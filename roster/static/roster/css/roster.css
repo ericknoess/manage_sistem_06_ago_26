@@ -1,0 +1,360 @@
+:root {
+    --bg-dark: #0f172a;
+    --panel-bg: #1e293b;
+    --border-color: #334155;
+    --accent: #38bdf8;
+    --text: #f8fafc;
+    --warning: #f59e0b;
+    --success: #22c65e;
+    --danger: #ef4444;
+    --purple: #a855f7;
+}
+
+body {
+    margin: 0;
+    padding: 1rem;
+    background-color: var(--bg-dark);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    gap: 0.75rem;
+}
+
+/* BARRA SUPERIOR DE CONTROL */
+.supervisor-toolbar {
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.toolbar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+.toolbar-title {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.kpi-badge {
+    background-color: rgba(56, 189, 248, 0.15);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
+.month-navigator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--bg-dark);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.month-navigator span {
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: var(--accent);
+    min-width: 110px;
+    text-align: center;
+}
+
+.btn-nav {
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text);
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* SECCIÓN DE CARGA MÁS DETALLADA */
+.config-grid {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+label {
+    font-size: 0.68rem;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+select, input, button {
+    background-color: var(--bg-dark);
+    color: var(--text);
+    border: 1px solid var(--border-color);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    outline: none;
+}
+
+select:focus, input:focus {
+    border-color: var(--accent);
+}
+
+button.btn-accent {
+    background-color: var(--accent);
+    color: #0f172a;
+    font-weight: bold;
+    border: none;
+    padding: 7px 14px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+button.btn-accent:hover {
+    opacity: 0.9;
+}
+
+button.btn-outline {
+    background-color: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-weight: bold;
+    padding: 7px 14px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.leyenda {
+    display: flex;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 8px;
+    border-radius: 6px;
+    align-items: center;
+}
+
+.badge {
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* VIEWPORT TABLA */
+.matrix-viewport {
+    flex: 1;
+    overflow: auto;
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    position: relative;
+    max-height: 550px;
+}
+
+table.roster-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    font-size: 0.78rem;
+}
+
+th, td {
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    text-align: center;
+    white-space: nowrap;
+}
+
+th.col-fixed, td.col-fixed {
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    background-color: var(--panel-bg);
+    width: 230px;
+    min-width: 230px;
+    text-align: left;
+    padding: 4px 8px;
+    font-weight: 500;
+    border-right: 2px solid #475569;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--bg-dark);
+    padding: 6px 2px;
+}
+
+th.col-fixed {
+    top: 0;
+    z-index: 30;
+    display: table-cell;
+}
+
+th.weekend { background-color: #1e1b4b; }
+
+tr.row-cuadrilla td {
+    font-weight: bold;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    display: table-cell;
+    transition: background-color 0.2s ease;
+}
+
+/* ESTILOS DRAG AND DROP */
+tr.draggable-row { cursor: grab; }
+tr.draggable-row:active { cursor: grabbing; }
+
+tr.dragging {
+    opacity: 0.4;
+    background-color: rgba(56, 189, 248, 0.2) !important;
+}
+
+.drag-over {
+    background-color: rgba(56, 189, 248, 0.25) !important;
+    outline: 2px dashed var(--accent);
+}
+
+.drag-handle {
+    cursor: grab;
+    margin-right: 6px;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.cell-turno {
+    width: 32px;
+    height: 30px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.72rem;
+    user-select: none;
+}
+
+.cell-turno:hover {
+    outline: 2px solid var(--accent);
+    z-index: 5;
+}
+
+/* ESTILOS TURNOS */
+.t-M { background-color: #1e3a8a; color: #93c5fd; }
+.t-T { background-color: #854d0e; color: #fef08a; }
+.t-N { background-color: #7c2d12; color: #fed7aa; }
+.t-TR { background-color: #065f46; color: #a7f3d0; }
+.t-OFF { background-color: #334155; color: #94a3b8; }
+.t-EMPTY { background-color: #0f172a; color: #475569; border: 1px dashed #475569; }
+.t-F { background-color: #7f1d1d; color: #fca5a5; border: 1px solid var(--danger); }
+.t-INC { background-color: #581c87; color: #e9d5ff; border: 1px solid var(--purple); font-size: 0.62rem; }
+
+.tag-status {
+    font-size: 0.6rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    float: right;
+    margin-top: 2px;
+}
+.st-ok { background: rgba(34, 198, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
+.st-pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+
+.btn-move {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid #475569;
+    color: #cbd5e1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    margin-left: 10px;
+}
+.btn-move:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* Nuevo estilo para el selector de turnos */
+.turno-selector {
+    position: absolute;
+    background: #2c3e50;
+    border: 1px solid #34495e;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    z-index: 1000;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    min-width: 80px;
+}
+
+.turno-selector button {
+    background: transparent;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+    width: 100%;
+}
+
+.turno-selector button:hover {
+    background: #3498db;
+}
+
+/* --- Paleta Industrial (Basada en referencia visual) --- */
+.cell-turno {
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s ease, border 0.2s ease;
+    font-weight: 600;
+    font-size: 13px;
+    border: 1px solid #2c3e50;
+    color: #ffffff;
+    height: 35px;
+    line-height: 35px;
+}
+
+.turno-M   { background-color: #3b82f6 !important; } /* Azul Mañana */
+.turno-T   { background-color: #d97706 !important; } /* Oro/Mustaza Tarde */
+.turno-N   { background-color: #92400e !important; } /* Naranja Profundo/Marrón Noche */
+.turno-TR  { background-color: #059669 !important; } /* Teal/Verde Turno Rotativo */
+.turno-OFF { background-color: #4b5563 !important; } /* Gris Descanso */
+.turno-F   { background-color: #dc2626 !important; } /* Rojo Falta */
+.turno-INC { background-color: #7c3aed !important; } /* Morado Incapacidad */
+.turno-none { 
+    background-color: transparent !important; 
+    border: 1px dashed #4b5563 !important; 
+    color: #9ca3af !important; 
+}

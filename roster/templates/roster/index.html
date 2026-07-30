@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control en Proceso - Roster</title>
+    <link rel="stylesheet" href="{% static 'roster/css/roster.css' %}">
+</head>
+<body>
+    <!-- Pegar aquí todo el contenido del <body> original de tu maqueta -->
+    <!-- (Desde el <div class="supervisor-toolbar"> hasta el cierre de la tabla </table>) -->
+        <div class="supervisor-toolbar">
+            <div class="toolbar-header">
+                <div class="toolbar-title">
+                    <span>⚙️ Roster Plantilla Activa</span>
+                    <span class="kpi-badge" id="lblTotalOps">👥 38 Colaboradores</span>
+                </div>
+    
+                <div class="month-navigator">
+               
+                    <div class="navigation-controls" style="display: flex; align-items: center; gap: 10px;">
+                        <button id="prevMonth" class="nav-btn"></button>
+                        <h2 id="currentDateDisplay">Julio 2026</h2>
+                        <button id="nextMonth" class="nav-btn"></button>
+                    </div>
+                    
+                </div>
+    
+                <div class="leyenda">
+                    <span><span class="badge t-M">M</span></span>
+                    <span><span class="badge t-T">T</span></span>
+                    <span><span class="badge t-N">N</span></span>
+                    <span><span class="badge t-TR">TR</span></span>
+                    <span><span class="badge t-OFF">OFF</span></span>
+                    <span><span class="badge t-F">F</span> Falta</span>
+                    <span><span class="badge t-INC">INC</span> Incap.</span>
+                    <span><span class="badge t-EMPTY">--</span> Sin Rol</span>
+                </div>
+            </div>
+    
+            <!-- CONTROLES DE ASIGNACIÓN DUAL (PERSONA O CUADRILLA) -->
+            <div class="config-grid">
+                <div class="field-group">
+                    <label>Filtro Vista</label>
+                    <select id="selFiltroVista" onchange="filtrarTabla(this.value)">
+                        <!-- Dinámico -->
+                    </select>
+                </div>
+    
+                <div style="border-left: 1px solid var(--border-color); height: 28px; margin: 0 4px;"></div>
+    
+                <!-- Asignación -->
+                <div class="field-group">
+                    <label>Aplicar Rol A</label>
+                    <select id="selModoAsignacion" onchange="cambiarModoAsignacion()">
+                        <option value="cuadrilla">👥 Cuadrilla Completa</option>
+                        <option value="persona">👤 Persona Individual</option>
+                    </select>
+                </div>
+    
+                <div class="field-group">
+                    <label id="lblTarget">Seleccionar Cuadrilla</label>
+                    <select id="selTarget">
+                        <!-- Dinámico según modo -->
+                    </select>
+                </div>
+    
+                <div class="field-group">
+                    <label>Secuencia Rol</label>
+                    <select id="selPatronRol">
+                        <option value="standard">5M-2OFF -> 5T-2OFF -> 5N-2OFF -> 5TR-2OFF</option>
+                        <option value="invertido">5N-2OFF -> 5T-2OFF -> 5M-2OFF</option>
+                    </select>
+                </div>
+    
+                <div class="field-group">
+                    <label>Día Inicio Secuencia</label>
+                    <input type="number" id="numDiaInicio" value="1" min="1" max="31" style="width: 55px;">
+                </div>
+    
+                <button class="btn-accent" onclick="ejecutarAsignacionRol()">⚡ Aplicar Rol</button>
+                <button class="btn-outline" onclick="agregarCuadrilla()">➕ Nueva Cuadrilla</button>
+            </div>
+        </div>
+    
+        <div class="matrix-viewport">
+            <table class="roster-table" id="tablaRoster">
+                <thead>
+                    <tr>
+                        <th class="col-fixed">Cuadrilla / Operador</th>
+                        <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+                        <th class="weekend">6</th><th class="weekend">7</th>
+                        <th>8</th><th>9</th><th>10</th><th>11</th><th>12</th>
+                        <th class="weekend">13</th><th class="weekend">14</th>
+                        <th>15</th><th>16</th><th>17</th><th>18</th><th>19</th>
+                        <th class="weekend">20</th><th class="weekend">21</th>
+                        <th>22</th><th>23</th><th>24</th><th>25</th><th>26</th>
+                        <th class="weekend">27</th><th class="weekend">28</th>
+                        <th>29</th><th>30</th><th>31</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyRoster">
+                    <!-- Se inyecta dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+    
+    <script src="{% static 'roster/js/roster.js' %}"></script>
+</body>
+</html>
