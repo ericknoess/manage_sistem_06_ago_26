@@ -1,111 +1,143 @@
+<!-- roster/templates/roster/index.html -->
 {% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control en Proceso - Roster</title>
-    <link rel="stylesheet" href="{% static 'roster/css/roster.css' %}">
+    <title>Módulo Control en Proceso - Upstream GxP</title>
+    
+    <!-- Tailwind CSS (Solo para desarrollo) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- GSAP para animaciones fluidas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <style>
+        .no-select { user-select: none; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
 </head>
-<body>
-    <!-- Pegar aquí todo el contenido del <body> original de tu maqueta -->
-    <!-- (Desde el <div class="supervisor-toolbar"> hasta el cierre de la tabla </table>) -->
-        <div class="supervisor-toolbar">
-            <div class="toolbar-header">
-                <div class="toolbar-title">
-                    <span>⚙️ Roster Plantilla Activa</span>
-                    <span class="kpi-badge" id="lblTotalOps">👥 38 Colaboradores</span>
+<body class="bg-slate-900 text-slate-200 min-h-screen font-sans no-select overflow-x-hidden">
+
+    <!-- HEADER INDUSTRIAL -->
+    <header class="bg-slate-950 border-b border-cyan-900/50 p-4 sticky top-0 z-50 shadow-lg">
+        <div class="flex flex-wrap justify-between items-center max-w-screen-2xl mx-auto gap-4">
+            <div>
+                <h1 class="text-xl font-black text-cyan-500 tracking-wider">BIOPROCESOS UPSTREAM</h1>
+                <p class="text-xs text-slate-400 font-mono">Plataforma Enterprise de Planificación y Control de Turnos (GxP Ready)</p>
+            </div>
+            
+            <!-- CONTROLES DE FECHA Y GESTIÓN -->
+            <div class="flex items-center gap-4 flex-wrap">
+                <!-- Botones de Gestión de Personal -->
+                <div class="flex gap-2">
+                    <button id="btnOpenCuadrillaModal" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
+                        <span>+ Cuadrilla</span>
+                    </button>
+                    <button id="btnOpenOperadorModal" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
+                        <span>+ Operador</span>
+                    </button>
                 </div>
-    
-                <div class="month-navigator">
-               
-                    <div class="navigation-controls" style="display: flex; align-items: center; gap: 10px;">
-                        <button id="prevMonth" class="nav-btn"></button>
-                        <h2 id="currentDateDisplay">Julio 2026</h2>
-                        <button id="nextMonth" class="nav-btn"></button>
-                    </div>
-                    
-                </div>
-    
-                <div class="leyenda">
-                    <span><span class="badge t-M">M</span></span>
-                    <span><span class="badge t-T">T</span></span>
-                    <span><span class="badge t-N">N</span></span>
-                    <span><span class="badge t-TR">TR</span></span>
-                    <span><span class="badge t-OFF">OFF</span></span>
-                    <span><span class="badge t-F">F</span> Falta</span>
-                    <span><span class="badge t-INC">INC</span> Incap.</span>
-                    <span><span class="badge t-EMPTY">--</span> Sin Rol</span>
+
+                <!-- Navegador de Meses -->
+                <div class="flex bg-slate-800 rounded border border-slate-700 p-1">
+                    <button id="prevMonth" class="px-3 py-1 hover:bg-slate-700 text-slate-300 rounded transition-colors text-sm font-bold">◄</button>
+                    <div id="currentDateDisplay" class="px-4 py-1 text-cyan-400 font-bold min-w-[140px] text-center border-l border-r border-slate-700 text-sm flex items-center justify-center">Cargando...</div>
+                    <button id="nextMonth" class="px-3 py-1 hover:bg-slate-700 text-slate-300 rounded transition-colors text-sm font-bold">►</button>
                 </div>
             </div>
-    
-            <!-- CONTROLES DE ASIGNACIÓN DUAL (PERSONA O CUADRILLA) -->
-            <div class="config-grid">
-                <div class="field-group">
-                    <label>Filtro Vista</label>
-                    <select id="selFiltroVista" onchange="filtrarTabla(this.value)">
-                        <!-- Dinámico -->
-                    </select>
-                </div>
-    
-                <div style="border-left: 1px solid var(--border-color); height: 28px; margin: 0 4px;"></div>
-    
-                <!-- Asignación -->
-                <div class="field-group">
-                    <label>Aplicar Rol A</label>
-                    <select id="selModoAsignacion" onchange="cambiarModoAsignacion()">
-                        <option value="cuadrilla">👥 Cuadrilla Completa</option>
-                        <option value="persona">👤 Persona Individual</option>
-                    </select>
-                </div>
-    
-                <div class="field-group">
-                    <label id="lblTarget">Seleccionar Cuadrilla</label>
-                    <select id="selTarget">
-                        <!-- Dinámico según modo -->
-                    </select>
-                </div>
-    
-                <div class="field-group">
-                    <label>Secuencia Rol</label>
-                    <select id="selPatronRol">
-                        <option value="standard">5M-2OFF -> 5T-2OFF -> 5N-2OFF -> 5TR-2OFF</option>
-                        <option value="invertido">5N-2OFF -> 5T-2OFF -> 5M-2OFF</option>
-                    </select>
-                </div>
-    
-                <div class="field-group">
-                    <label>Día Inicio Secuencia</label>
-                    <input type="number" id="numDiaInicio" value="1" min="1" max="31" style="width: 55px;">
-                </div>
-    
-                <button class="btn-accent" onclick="ejecutarAsignacionRol()">⚡ Aplicar Rol</button>
-                <button class="btn-outline" onclick="agregarCuadrilla()">➕ Nueva Cuadrilla</button>
+        </div>
+    </header>
+
+    <!-- CONTENEDOR PRINCIPAL DE LA MATRIZ -->
+    <main class="p-4 max-w-screen-2xl mx-auto">
+        <div class="bg-slate-800/50 rounded-xl border border-slate-700 shadow-2xl overflow-hidden relative">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left">
+                    <thead class="bg-slate-950 border-b-2 border-cyan-800">
+                        <tr>
+                            <th class="p-3 sticky left-0 bg-slate-950 z-20 border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest w-48 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+                                Operador / Cuadrilla
+                            </th>
+                            <script>
+                                for(let i=1; i<=31; i++) {
+                                    document.write(`<th class="p-2 border-r border-slate-800 text-center text-[10px] text-slate-500 font-mono w-8 min-w-[32px]">${i}</th>`);
+                                }
+                            </script>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyRoster" class="bg-slate-900/50">
+                        <tr>
+                            <td colspan="32" class="p-12 text-center text-slate-500 font-mono animate-pulse">
+                                Cargando matriz operacional desde el servidor...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
-    
-        <div class="matrix-viewport">
-            <table class="roster-table" id="tablaRoster">
-                <thead>
-                    <tr>
-                        <th class="col-fixed">Cuadrilla / Operador</th>
-                        <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
-                        <th class="weekend">6</th><th class="weekend">7</th>
-                        <th>8</th><th>9</th><th>10</th><th>11</th><th>12</th>
-                        <th class="weekend">13</th><th class="weekend">14</th>
-                        <th>15</th><th>16</th><th>17</th><th>18</th><th>19</th>
-                        <th class="weekend">20</th><th class="weekend">21</th>
-                        <th>22</th><th>23</th><th>24</th><th>25</th><th>26</th>
-                        <th class="weekend">27</th><th class="weekend">28</th>
-                        <th>29</th><th>30</th><th>31</th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyRoster">
-                    <!-- Se inyecta dinámicamente -->
-                </tbody>
-            </table>
+        
+        <!-- LEYENDA GxP -->
+        <div class="mt-4 flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 justify-center">
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-amber-500/20 border border-amber-500 rounded-sm"></div> M: Mañana</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-blue-500/20 border border-blue-500 rounded-sm"></div> T: Tarde</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-purple-500/20 border border-purple-500 rounded-sm"></div> N: Noche</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-teal-500/20 border border-teal-500 rounded-sm"></div> TR: Turno Regular</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-slate-800 border border-slate-600 rounded-sm"></div> OFF: Descanso</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-orange-500/20 border border-orange-500 rounded-sm"></div> INC: Incapacidad</span>
+            <span class="flex items-center gap-1"><div class="w-3 h-3 bg-red-500/20 border border-red-500 rounded-sm"></div> F: Falta</span>
         </div>
-    
-    <script src="{% static 'roster/js/roster.js' %}"></script>
+    </main>
+
+    <!-- MODAL: NUEVA CUADRILLA -->
+    <div id="modalCuadrilla" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 class="text-lg font-bold text-cyan-400 mb-4">Registrar Nueva Cuadrilla</h3>
+            <form id="formCuadrilla" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Identificador (ej. C, D)</label>
+                    <input type="text" id="cuadrillaIdentificador" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none uppercase" maxlength="5">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Nombre Descriptivo</label>
+                    <input type="text" id="cuadrillaNombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none" placeholder="Cuadrilla C - Purificación">
+                </div>
+                <div class="flex justify-end gap-2 pt-4">
+                    <button type="button" id="btnCloseCuadrillaModal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded">Guardar Cuadrilla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: NUEVO OPERADOR -->
+    <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador</h3>
+            <form id="formOperador" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Nombre Completo del Operador</label>
+                    <input type="text" id="operadorNombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none" placeholder="Operador 11">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Asignar a Cuadrilla</label>
+                    <select id="operadorCuadrillaSelect" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
+                        <!-- Se llena dinámicamente vía JS -->
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-4">
+                    <button type="button" id="btnCloseOperadorModal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Guardar Operador</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT DE LA APLICACIÓN -->
+    <script src="{% static 'roster/js/roster.js' %}?v={% now 'U' %}"></script>
 </body>
 </html>

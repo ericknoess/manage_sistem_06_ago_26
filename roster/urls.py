@@ -1,20 +1,16 @@
-from django.urls import path, include
+# roster/urls.py
+
+from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import CuadrillaViewSet, OperadorViewSet, TurnoDiaViewSet, RosterView
+from .views import RosterDashboardView, CuadrillaViewSet, OperadorViewSet, TurnoDiaViewSet
 
-# Inicializamos el router
+# Instanciamos el enrutador de Django REST Framework
 router = DefaultRouter()
-
-# Registramos cada ViewSet con su respectivo 'basename'.
-# El basename es la base para los nombres de las URLs (ej: 'cuadrilla-list', 'operador-list')
 router.register(r'cuadrillas', CuadrillaViewSet, basename='cuadrilla')
 router.register(r'operadores', OperadorViewSet, basename='operador')
-router.register(r'turnos', TurnoDiaViewSet, basename='turno')
+router.register(r'turnos', TurnoDiaViewSet, basename='turnodia')
 
+# Unimos la vista HTML del dashboard con los endpoints REST del router
 urlpatterns = [
-    # Vista visual del frontend
-    path('vista/', RosterView.as_view(), name='roster-view'), 
-    
-    # API endpoints
-    path('api/', include(router.urls)), 
-]
+    path('', RosterDashboardView.as_view(), name='roster-dashboard'),
+] + router.urls

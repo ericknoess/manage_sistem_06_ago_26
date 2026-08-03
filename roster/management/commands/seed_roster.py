@@ -1,8 +1,12 @@
+# roster/management/commands/seed_roster.py
 from django.core.management.base import BaseCommand
 from roster.models import Cuadrilla, Operador, TurnoDia
 from datetime import date, timedelta
 
 class Command(BaseCommand):
+    """
+    Comando personalizado para poblar la base de datos relacional con el Roster inicial de la maqueta (Julio 2026).
+    """
     help = 'Puebla la base de datos relacional con el Roster inicial de la maqueta (Julio 2026)'
 
     def handle(self, *args, **kwargs):
@@ -81,5 +85,5 @@ class Command(BaseCommand):
         # bulk_create ejecuta un solo query SQL para insertar miles de registros, vital para escalabilidad.
         TurnoDia.objects.bulk_create(turnos_a_crear)
         
-        self.stdout.write(self.style.SUCCESS(f"✔ Se insertaron {len(turnos_a_crear)} turnos correspondientes a Julio 2026."))
+        self.stdout.write(self.style.SUCCESS(f"✔ Se insertaron {len(turnos_a_crear)} turnos correspondientes al mes de Julio 2026."))
         self.stdout.write(self.style.SUCCESS("🚀 ¡Base de datos sembrada con éxito! Lista para operar."))

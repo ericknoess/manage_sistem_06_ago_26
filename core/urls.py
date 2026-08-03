@@ -1,9 +1,8 @@
+# core/urls.py
 from django.contrib import admin
 from django.urls import path, include
 
-
-# core/urls.py
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('roster/', include('roster.urls')),
+    path('api/roster/', include('roster.urls')),
 ]
