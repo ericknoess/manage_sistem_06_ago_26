@@ -43,7 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentDateDisplay.textContent = `${getMonthName(month)} ${year}`;
             tbody.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-slate-500 font-mono animate-pulse">Sincronizando con PostgreSQL...</td></tr>`;
 
-            const response = await fetch(`/api/roster/cuadrillas/?month=${month}&year=${year}`);
+            const response = await fetch(`/roster/api/cuadrillas/?month=${month}&year=${year}`, {
+                credentials: 'include'
+            });
             if (!response.ok) throw new Error('Error al conectar con la API de Cuadrillas');
             
             cachedCuadrillas = await response.json();
@@ -88,11 +90,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const trOp = document.createElement('tr');
                 trOp.className = 'border-b border-slate-800 hover:bg-slate-800/30 transition-colors';
 
+                // Generación inteligente de la fotografía o fallback con iniciales corporativas
+                let avatarHtml = '';
+                if (operador.foto) {
+                    avatarHtml = `<img src="${operador.foto}" alt="${operador.nombre}" class="w-8 h-8 rounded-full object-cover border border-cyan-500/50 shadow-sm flex-shrink-0">`;
+                } else {
+                    const initials = operador.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                    avatarHtml = `<div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-cyan-400 flex-shrink-0">${initials}</div>`;
+                }
+
                 let html = `
-                    <td class="p-3 sticky left-0 bg-slate-900 z-10 border-r border-slate-700 text-xs font-medium text-slate-300 w-52 truncate shadow-[2px_0_5px_rgba(0,0,0,0.3)] select-none">
+                    <td class="p-3 sticky left-0 bg-slate-900 z-10 border-r border-slate-700 text-xs font-medium text-slate-300 w-56 truncate shadow-[2px_0_5px_rgba(0,0,0,0.3)] select-none">
                         <div class="flex items-center justify-between">
-                            <span class="truncate" title="${operador.nombre}">${operador.nombre}</span>
-                            <div class="flex items-center space-x-1.5">
+                            <div class="flex items-center space-x-2.5 truncate mr-2">
+                                ${avatarHtml}
+                                <div class="truncate">
+                                    <div class="truncate font-bold text-slate-200" title="${operador.nombre}">${operador.nombre}</div>
+                                    <div class="text-[10px] font-mono text-cyan-500">${operador.codigo_empleado || ''}</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-1.5 flex-shrink-0">
                                 <button type="button" class="text-slate-400 hover:text-cyan-400 p-1 text-[10px] bg-slate-800 rounded border border-slate-700 transition-colors reassign-btn cursor-pointer" title="Seleccionar nueva cuadrilla" data-reassign-id="${operador.id}" data-current-cuadrilla="${cuadrilla.id}">
                                     🔄
                                 </button>
@@ -151,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (tr) tr.classList.add('opacity-50', 'bg-cyan-950/50');
             });
 
-            handle.addEventListener('dragend', (e) => {
+            handle.addEventListener('dragend', () => {
                 const tr = handle.closest('tr');
                 if (tr) tr.classList.remove('opacity-50', 'bg-cyan-950/50');
             });
@@ -185,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 
-                // Remover cualquier dropdown existente
                 document.querySelectorAll('.reassign-dropdown').forEach(el => el.remove());
 
                 const operadorId = btn.getAttribute('data-reassign-id');
@@ -195,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dropdown = document.createElement('div');
                 dropdown.className = 'reassign-dropdown fixed bg-slate-900 border border-cyan-800 rounded-xl shadow-2xl p-3 z-50 text-xs font-sans';
                 dropdown.style.width = '250px';
-                dropdown.style.visibility = 'hidden'; // Oculto temporalmente para medición precisa de altura
+                dropdown.style.visibility = 'hidden';
 
                 dropdown.innerHTML = `
                     <div class="font-bold text-cyan-400 mb-2 border-b border-slate-800 pb-1 flex justify-between items-center">
@@ -215,28 +231,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 document.body.appendChild(dropdown);
 
-                // Cálculo inteligente de colisión con los bordes de la pantalla
                 const dropdownHeight = dropdown.offsetHeight;
                 const dropdownWidth = 250;
                 const margin = 6;
 
-                // 1. Evaluación Eje Vertical (Top/Bottom)
                 let topPos = rect.bottom + margin;
                 if (topPos + dropdownHeight > window.innerHeight) {
-                    // Si sobrepasa el límite inferior de la pantalla, se despliega HACIA ARRIBA
                     topPos = Math.max(10, rect.top - dropdownHeight - margin);
                 }
 
-                // 2. Evaluación Eje Horizontal (Left/Right)
                 let leftPos = rect.left;
                 if (leftPos + dropdownWidth > window.innerWidth) {
                     leftPos = window.innerWidth - dropdownWidth - margin;
                 }
-                leftPos = Math.max(10, leftPos); // Evitar desbordamiento en el borde izquierdo
+                leftPos = Math.max(10, leftPos);
 
                 dropdown.style.top = `${topPos}px`;
                 dropdown.style.left = `${leftPos}px`;
-                dropdown.style.visibility = 'visible'; // Renderizar tras la calibración de coordenadas
+                dropdown.style.visibility = 'visible';
 
                 dropdown.querySelectorAll('button[data-target-cuadrilla]').forEach(optionBtn => {
                     optionBtn.addEventListener('click', async (ev) => {
@@ -260,12 +272,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function updateOperadorCuadrilla(operadorId, targetCuadrillaId) {
         try {
-            const response = await fetch(`/api/roster/operadores/${operadorId}/`, {
+            const response = await fetch(`/roster/api/operadores/${operadorId}/`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
+                credentials: 'include',
                 body: JSON.stringify({ cuadrilla: parseInt(targetCuadrillaId) })
             });
 
@@ -311,29 +324,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (turnoId && turnoId !== "null" && turnoId !== "") {
                         if (nuevoCodigo === '--') {
-                            response = await fetch(`/api/roster/turnos/${turnoId}/`, {
+                            response = await fetch(`/roster/api/turnos/${turnoId}/`, {
                                 method: 'DELETE',
-                                headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                                credentials: 'include'
                             });
                         } else {
-                            response = await fetch(`/api/roster/turnos/${turnoId}/`, {
+                            response = await fetch(`/roster/api/turnos/${turnoId}/`, {
                                 method: 'PATCH',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'X-CSRFToken': getCookie('csrftoken')
                                 },
+                                credentials: 'include',
                                 body: JSON.stringify({ codigo_turno: nuevoCodigo })
                             });
                             if (response.ok) responseData = await response.json();
                         }
                     } else {
                         if (nuevoCodigo !== '--') {
-                            response = await fetch('/api/roster/turnos/', {
+                            response = await fetch('/roster/api/turnos/', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'X-CSRFToken': getCookie('csrftoken')
                                 },
+                                credentials: 'include',
                                 body: JSON.stringify({
                                     fecha: fecha,
                                     codigo_turno: nuevoCodigo,
@@ -394,7 +410,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function populateCuadrillasSelect() {
         try {
-            const response = await fetch('/api/roster/cuadrillas/');
+            const response = await fetch('/roster/api/cuadrillas/', {
+                credentials: 'include'
+            });
             const cuadrillas = await response.json();
             operadorCuadrillaSelect.innerHTML = '';
             cuadrillas.forEach(c => {
@@ -423,12 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const nombre = document.getElementById('cuadrillaNombre').value;
 
         try {
-            const res = await fetch('/api/roster/cuadrillas/', {
+            const res = await fetch('/roster/api/cuadrillas/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
+                credentials: 'include',
                 body: JSON.stringify({ identificador, nombre, activa: true })
             });
 
@@ -448,17 +467,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     formOperador.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const nombre = document.getElementById('operadorNombre').value;
-        const cuadrillaId = operadorCuadrillaSelect.value;
+
+        const formData = new FormData(formOperador);
+
+        if (!formData.has('activo')) {
+            formData.append('activo', 'true');
+        }
 
         try {
-            const res = await fetch('/api/roster/operadores/', {
+            const res = await fetch('/roster/api/operadores/', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
-                body: JSON.stringify({ nombre, cuadrilla: cuadrillaId, activo: true })
+                credentials: 'include',
+                body: formData
             });
 
             if (res.ok) {
@@ -470,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error al crear operador: " + JSON.stringify(err));
             }
         } catch (error) {
-            console.error(error);
+            console.error("Error de red al crear operador:", error);
             alert("Error de red al crear operador.");
         }
     });

@@ -22,8 +22,15 @@ class Cuadrilla(models.Model):
 
 class Operador(models.Model):
     """
-    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta.
+    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta,
+    incorporando metadatos de expertiz y soporte fotográfico para trazabilidad GxP.
     """
+    EXPERTISE_CHOICES = [
+        ('JUNIOR', 'Operador Junior'),
+        ('SENIOR', 'Operador Senior'),
+        ('ESPECIALISTA', 'Especialista Upstream'),
+    ]
+
     cuadrilla = models.ForeignKey(
         Cuadrilla, 
         on_delete=models.CASCADE, 
@@ -32,10 +39,12 @@ class Operador(models.Model):
     )
     nombre = models.CharField(max_length=150, verbose_name="Nombre del Operador")
     codigo_empleado = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="Código de Empleado")
+    foto = models.ImageField(upload_to='operadores/fotos/', blank=True, null=True, verbose_name="Fotografía del Colaborador")
+    nivel_expertiz = models.CharField(max_length=30, choices=EXPERTISE_CHOICES, default='JUNIOR', verbose_name="Nivel de Expertiz")
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
 
     def __str__(self):
-        return f"{self.nombre} ({self.cuadrilla.identificador})"
+        return f"{self.nombre} ({self.cuadrilla.identificador}) - {self.get_nivel_expertiz_display()}"
 
     class Meta:
         verbose_name = "Operador"

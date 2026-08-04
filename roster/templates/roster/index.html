@@ -33,7 +33,7 @@
             
             <!-- CONTROLES DE FECHA Y GESTIÓN -->
             <div class="flex items-center gap-4 flex-wrap">
-                <!-- Botones de Gestión de Personal -->
+                <!-- Botones de Gestión de Personal (Simplificados) -->
                 <div class="flex gap-2">
                     <button id="btnOpenCuadrillaModal" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>+ Cuadrilla</span>
@@ -100,11 +100,11 @@
             <form id="formCuadrilla" class="space-y-4">
                 <div>
                     <label class="block text-xs font-mono text-slate-400 mb-1">Identificador (ej. C, D)</label>
-                    <input type="text" id="cuadrillaIdentificador" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none uppercase" maxlength="5">
+                    <input type="text" id="cuadrillaIdentificador" name="identificador" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none uppercase" maxlength="5">
                 </div>
                 <div>
                     <label class="block text-xs font-mono text-slate-400 mb-1">Nombre Descriptivo</label>
-                    <input type="text" id="cuadrillaNombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none" placeholder="Cuadrilla C - Purificación">
+                    <input type="text" id="cuadrillaNombre" name="nombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none" placeholder="Cuadrilla C - Purificación">
                 </div>
                 <div class="flex justify-end gap-2 pt-4">
                     <button type="button" id="btnCloseCuadrillaModal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded">Cancelar</button>
@@ -116,28 +116,45 @@
 
     <!-- MODAL: NUEVO OPERADOR -->
     <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador</h3>
-            <form id="formOperador" class="space-y-4">
+        <div id="modalOperadorContent" class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador GxP</h3>
+            <form id="formOperador" class="space-y-3" enctype="multipart/form-data">
                 <div>
                     <label class="block text-xs font-mono text-slate-400 mb-1">Nombre Completo del Operador</label>
-                    <input type="text" id="operadorNombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none" placeholder="Operador 11">
+                    <input type="text" id="operadorNombre" name="nombre" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none" placeholder="ej. Juan Pérez">
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Código de Empleado</label>
+                    <input type="text" id="operadorCodigo" name="codigo_empleado" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none uppercase" placeholder="ej. OP-1042">
                 </div>
                 <div>
                     <label class="block text-xs font-mono text-slate-400 mb-1">Asignar a Cuadrilla</label>
-                    <select id="operadorCuadrillaSelect" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
+                    <select id="operadorCuadrillaSelect" name="cuadrilla" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
                         <!-- Se llena dinámicamente vía JS -->
                     </select>
                 </div>
-                <div class="flex justify-end gap-2 pt-4">
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Nivel de Expertiz</label>
+                    <select id="operadorExpertiz" name="nivel_expertiz" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
+                        <option value="JUNIOR">Operador Junior</option>
+                        <option value="SENIOR">Operador Senior</option>
+                        <option value="ESPECIALISTA">Especialista Upstream</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Fotografía del Colaborador (Opcional)</label>
+                    <input type="file" id="operadorFoto" name="foto" accept="image/png, image/jpeg" class="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
                     <button type="button" id="btnCloseOperadorModal" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded">Cancelar</button>
                     <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Guardar Operador</button>
                 </div>
+                <div id="operador-form-feedback" class="feedback-message mt-2 p-2 rounded text-xs text-center hidden"></div>
             </form>
         </div>
     </div>
 
-    <!-- SCRIPT DE LA APLICACIÓN -->
+    <!-- SCRIPTS DE LA APLICACIÓN -->
     <script src="{% static 'roster/js/roster.js' %}?v={% now 'U' %}"></script>
 </body>
 </html>
