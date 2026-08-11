@@ -2,7 +2,8 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Cuadrilla, Operador, TurnoDia
+from .models import Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+
 
 class TurnoDiaSerializer(serializers.ModelSerializer):
     """
@@ -131,3 +132,47 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'email': instance.email,
             'is_active': instance.is_active
         }
+
+
+class SecuenciaRolDetalleSerializer(serializers.ModelSerializer):
+    """
+    Serializer para los pasos individuales de una secuencia.
+    """
+    class Meta:
+        model = SecuenciaRolDetalle
+        fields = ['id', 'orden', 'codigo_turno', 'dias']
+
+
+class SecuenciaRolSerializer(serializers.ModelSerializer):
+    """
+    Serializer para SecuenciaRol con soporte de escritura anidada (detalles).
+    Permite crear/editar la secuencia y sus pasos en una sola petición.
+    """
+    detalles = SecuenciaRolDetalleSerializer(many=True)
+
+    class Meta:
+        model = SecuenciaRol
+        fields = ['id', 'nombre', 'descripcion', 'activa', 'created_at', 'detalles']
+
+    def create(self, validated_data):
+        detalles_data = validated_data.pop('detalles')
+        secuencia = SecuenciaRol.objects.create(**validated_data)
+        for detalle_data in detalles_data:
+            SecuenciaRolDetalle.objects.create(secuencia=secuencia, **detalle_data)
+        return secuencia
+
+    def update(self, instance, validated_data):
+        detalles_data = validated_data.pop('detalles', None)
+        instance.nombre = validated_data.get('nombre', instance.nombre)
+        instance.descripcion = validated_data.get('descripcion', instance.descripcion)
+        instance.activa = validated_data.get('activa', instance.activa)
+        instance.save()
+
+        if detalles_data is not None:
+            # Estrategia de reemplazo simple para la edición:
+            # Borramos los anteriores y recreamos (trazabilidad mediante log posterior)
+            instance.detalles.all().delete()
+            for detalle_data in detalles_data:
+                SecuenciaRolDetalle.objects.create(secuencia=instance, **detalle_data)
+        
+        return instance

@@ -18,6 +18,7 @@ class Cuadrilla(models.Model):
     class Meta:
         verbose_name = "Cuadrilla"
         verbose_name_plural = "Cuadrillas"
+        ordering = ['identificador']
 
 
 class Operador(models.Model):
@@ -44,11 +45,12 @@ class Operador(models.Model):
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
 
     def __str__(self):
-        return f"{self.nombre} ({self.cuadrilla.identificador}) - {self.get_nivel_expertiz_display()}"
+        return f"{self.codigo_empleado or 'S/C'} | {self.nombre} ({self.cuadrilla.identificador if self.cuadrilla else 'Sin Cuadrilla'})"
 
     class Meta:
         verbose_name = "Operador"
         verbose_name_plural = "Operadores"
+        ordering = ['codigo_empleado']
 
 
 class TurnoDia(models.Model):
@@ -65,6 +67,7 @@ class TurnoDia(models.Model):
         ('F', 'Falta'),
         ('INC', 'Incapacidad'),
         ('--', 'Sin Asignación / Inactivo'),
+        ('', 'Sin Asignación / Inactivo'),
     ]
 
     operador = models.ForeignKey(
@@ -74,13 +77,60 @@ class TurnoDia(models.Model):
         verbose_name="Operador"
     )
     fecha = models.DateField(verbose_name="Fecha de Asignación")
-    codigo_turno = models.CharField(max_length=10, choices=TURNO_CHOICES, verbose_name="Código de Turno")
+    codigo_turno = models.CharField(max_length=10, choices=TURNO_CHOICES, default='', verbose_name="Código de Turno")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Actualización (GxP)")
 
     class Meta:
         unique_together = ('operador', 'fecha')
         verbose_name = "Asignación de Turno"
         verbose_name_plural = "Asignaciones de Turnos"
+        ordering = ['-fecha', 'operador']
 
     def __str__(self):
-        return f"{self.operador.nombre} - {self.fecha}: {self.codigo_turno}"
+        return f"{self.operador.nombre} - {self.fecha}: {self.codigo_turno or 'Libre'}"
+
+
+class SecuenciaRol(models.Model):
+    """
+    Define un patrón de rotación reutilizable (plantilla).
+    Ejemplo: "Rotación A 5x2"
+    """
+    nombre = models.CharField(max_length=100, unique=True, verbose_name="Nombre de la Secuencia")
+    descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción")
+    activa = models.BooleanField(default=True, verbose_name="¿Está Activa?")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+
+    def __str__(self):
+        return f"{self.nombre} {'(Activa)' if self.activa else '(Inactiva)'}"
+
+    class Meta:
+        verbose_name = "Secuencia de Rol"
+        verbose_name_plural = "Secuencias de Rol"
+        ordering = ['nombre']
+
+
+class SecuenciaRolDetalle(models.Model):
+    """
+    Define los pasos individuales de una secuencia de rol.
+    """
+    secuencia = models.ForeignKey(
+        SecuenciaRol, 
+        on_delete=models.CASCADE, 
+        related_name='detalles', 
+        verbose_name="Secuencia Padre"
+    )
+    orden = models.PositiveIntegerField(verbose_name="Orden de Ejecución")
+    codigo_turno = models.CharField(
+        max_length=10, 
+        choices=TurnoDia.TURNO_CHOICES, 
+        verbose_name="Código de Turno"
+    )
+    dias = models.PositiveIntegerField(default=1, verbose_name="Cantidad de Días")
+
+    class Meta:
+        ordering = ['secuencia', 'orden']
+        verbose_name = "Detalle de Secuencia"
+        verbose_name_plural = "Detalles de Secuencia"
+
+    def __str__(self):
+        return f"{self.secuencia.nombre} - Paso {self.orden}: {self.codigo_turno} x {self.dias} días"

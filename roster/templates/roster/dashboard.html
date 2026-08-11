@@ -1,0 +1,62 @@
+<!-- roster/templates/roster/dashboard.html -->
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control en Proceso - Upstream Bioprocess Platform</title>
+    <link rel="stylesheet" href="{% static 'roster/css/roster.css' %}">
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>Upstream Bioprocess Platform</h1>
+            <p style="margin: 5px 0 0 0; color: var(--text-muted);">Módulo de Planificación y Control en Proceso (Roster & Cuadrillas)</p>
+        </div>
+        <div>
+            <span class="badge">SISTEMA GxP READY</span>
+        </div>
+    </header>
+
+    <main class="grid-container">
+        <div class="card">
+            <h3>Cuadrillas Operativas (CHO / E. coli / HEK293)</h3>
+            <p>Sincronización en tiempo real vía REST API:</p>
+            <ul id="cuadrillas-dinamicas">
+                <li>Cargando cuadrillas...</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>Operadores en Turno y Asignación</h3>
+            <p>Estado del personal asignado a líneas de cultivo:</p>
+            <ul id="operadores-dinamicos">
+                <li>Cargando operadores...</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>Endpoints API REST Disponibles</h3>
+            <p>Estructura backend lista para consumo asíncrono:</p>
+            <ul>
+                <li><code>/roster/cuadrillas/</code></li>
+                <li><code>/roster/operadores/</code></li>
+                <li><code>/roster/patrones-turno/</code></li>
+                <li><code>/roster/turnos-operador/</code></li>
+            </ul>
+        </div>
+    </main>
+
+    <div class="api-links">
+        <strong>Enlaces Rápidos DRF:</strong>
+        <a href="/roster/cuadrillas/" target="_blank">API Cuadrillas</a>
+        <a href="/roster/operadores/" target="_blank">API Operadores</a>
+        <a href="/roster/patrones-turno/" target="_blank">API Patrones de Turno</a>
+        <a href="/roster/turnos-operador/" target="_blank">API Turnos Operador</a>
+    </div>
+
+    <script src="{% static 'roster/js/roster.js' %}"></script>
+</body>
+</html>
