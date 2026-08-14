@@ -41,6 +41,9 @@
                     <button id="btnOpenOperadorModal" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>+ Operador</span>
                     </button>
+                    <button id="btn-mover-cuadrilla" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <span>Mover a cuadrilla</span> <span id="selected-counter" class="badge bg-slate-900 text-cyan-400 px-1.5 py-0.5 rounded text-[10px] ms-1">0</span>
+                    </button>
                     <button id="btnOpenCargaMasivaModal" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>⚡ Carga Masiva</span>
                     </button>
@@ -97,7 +100,7 @@
     </main>
 
     <!-- MODAL: NUEVA CUADRILLA -->
-    <div id="modalCuadrilla" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div id="modalCuadrilla" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h3 class="text-lg font-bold text-cyan-400 mb-4">Registrar Nueva Cuadrilla</h3>
             <form id="formCuadrilla" class="space-y-4">
@@ -118,7 +121,7 @@
     </div>
 
     <!-- MODAL: NUEVO OPERADOR -->
-    <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div id="modalOperadorContent" class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador GxP</h3>
             <form id="formOperador" class="space-y-3" enctype="multipart/form-data">
@@ -157,8 +160,65 @@
         </div>
     </div>
 
+    <!-- MODAL: MOVER CUADRILLA (Sincronizado con lógica de roser.js) -->
+    <div id="modal-mover-cuadrilla" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-cyan-400">Reasignación de Cuadrilla (GxP)</h3>
+                    <p class="text-xs text-slate-400 font-mono">Mueva los operadores seleccionados a una nueva estructura</p>
+                </div>
+                <button type="button" id="close-modal-btn" class="text-slate-400 hover:text-white font-bold text-lg px-2">✕</button>
+            </div>
+
+            <!-- PASO 1: SELECCIÓN DE DESTINO -->
+            <div id="modal-step-selection" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Cuadrilla de Origen Actual</label>
+                    <input type="text" id="modal-source-group-name" readonly class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-400 font-mono cursor-not-allowed">
+                    <input type="hidden" id="modal-source-group-id">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Colaboradores Seleccionados</label>
+                    <div class="max-h-28 overflow-y-auto bg-slate-950 border border-slate-800 rounded p-2">
+                        <ul id="modal-selected-list" class="text-xs font-mono text-slate-300 space-y-1"></ul>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Cuadrilla Destino</label>
+                    <select id="modal-destination-select" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        <option value="">Seleccionar cuadrilla destino...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- PASO 2: CONFIRMACIÓN -->
+            <div id="modal-step-confirmation" class="space-y-4 hidden">
+                <div class="bg-slate-950 border border-cyan-900/50 rounded p-4 space-y-2 text-xs font-mono">
+                    <p class="text-cyan-400 font-bold">Resumen de Reasignación:</p>
+                    <p>• Colaboradores a mover: <span id="conf-count" class="text-white font-bold"></span></p>
+                    <p>• Origen: <span id="conf-source" class="text-slate-300"></span></p>
+                    <p>• Destino: <span id="conf-dest" class="text-cyan-300 font-bold"></span></p>
+                </div>
+                <p class="text-[11px] text-amber-400 font-mono">⚠️ Esta acción registrará el cambio en la bitácora de auditoría GxP del sistema.</p>
+            </div>
+
+            <!-- FEEDBACK -->
+            <div id="modal-feedback" class="mt-3 p-2 rounded text-xs text-center hidden"></div>
+
+            <!-- BOTONERA DE ACCIÓN -->
+            <div class="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-800">
+                <button type="button" id="modal-cancel-btn" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded">Cancelar</button>
+                <button type="button" id="modal-continue-btn" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded disabled:opacity-50 disabled:cursor-not-allowed" disabled>Continuar</button>
+                <button type="button" id="modal-confirm-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded hidden">Confirmar Movimiento</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CARGA MASIVA DE HORARIOS Y SECUENCIAS -->
-    <div id="modalCargaMasiva" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+    <div id="modalCargaMasiva" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4 overflow-y-auto">
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-4xl shadow-2xl my-8">
             <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
                 <div>

@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMonth = fechaActual.getMonth() + 1; // 1-12
     let secuenciasCache = [];
 
+    // Estado local para la selección múltiple de operadores (Módulo de Movimiento de Cuadrillas)
+    const selectedOperators = new Map(); // Key: operadorId, Value: { id, nombre, cuadrillaId, cuadrillaNombre }
+    let currentStep = 'selection'; // 'selection' o 'confirmation'
+
     const mesesNombres = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
@@ -18,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPrevMonth = document.getElementById('prevMonth');
     const btnNextMonth = document.getElementById('nextMonth');
 
-    // Modales y Botones
+    // Modales y Botones (Cuadrillas, Operadores, Carga Masiva)
     const btnOpenCuadrilla = document.getElementById('btnOpenCuadrillaModal');
     const modalCuadrilla = document.getElementById('modalCuadrilla');
     const btnCloseCuadrilla = document.getElementById('btnCloseCuadrillaModal');
@@ -53,6 +57,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const cmPreviewBody = document.getElementById('cmPreviewBody');
     const cmFeedback = document.getElementById('cmFeedback');
 
+    // Elementos DOM - Módulo de Movimiento de Cuadrillas (Modal y Botón Flotante/Acción)
+    const btnMoverCuadrilla = document.getElementById('btn-mover-cuadrilla');
+    const selectedCounter = document.getElementById('selected-counter');
+    const modalMoverCuadrilla = document.getElementById('modal-mover-cuadrilla');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    const modalContinueBtn = document.getElementById('modal-continue-btn');
+    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+    
+    const stepSelection = document.getElementById('modal-step-selection');
+    const stepConfirmation = document.getElementById('modal-step-confirmation');
+    const modalSelectedList = document.getElementById('modal-selected-list');
+    const modalSourceNameInput = document.getElementById('modal-source-group-name');
+    const modalSourceIdInput = document.getElementById('modal-source-group-id');
+    const modalDestinationSelect = document.getElementById('modal-destination-select');
+    const modalFeedback = document.getElementById('modal-feedback');
+
+    const confCount = document.getElementById('conf-count');
+    const confSource = document.getElementById('conf-source');
+    const confDest = document.getElementById('conf-dest');
+
     // --- FUNCIONES DE SOPORTE Y CARGA ---
 
     function actualizarDisplayFecha() {
@@ -69,6 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Error al conectar con el servidor para obtener la cuadrilla.');
             
             const cuadrillas = await response.json();
+            window.appCuadrillas = cuadrillas;
+
             renderRosterGrid(cuadrillas);
         } catch (error) {
             tbodyRoster.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-red-400 font-mono">Error crítico al cargar datos: ${error.message}</td></tr>`;
@@ -108,11 +135,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             cuadrilla.operadores.forEach(op => {
+                const isChecked = selectedOperators.has(String(op.id)) ? 'checked' : '';
+
                 html += `<tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">`;
                 
                 html += `
                     <td class="p-2.5 sticky left-0 bg-slate-900 z-10 border-r border-slate-700 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
                         <div class="flex items-center gap-2">
+                            <input type="checkbox" autocomplete="off" class="operador-checkbox rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500 cursor-pointer"
+                                   data-operador-id="${op.id}"
+                                   data-operador-nombre="${op.nombre}"
+                                   data-cuadrilla-id="${cuadrilla.id}"
+                                   data-cuadrilla-nombre="${cuadrilla.nombre}" ${isChecked}>
                             ${op.foto ? `<img src="${op.foto}" class="w-7 h-7 rounded-full object-cover border border-slate-600">` : `<div class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${op.nombre.substring(0,2).toUpperCase()}</div>`}
                             <div class="overflow-hidden">
                                 <p class="text-xs font-bold text-slate-200 truncate" title="${op.nombre}">${op.nombre}</p>
@@ -150,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         tbodyRoster.innerHTML = html;
+        updateSelectionUI();
     }
 
     function obtenerEstiloCeldaTurno(codigo) {
@@ -167,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- CONFIGURACIÓN DE EVENT LISTENERS Y MODALES ---
     function setupEventListeners() {
-        // Navegación de meses
         if (btnPrevMonth) {
             btnPrevMonth.addEventListener('click', () => {
                 currentMonth--;
@@ -192,7 +226,267 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Cambio manual de turno al hacer clic en una celda de la gradilla (Optimizado sin parpadeos)
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.classList.contains('operador-checkbox')) {
+                const checkbox = e.target;
+                const id = checkbox.dataset.operadorId;
+                const nombre = checkbox.dataset.operadorNombre;
+                const cuadrillaId = checkbox.dataset.cuadrillaId;
+                const cuadrillaNombre = checkbox.dataset.cuadrillaNombre;
+
+                if (checkbox.checked) {
+                    selectedOperators.set(id, { id, nombre, cuadrillaId, cuadrillaNombre });
+                } else {
+                    selectedOperators.delete(id);
+                }
+
+                updateSelectionUI();
+            }
+        });
+
+        function updateSelectionUI() {
+            if (!selectedCounter || !btnMoverCuadrilla) return;
+            const count = selectedOperators.size;
+            selectedCounter.textContent = count;
+            if (count > 0) {
+                btnMoverCuadrilla.removeAttribute('disabled');
+                btnMoverCuadrilla.classList.remove('bg-slate-700', 'text-slate-300', 'opacity-50', 'cursor-not-allowed');
+                btnMoverCuadrilla.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+            } else {
+                btnMoverCuadrilla.setAttribute('disabled', 'true');
+                btnMoverCuadrilla.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+                btnMoverCuadrilla.classList.add('bg-slate-700', 'text-slate-300', 'opacity-50', 'cursor-not-allowed');
+            }
+        }
+        window.updateSelectionUI = updateSelectionUI;
+
+        document.addEventListener('click', (e) => {
+            const triggerBtn = e.target.closest('#btn-mover-cuadrilla');
+            if (!triggerBtn) return;
+
+            if (selectedOperators.size === 0) {
+                alert("⚠️ Debe seleccionar al menos un operador utilizando las casillas de verificación de la matriz antes de mover cuadrilla.");
+                return;
+            }
+
+            const operatorsArray = Array.from(selectedOperators.values());
+            const firstGroup = operatorsArray[0].cuadrillaId;
+            const sameGroup = operatorsArray.every(op => op.cuadrillaId === firstGroup);
+
+            if (!sameGroup) {
+                alert("❌ Error: No puedes mover colaboradores de diferentes cuadrillas simultáneamente.");
+                return;
+            }
+
+            if (modalSourceNameInput) modalSourceNameInput.value = operatorsArray[0].cuadrillaNombre;
+            if (modalSourceIdInput) modalSourceIdInput.value = firstGroup;
+
+            if (modalSelectedList) {
+                modalSelectedList.innerHTML = '';
+                operatorsArray.forEach(op => {
+                    const li = document.createElement('li');
+                    li.textContent = `• ${op.nombre}`;
+                    modalSelectedList.appendChild(li);
+                });
+            }
+
+            populateDestinationSelect(firstGroup);
+
+            if (stepSelection) stepSelection.classList.remove('hidden');
+            if (stepConfirmation) stepConfirmation.classList.add('hidden');
+            if (modalContinueBtn) {
+                modalContinueBtn.classList.remove('hidden');
+                modalContinueBtn.setAttribute('disabled', 'true');
+            }
+            if (modalConfirmBtn) modalConfirmBtn.classList.add('hidden');
+            if (modalFeedback) modalFeedback.classList.add('hidden');
+            currentStep = 'selection';
+
+            if (modalMoverCuadrilla) {
+                modalMoverCuadrilla.classList.remove('hidden');
+                const modalBox = modalMoverCuadrilla.querySelector('div.bg-slate-900') || modalMoverCuadrilla.firstElementChild;
+                
+                if (modalBox) {
+                    modalBox.style.opacity = '0';
+                    modalBox.style.transform = 'scale(0.9)';
+
+                    if (typeof gsap !== 'undefined') {
+                        gsap.to(modalBox, { 
+                            scale: 1, 
+                            opacity: 1, 
+                            duration: 0.3, 
+                            ease: "power2.out" 
+                        });
+                    } else {
+                        modalBox.style.opacity = '1';
+                        modalBox.style.transform = 'scale(1)';
+                    }
+                }
+            }
+        });
+
+        function populateDestinationSelect(currentGroupId) {
+            if (!modalDestinationSelect) return;
+            modalDestinationSelect.innerHTML = '<option value="">Seleccionar cuadrilla destino...</option>';
+            
+            const cuadrillasDisponibles = window.appCuadrillas || []; 
+
+            cuadrillasDisponibles.forEach(c => {
+                if (String(c.id) !== String(currentGroupId)) {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.identificador} - ${c.nombre}`;
+                    modalDestinationSelect.appendChild(opt);
+                }
+            });
+        }
+
+        if (modalDestinationSelect) {
+            modalDestinationSelect.addEventListener('change', () => {
+                if (modalDestinationSelect.value) {
+                    modalContinueBtn.removeAttribute('disabled');
+                } else {
+                    modalContinueBtn.setAttribute('disabled', 'true');
+                }
+            });
+        }
+
+        if (modalContinueBtn) {
+            modalContinueBtn.addEventListener('click', () => {
+                currentStep = 'confirmation';
+                if (stepSelection) stepSelection.classList.add('hidden');
+                if (stepConfirmation) stepConfirmation.classList.remove('hidden');
+                modalContinueBtn.classList.add('hidden');
+                if (modalConfirmBtn) modalConfirmBtn.classList.remove('hidden');
+
+                if (confCount) confCount.textContent = selectedOperators.size;
+                if (confSource) confSource.textContent = modalSourceNameInput.value;
+                if (confDest && modalDestinationSelect) {
+                    confDest.textContent = modalDestinationSelect.options[modalDestinationSelect.selectedIndex].text;
+                }
+            });
+        }
+
+        // >>> SECCIÓN MODIFICADA: Validaciones estrictas y parseo de errores de DRF <<<
+        if (modalConfirmBtn) {
+            modalConfirmBtn.addEventListener('click', async () => {
+                // 1. Convertir y filtrar explícitamente los IDs para evitar enviar [NaN]
+                const operadorIds = Array.from(selectedOperators.keys())
+                    .map(id => parseInt(id, 10))
+                    .filter(id => !isNaN(id));
+                
+                const destinoRaw = modalDestinationSelect ? modalDestinationSelect.value : null;
+                const cuadrillaDestinoId = destinoRaw ? parseInt(destinoRaw, 10) : null;
+
+                // 2. Validaciones preventivas en el cliente antes de llamar al backend
+                if (operadorIds.length === 0) {
+                    showFeedback('Debe seleccionar al menos un colaborador válido para mover.', 'error');
+                    return;
+                }
+
+                if (!cuadrillaDestinoId || isNaN(cuadrillaDestinoId)) {
+                    showFeedback('Debe seleccionar una cuadrilla de destino válida.', 'error');
+                    return;
+                }
+
+                modalConfirmBtn.setAttribute('disabled', 'true');
+                modalConfirmBtn.textContent = 'Procesando...';
+
+                try {
+                    const response = await fetch('/api/roster/mover-cuadrilla/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken')
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            operador_ids: operadorIds,
+                            cuadrilla_destino_id: cuadrillaDestinoId
+                        })
+                    });
+
+                    // Parsear el cuerpo de la respuesta aunque sea un error HTTP 400
+                    const data = await response.json();
+
+                    if (response.ok && (data.success || response.status === 200)) {
+                        showToast(data.message || 'Colaboradores movidos exitosamente', 'success');
+                        
+                        selectedOperators.clear();
+                        updateSelectionUI();
+
+                        closeMoveModal();
+                        loadRosterData();
+                    } else {
+                        // 3. Extracción robusta de errores detallados de Django REST Framework
+                        let errorDetail = 'Error al procesar la solicitud.';
+                        if (data.message) {
+                            errorDetail = data.message;
+                        } else if (data.detail) {
+                            errorDetail = data.detail;
+                        } else if (data.errors) {
+                            // Errores de validación personalizados
+                            errorDetail = typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors);
+                        } else if (Object.keys(data).length > 0) {
+                            // Capturar errores a nivel de campo del Serializer (ej. {"cuadrilla_destino_id": ["..."]})
+                            const errorMessages = [];
+                            for (const key in data) {
+                                errorMessages.push(`${key}: ${data[key]}`);
+                            }
+                            errorDetail = errorMessages.join(' | ');
+                        }
+
+                        showFeedback(errorDetail, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error de red al mover cuadrilla:', error);
+                    showFeedback('Error de conexión con el servidor. Consulta la consola.', 'error');
+                } finally {
+                    modalConfirmBtn.removeAttribute('disabled');
+                    modalConfirmBtn.textContent = 'Confirmar Movimiento';
+                }
+            });
+        }
+        // >>> FIN SECCIÓN MODIFICADA <<<
+
+        [closeModalBtn, modalCancelBtn].forEach(btn => {
+            if (btn) btn.addEventListener('click', closeMoveModal);
+        });
+
+        function closeMoveModal() {
+            if (!modalMoverCuadrilla) return;
+            
+            selectedOperators.clear();
+            updateSelectionUI();
+
+            const modalBox = modalMoverCuadrilla.querySelector('div.bg-slate-900') || modalMoverCuadrilla.firstElementChild;
+            if (modalBox && typeof gsap !== 'undefined') {
+                gsap.to(modalBox, {
+                    scale: 0.9, opacity: 0, duration: 0.2, ease: "power2.in",
+                    onComplete: () => {
+                        modalMoverCuadrilla.classList.add('hidden');
+                    }
+                });
+            } else {
+                modalMoverCuadrilla.classList.add('hidden');
+            }
+        }
+
+        function showFeedback(message, type) {
+            if (!modalFeedback) return;
+            modalFeedback.textContent = message;
+            modalFeedback.classList.remove('hidden', 'bg-emerald-900/50', 'text-emerald-300', 'bg-red-900/50', 'text-red-300');
+            if (type === 'success') {
+                modalFeedback.classList.add('bg-emerald-900/50', 'text-emerald-300', 'border', 'border-emerald-700');
+            } else {
+                modalFeedback.classList.add('bg-red-900/50', 'text-red-300', 'border', 'border-red-700');
+            }
+        }
+
+        function showToast(message, type) {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
         if (tbodyRoster) {
             tbodyRoster.addEventListener('click', async (e) => {
                 const td = e.target.closest('td[data-operador-id]');
@@ -202,7 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fecha = td.dataset.fecha;
                 const turnoActual = td.dataset.turnoActual || '';
 
-                // Ciclar turnos: '' -> M -> T -> N -> TR -> OFF -> INC -> F -> ''
                 const turnosCiclo = ['', 'M', 'T', 'N', 'TR', 'OFF', 'INC', 'F'];
                 const currentIndex = turnosCiclo.indexOf(turnoActual);
                 const nextIndex = (currentIndex + 1) % turnosCiclo.length;
@@ -215,6 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': getCookie('csrftoken')
                         },
+                        credentials: 'include',
                         body: JSON.stringify({
                             operador: operadorId,
                             fecha: fecha,
@@ -224,7 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (!response.ok) throw new Error('Error al actualizar el turno en el servidor.');
 
-                    // ACTUALIZACIÓN QUIRÚRGICA DEL DOM (Sin parpadeos)
                     td.dataset.turnoActual = nuevoTurno;
                     td.title = `Clic para cambiar turno (${fecha}): ${nuevoTurno || 'Libre'}`;
                     
@@ -242,7 +535,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnOpenCuadrilla) {
             btnOpenCuadrilla.addEventListener('click', () => {
                 modalCuadrilla.classList.remove('hidden');
-                gsap.fromTo(modalCuadrilla.querySelector('.bg-slate-900'), { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+                const box = modalCuadrilla.querySelector('div.bg-slate-900') || modalCuadrilla.firstElementChild;
+                if (box && typeof gsap !== 'undefined') {
+                    gsap.fromTo(box, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+                }
             });
         }
         if (btnCloseCuadrilla) {
@@ -262,6 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const res = await fetch('/api/cuadrillas/', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'include',
                         body: JSON.stringify(formData)
                     });
                     if (!res.ok) throw new Error('No se pudo registrar la cuadrilla.');
@@ -277,9 +574,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnOpenOperador) {
             btnOpenOperador.addEventListener('click', async () => {
                 modalOperador.classList.remove('hidden');
-                gsap.fromTo(modalOperador.querySelector('div.bg-slate-900'), { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+                const box = modalOperador.querySelector('div.bg-slate-900') || modalOperador.firstElementChild;
+                if (box && typeof gsap !== 'undefined') {
+                    gsap.fromTo(box, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+                }
                 try {
-                    const res = await fetch('/api/cuadrillas/');
+                    const res = await fetch('/api/cuadrillas/', { credentials: 'include' });
                     const cuadrillas = await res.json();
                     operadorCuadrillaSelect.innerHTML = '<option value="">-- Seleccione Cuadrilla --</option>';
                     cuadrillas.forEach(c => {
@@ -308,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const res = await fetch('/api/operadores/', {
                         method: 'POST',
                         headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'include',
                         body: formDataObj
                     });
                     const data = await res.json();
@@ -334,28 +635,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnOpenCargaMasiva) {
             btnOpenCargaMasiva.addEventListener('click', () => {
                 modalCargaMasiva.classList.remove('hidden');
-                gsap.fromTo(modalCargaMasiva.querySelector('.bg-slate-900'), 
-                    { scale: 0.9, opacity: 0 }, 
-                    { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' }
-                );
+                const box = modalCargaMasiva.querySelector('div.bg-slate-900') || modalCargaMasiva.firstElementChild;
+                if (box && typeof gsap !== 'undefined') {
+                    gsap.fromTo(box, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+                }
                 cargarSecuenciasDisponibles();
             });
         }
 
         function cerrarModalCarga() {
-            gsap.to(modalCargaMasiva.querySelector('.bg-slate-900'), {
-                scale: 0.9, opacity: 0, duration: 0.2, ease: 'power2.in',
-                onComplete: () => {
-                    modalCargaMasiva.classList.add('hidden');
-                    formCargaMasiva.reset();
-                    cmContenedorSelector.classList.add('hidden');
-                    cmContenedorPrevisualizacion.classList.add('hidden');
-                    cmVisualizadorSecuencia.classList.add('hidden');
-                    btnConfirmarCarga.classList.add('hidden');
-                    btnPrevisualizarCarga.classList.remove('hidden');
-                    cmFeedback.classList.add('hidden');
-                }
-            });
+            const box = modalCargaMasiva.querySelector('div.bg-slate-900') || modalCargaMasiva.firstElementChild;
+            if (box && typeof gsap !== 'undefined') {
+                gsap.to(box, {
+                    scale: 0.9, opacity: 0, duration: 0.2, ease: 'power2.in',
+                    onComplete: () => {
+                        modalCargaMasiva.classList.add('hidden');
+                        formCargaMasiva.reset();
+                        cmContenedorSelector.classList.add('hidden');
+                        cmContenedorPrevisualizacion.classList.add('hidden');
+                        cmVisualizadorSecuencia.classList.add('hidden');
+                        btnConfirmarCarga.classList.add('hidden');
+                        btnPrevisualizarCarga.classList.remove('hidden');
+                        cmFeedback.classList.add('hidden');
+                    }
+                });
+            } else {
+                modalCargaMasiva.classList.add('hidden');
+                formCargaMasiva.reset();
+            }
         }
 
         if (btnCloseCargaMasiva1) btnCloseCargaMasiva1.addEventListener('click', cerrarModalCarga);
@@ -363,7 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function cargarSecuenciasDisponibles() {
             try {
-                const response = await fetch('/api/secuencias/');
+                const response = await fetch('/api/secuencias/', { credentials: 'include' });
                 if (!response.ok) throw new Error('Error al obtener las secuencias de rol.');
                 const data = await response.json();
                 secuenciasCache = data;
@@ -418,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (tipo === 'operador') {
                     cmLabelSelector.textContent = 'Seleccionar Colaborador';
                     try {
-                        const res = await fetch('/api/operadores/?activo=true');
+                        const res = await fetch('/api/operadores/?activo=true', { credentials: 'include' });
                         const operadores = await res.json();
                         cmSelectReferencia.innerHTML = '<option value="">-- Seleccione Colaborador --</option>';
                         operadores.forEach(op => {
@@ -433,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (tipo === 'cuadrilla') {
                     cmLabelSelector.textContent = 'Seleccionar Cuadrilla';
                     try {
-                        const res = await fetch('/api/cuadrillas/');
+                        const res = await fetch('/api/cuadrillas/', { credentials: 'include' });
                         const cuadrillas = await res.json();
                         cmSelectReferencia.innerHTML = '<option value="">-- Seleccione Cuadrilla --</option>';
                         cuadrillas.filter(c => c.activa).forEach(c => {
@@ -488,6 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': getCookie('csrftoken')
                         },
+                        credentials: 'include',
                         body: JSON.stringify(payload)
                     });
 
@@ -550,6 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             'Content-Type': 'application/json',
                             'X-CSRFToken': getCookie('csrftoken')
                         },
+                        credentials: 'include',
                         body: JSON.stringify(payload)
                     });
 
@@ -570,7 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function mostrarFeedbackCarga(mensaje, tipo) {
             cmFeedback.textContent = mensaje;
             cmFeedback.classList.remove('hidden', 'bg-emerald-900/50', 'text-emerald-300', 'bg-red-900/50', 'text-red-300');
-            if (tipo === 'success') {
+            if (type === 'success' || tipo === 'success') {
                 cmFeedback.classList.add('bg-emerald-900/50', 'text-emerald-300', 'border', 'border-emerald-700');
             } else {
                 cmFeedback.classList.add('bg-red-900/50', 'text-red-300', 'border', 'border-red-700');

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.views.generic import TemplateView
@@ -9,10 +10,12 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Cuadrilla, Operador, SecuenciaRol, TurnoDia
 from .serializers import (
     CuadrillaSerializer,
+    MoverColaboradoresSerializer,
     OperadorSerializer,
     SecuenciaRolSerializer,
     TurnoDiaSerializer,
@@ -315,6 +318,90 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
         },
         status=status.HTTP_201_CREATED,
     )
+
+
+class MoverColaboradoresAPIView(APIView):
+  """Endpoint API REST para la reasignación atómica de colaboradores entre cuadrillas.
+
+  Garantiza consistencia transaccional, control de concurrencia y trazabilidad
+  GxP.
+  """
+
+  permission_classes = [permissions.IsAuthenticated]
+
+  def post(self, request, *args, **kwargs):
+    serializer = MoverColaboradoresSerializer(
+        data=request.data, context={'request': request}
+    )
+
+    if not serializer.is_valid():
+      return Response(
+          {
+              'success': False,
+              'message': 'Errores de validación en la solicitud.',
+              'errors': serializer.errors,
+          },
+          status=status.HTTP_400_BAD_REQUEST,
+      )
+
+    data = serializer.validated_data
+    operador_ids = data['operador_ids']
+    cuadrilla_destino_id = data['cuadrilla_destino_id']
+
+    try:
+      with transaction.atomic():
+        # Bloqueo de registros para evitar condiciones de carrera (concurrencia)
+        cuadrilla_destino = Cuadrilla.objects.select_for_update().get(
+            id=cuadrilla_destino_id
+        )
+        operadores = Operador.objects.select_for_update().filter(
+            id__in=operador_ids
+        )
+
+        # Identificar cuadrilla origen para metadatos de respuesta
+        cuadrilla_origen_id = operadores.first().cuadrilla_id
+        cuadrilla_origen = Cuadrilla.objects.get(id=cuadrilla_origen_id)
+
+        updated_operators = []
+        for operador in operadores:
+          operador.cuadrilla = cuadrilla_destino
+          fields_to_update = ['cuadrilla']
+          if hasattr(operador, 'updated_at'):
+            fields_to_update.append('updated_at')
+          operador.save(update_fields=fields_to_update)
+
+          updated_operators.append({
+              'id': operador.id,
+              'nombre': operador.nombre,
+              'nueva_cuadrilla': cuadrilla_destino.nombre,
+          })
+
+      return Response(
+          {
+              'success': True,
+              'message': 'Colaboradores movidos correctamente',
+              'moved_count': len(updated_operators),
+              'source_group_id': cuadrilla_origen.id,
+              'source_group_name': cuadrilla_origen.nombre,
+              'destination_group_id': cuadrilla_destino.id,
+              'destination_group_name': cuadrilla_destino.nombre,
+              'operators': updated_operators,
+          },
+          status=status.HTTP_200_OK,
+      )
+
+    except Exception as e:
+      return Response(
+          {
+              'success': False,
+              'message': (
+                  'No fue posible completar el movimiento. No se realizaron'
+                  ' cambios.'
+              ),
+              'error': str(e),
+          },
+          status=status.HTTP_400_BAD_REQUEST,
+      )
 
 
 class UserRegistrationViewSet(viewsets.ModelViewSet):

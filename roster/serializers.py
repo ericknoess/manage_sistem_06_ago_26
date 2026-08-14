@@ -78,6 +78,76 @@ class CuadrillaSerializer(serializers.ModelSerializer):
         ]
 
 
+class MoverColaboradoresSerializer(serializers.Serializer):
+    """
+    Serializer encargado de validar y procesar la reasignación masiva o individual 
+    de operadores entre cuadrillas, validando estados activos y consistencia GxP.
+    """
+    operador_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text="Lista de IDs de los colaboradores a mover"
+    )
+    cuadrilla_destino_id = serializers.IntegerField(
+        help_text="ID de la cuadrilla destino"
+    )
+
+    def validate(self, data):
+        """
+        Validaciones de negocio robustas en backend:
+        1. Existencia y estado activo de la cuadrilla destino (campo 'activa').
+        2. Existencia y estado activo de los operadores (campo 'activo').
+        3. Consistencia de la cuadrilla origen (todos deben pertenecer a la misma cuadrilla).
+        4. Restricción de no mover a la misma cuadrilla actual.
+        """
+        # 1. Validar Cuadrilla Destino
+        try:
+            cuadrilla_destino = Cuadrilla.objects.get(id=data['cuadrilla_destino_id'])
+            if not cuadrilla_destino.activa:
+                raise serializers.ValidationError({
+                    "cuadrilla_destino_id": "La cuadrilla destino no se encuentra activa."
+                })
+        except Cuadrilla.DoesNotExist:
+            raise serializers.ValidationError({
+                "cuadrilla_destino_id": "La cuadrilla destino especificada no existe."
+            })
+
+        # 2. Validar Operadores
+        operador_ids = data['operador_ids']
+        operadores = Operador.objects.filter(id__in=operador_ids)
+        
+        if operadores.count() != len(operador_ids):
+            raise serializers.ValidationError({
+                "operador_ids": "Uno o más colaboradores seleccionados no existen en el sistema."
+            })
+
+        # Verificar que todos los operadores estén activos (campo 'activo')
+        operadores_inactivos = operadores.filter(activo=False)
+        if operadores_inactivos.exists():
+            nombres_inactivos = ", ".join([op.nombre for op in operadores_inactivos])
+            raise serializers.ValidationError({
+                "operador_ids": f"Los siguientes colaboradores están inactivos y no pueden ser movidos: {nombres_inactivos}."
+            })
+
+        # 3. Validar Cuadrilla Origen (Consistencia para operaciones múltiples)
+        cuadrillas_origen = operadores.values_list('cuadrilla_id', flat=True).distinct()
+        
+        if len(cuadrillas_origen) > 1:
+            raise serializers.ValidationError({
+                "operador_ids": "Los colaboradores seleccionados pertenecen a diferentes cuadrillas origen."
+            })
+        
+        cuadrilla_origen_id = cuadrillas_origen[0]
+        
+        # 4. Validar que la cuadrilla destino sea distinta a la origen
+        if cuadrilla_origen_id == data['cuadrilla_destino_id']:
+            raise serializers.ValidationError({
+                "cuadrilla_destino_id": "La cuadrilla destino debe ser diferente a la cuadrilla actual de los colaboradores."
+            })
+
+        return data
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """
     Serializer dedicado a la creación y registro seguro de usuarios del sistema (Django Auth)
