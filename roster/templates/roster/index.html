@@ -15,16 +15,17 @@
     
     <style>
         .no-select { user-select: none; }
+        /* Mejora sutil del scrollbar para la tabla Enterprise */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: #0f172a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; border: 1px solid #0f172a; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-200 min-h-screen font-sans no-select overflow-x-hidden">
+<body class="bg-slate-900 text-slate-200 min-h-screen font-sans no-select overflow-x-hidden flex flex-col">
 
     <!-- HEADER INDUSTRIAL -->
-    <header class="bg-slate-950 border-b border-cyan-900/50 p-4 sticky top-0 z-50 shadow-lg">
+    <header class="bg-slate-950 border-b border-cyan-900/50 p-4 sticky top-0 z-50 shadow-lg shrink-0">
         <div class="flex flex-wrap justify-between items-center max-w-screen-2xl mx-auto gap-4">
             <div>
                 <h1 class="text-xl font-black text-cyan-500 tracking-wider">BIOPROCESOS UPSTREAM</h1>
@@ -60,18 +61,23 @@
     </header>
 
     <!-- CONTENEDOR PRINCIPAL DE LA MATRIZ -->
-    <main class="p-4 max-w-screen-2xl mx-auto">
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700 shadow-2xl overflow-hidden relative">
-            <div class="overflow-x-auto">
+    <main class="p-4 max-w-screen-2xl mx-auto w-full flex-1 flex flex-col">
+        <div class="bg-slate-800/50 rounded-xl border border-slate-700 shadow-2xl overflow-hidden relative flex-1 flex flex-col">
+            
+            <!-- CONTENEDOR CON SCROLL (Altura limitada y desbordamiento automático) -->
+            <div class="overflow-auto max-h-[70vh] w-full relative custom-scrollbar">
                 <table class="w-full border-collapse text-left">
-                    <thead class="bg-slate-950 border-b-2 border-cyan-800">
+                    <!-- ENCABEZADO STICKY -->
+                    <thead class="bg-slate-950 border-b-2 border-cyan-800 sticky top-0 z-30 shadow-md">
                         <tr>
-                            <th class="p-3 sticky left-0 bg-slate-950 z-20 border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest w-48 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
+                            <!-- ESQUINA STICKY (Intersecta X y Y - Z-Index 40) -->
+                            <th class="p-3 sticky left-0 top-0 bg-slate-950 z-40 border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest w-48 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
                                 Operador / Cuadrilla
                             </th>
                             <script>
                                 for(let i=1; i<=31; i++) {
-                                    document.write(`<th class="p-2 border-r border-slate-800 text-center text-[10px] text-slate-500 font-mono w-8 min-w-[32px]">${i}</th>`);
+                                    // FONDO SÓLIDO (bg-slate-950) para evitar transparencias al subir las filas
+                                    document.write(`<th class="p-2 border-r border-slate-800 text-center text-[10px] text-slate-500 font-mono w-8 min-w-[32px] bg-slate-950">${i}</th>`);
                                 }
                             </script>
                         </tr>
@@ -88,7 +94,7 @@
         </div>
         
         <!-- LEYENDA GxP -->
-        <div class="mt-4 flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 justify-center">
+        <div class="mt-4 flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 justify-center shrink-0">
             <span class="flex items-center gap-1"><div class="w-3 h-3 bg-amber-500/20 border border-amber-500 rounded-sm"></div> M: Mañana</span>
             <span class="flex items-center gap-1"><div class="w-3 h-3 bg-blue-500/20 border border-blue-500 rounded-sm"></div> T: Tarde</span>
             <span class="flex items-center gap-1"><div class="w-3 h-3 bg-purple-500/20 border border-purple-500 rounded-sm"></div> N: Noche</span>
@@ -160,7 +166,7 @@
         </div>
     </div>
 
-    <!-- MODAL: MOVER CUADRILLA (Sincronizado con lógica de roser.js) -->
+    <!-- MODAL: MOVER CUADRILLA -->
     <div id="modal-mover-cuadrilla" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
