@@ -10,7 +10,8 @@ class Cuadrilla(models.Model):
     nombre = models.CharField(max_length=100, verbose_name="Nombre Descriptivo")
     activa = models.BooleanField(default=True, verbose_name="Cuadrilla Activa")
     descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción del Área")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     def __str__(self):
         return f"{self.identificador} - {self.nombre}"
@@ -23,8 +24,7 @@ class Cuadrilla(models.Model):
 
 class Operador(models.Model):
     """
-    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta,
-    incorporando metadatos de expertiz y soporte fotográfico para trazabilidad GxP.
+    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta.
     """
     EXPERTISE_CHOICES = [
         ('JUNIOR', 'Operador Junior'),
@@ -43,6 +43,8 @@ class Operador(models.Model):
     foto = models.ImageField(upload_to='operadores/fotos/', blank=True, null=True, verbose_name="Fotografía del Colaborador")
     nivel_expertiz = models.CharField(max_length=30, choices=EXPERTISE_CHOICES, default='JUNIOR', verbose_name="Nivel de Expertiz")
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     def __str__(self):
         return f"{self.codigo_empleado or 'S/C'} | {self.nombre} ({self.cuadrilla.identificador if self.cuadrilla else 'Sin Cuadrilla'})"
@@ -55,8 +57,7 @@ class Operador(models.Model):
 
 class TurnoDia(models.Model):
     """
-    Matriz de turnos operacional. Asocia a un operador con un código de turno específico en una fecha dada,
-    garantizando trazabilidad GxP.
+    Matriz de turnos operacional. Asocia a un operador con un código de turno específico en una fecha dada.
     """
     TURNO_CHOICES = [
         ('M', 'Matutino'),
@@ -78,7 +79,8 @@ class TurnoDia(models.Model):
     )
     fecha = models.DateField(verbose_name="Fecha de Asignación")
     codigo_turno = models.CharField(max_length=10, choices=TURNO_CHOICES, default='', verbose_name="Código de Turno")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Actualización (GxP)")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     class Meta:
         unique_together = ('operador', 'fecha')
@@ -93,12 +95,12 @@ class TurnoDia(models.Model):
 class SecuenciaRol(models.Model):
     """
     Define un patrón de rotación reutilizable (plantilla).
-    Ejemplo: "Rotación A 5x2"
     """
     nombre = models.CharField(max_length=100, unique=True, verbose_name="Nombre de la Secuencia")
     descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción")
     activa = models.BooleanField(default=True, verbose_name="¿Está Activa?")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     def __str__(self):
         return f"{self.nombre} {'(Activa)' if self.activa else '(Inactiva)'}"
@@ -126,6 +128,8 @@ class SecuenciaRolDetalle(models.Model):
         verbose_name="Código de Turno"
     )
     dias = models.PositiveIntegerField(default=1, verbose_name="Cantidad de Días")
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     class Meta:
         ordering = ['secuencia', 'orden']

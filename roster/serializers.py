@@ -12,7 +12,7 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = TurnoDia
-        fields = ['id', 'operador', 'fecha', 'codigo_turno', 'updated_at']
+        fields = ['id', 'operador', 'fecha', 'codigo_turno']
 
 
 class OperadorSerializer(serializers.ModelSerializer):
@@ -73,7 +73,7 @@ class CuadrillaSerializer(serializers.ModelSerializer):
             'nombre', 
             'activa', 
             'descripcion', 
-            'created_at', 
+            'creado_en', 
             'operadores'
         ]
 
@@ -94,11 +94,7 @@ class MoverColaboradoresSerializer(serializers.Serializer):
 
     def validate(self, data):
         """
-        Validaciones de negocio robustas en backend:
-        1. Existencia y estado activo de la cuadrilla destino (campo 'activa').
-        2. Existencia y estado activo de los operadores (campo 'activo').
-        3. Consistencia de la cuadrilla origen (todos deben pertenecer a la misma cuadrilla).
-        4. Restricción de no mover a la misma cuadrilla actual.
+        Validaciones de negocio robustas en backend con trazas de diagnóstico GxP.
         """
         # 1. Validar Cuadrilla Destino
         try:
@@ -112,16 +108,21 @@ class MoverColaboradoresSerializer(serializers.Serializer):
                 "cuadrilla_destino_id": "La cuadrilla destino especificada no existe."
             })
 
-        # 2. Validar Operadores
+        # 2. Validar Operadores y depurar estado en Base de Datos
         operador_ids = data['operador_ids']
         operadores = Operador.objects.filter(id__in=operador_ids)
         
+        print(f"\n--- [DIAGNÓSTICO GxP MOVER COLABORADORES] ---")
+        print(f"IDs recibidos en payload: {operador_ids}")
+        for op in operadores:
+            print(f" -> Operador ID: {op.id} | Nombre: {op.nombre} | Cuadrilla ID en BD: {op.cuadrilla_id}")
+
         if operadores.count() != len(operador_ids):
             raise serializers.ValidationError({
                 "operador_ids": "Uno o más colaboradores seleccionados no existen en el sistema."
             })
 
-        # Verificar que todos los operadores estén activos (campo 'activo')
+        # Verificar que todos los operadores estén activos
         operadores_inactivos = operadores.filter(activo=False)
         if operadores_inactivos.exists():
             nombres_inactivos = ", ".join([op.nombre for op in operadores_inactivos])
@@ -130,14 +131,17 @@ class MoverColaboradoresSerializer(serializers.Serializer):
             })
 
         # 3. Validar Cuadrilla Origen (Consistencia para operaciones múltiples)
-        cuadrillas_origen = operadores.values_list('cuadrilla_id', flat=True).distinct()
-        
+        cuadrillas_origen = set(operadores.values_list('cuadrilla_id', flat=True))
+        print(f"Cuadrillas origen únicas detectadas en BD: {cuadrillas_origen}")
+        print(f"-----------------------------------------------\n")
+
         if len(cuadrillas_origen) > 1:
+            nombres_cuadrillas = list(Cuadrilla.objects.filter(id__in=cuadrillas_origen).values_list('nombre', flat=True))
             raise serializers.ValidationError({
-                "operador_ids": "Los colaboradores seleccionados pertenecen a diferentes cuadrillas origen."
+                "operador_ids": f"Los colaboradores seleccionados pertenecen a diferentes cuadrillas origen: {', '.join(str(n) for n in nombres_cuadrillas)}."
             })
         
-        cuadrilla_origen_id = cuadrillas_origen[0]
+        cuadrilla_origen_id = list(cuadrillas_origen)[0]
         
         # 4. Validar que la cuadrilla destino sea distinta a la origen
         if cuadrilla_origen_id == data['cuadrilla_destino_id']:
@@ -185,7 +189,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         if operador_id:
             try:
                 operador = Operador.objects.get(id=operador_id)
-                # Enlazamos o registramos la referencia para auditoría GxP futura si es requerido
             except Operador.DoesNotExist:
                 pass
 
@@ -222,7 +225,7 @@ class SecuenciaRolSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SecuenciaRol
-        fields = ['id', 'nombre', 'descripcion', 'activa', 'created_at', 'detalles']
+        fields = ['id', 'nombre', 'descripcion', 'activa', 'creado_en', 'detalles']
 
     def create(self, validated_data):
         detalles_data = validated_data.pop('detalles')
@@ -239,8 +242,6 @@ class SecuenciaRolSerializer(serializers.ModelSerializer):
         instance.save()
 
         if detalles_data is not None:
-            # Estrategia de reemplazo simple para la edición:
-            # Borramos los anteriores y recreamos (trazabilidad mediante log posterior)
             instance.detalles.all().delete()
             for detalle_data in detalles_data:
                 SecuenciaRolDetalle.objects.create(secuencia=instance, **detalle_data)

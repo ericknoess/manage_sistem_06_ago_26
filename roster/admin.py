@@ -18,8 +18,8 @@ class SecuenciaRolAdmin(admin.ModelAdmin):
     Configuración del panel de administración para el modelo SecuenciaRol.
     Facilita la gestión de plantillas de rotación reutilizables para la carga masiva.
     """
-    list_display = ('id', 'nombre', 'descripcion', 'activa', 'created_at')
-    list_filter = ('activa', 'created_at')
+    list_display = ('id', 'nombre', 'descripcion', 'activa', 'creado_en')
+    list_filter = ('activa', 'creado_en')
     search_fields = ('nombre', 'descripcion')
     list_editable = ('activa',)
     inlines = [SecuenciaRolDetalleInline]
@@ -31,9 +31,9 @@ class CuadrillaAdmin(admin.ModelAdmin):
     Configuración del panel de administración para el modelo Cuadrilla.
     Permite visualizar el nombre, descripción y fecha de creación en formato tabular.
     """
-    list_display = ('id', 'identificador', 'nombre', 'descripcion', 'activa', 'created_at')
+    list_display = ('id', 'identificador', 'nombre', 'descripcion', 'activa', 'creado_en')
     search_fields = ('identificador', 'nombre')
-    list_filter = ('activa', 'created_at')
+    list_filter = ('activa', 'creado_en')
     list_editable = ('activa',)
 
 
@@ -55,7 +55,7 @@ class TurnoDiaAdmin(admin.ModelAdmin):
     Configuración del panel de administración para la matriz de turnos (TurnoDia).
     Permite filtrar por código de turno, fecha y cuadrilla del operador.
     """
-    list_display = ('id', 'operador', 'fecha', 'codigo_turno', 'updated_at')
+    list_display = ('id', 'operador', 'fecha', 'codigo_turno', 'actualizado_en')
     list_filter = ('codigo_turno', 'fecha', 'operador__cuadrilla')
     search_fields = ('operador__nombre', 'codigo_turno')
     date_hierarchy = 'fecha'

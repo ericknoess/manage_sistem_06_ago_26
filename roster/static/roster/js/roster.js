@@ -7,9 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMonth = fechaActual.getMonth() + 1; // 1-12
     let secuenciasCache = [];
 
-    // Estado local para la selección múltiple de operadores (Módulo de Movimiento de Cuadrillas)
-    const selectedOperators = new Map(); // Key: operadorId, Value: { id, nombre, cuadrillaId, cuadrillaNombre }
-    let currentStep = 'selection'; // 'selection' o 'confirmation'
+    // Estado local para la selección múltiple
+    const selectedOperators = new Map();
+    let currentStep = 'selection';
 
     const mesesNombres = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPrevMonth = document.getElementById('prevMonth');
     const btnNextMonth = document.getElementById('nextMonth');
 
-    // Modales y Botones (Cuadrillas, Operadores, Carga Masiva)
+    // Modales y Botones
     const btnOpenCuadrilla = document.getElementById('btnOpenCuadrillaModal');
     const modalCuadrilla = document.getElementById('modalCuadrilla');
     const btnCloseCuadrilla = document.getElementById('btnCloseCuadrillaModal');
@@ -57,7 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const cmPreviewBody = document.getElementById('cmPreviewBody');
     const cmFeedback = document.getElementById('cmFeedback');
 
-    // Elementos DOM - Módulo de Movimiento de Cuadrillas (Modal y Botón Flotante/Acción)
     const btnMoverCuadrilla = document.getElementById('btn-mover-cuadrilla');
     const selectedCounter = document.getElementById('selected-counter');
     const modalMoverCuadrilla = document.getElementById('modal-mover-cuadrilla');
@@ -90,14 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             tbodyRoster.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-cyan-400 font-mono animate-pulse">Sincronizando matriz operacional (${mesesNombres[currentMonth - 1]} ${currentYear})...</td></tr>`;
             
-            const response = await fetch(`/api/cuadrillas/?month=${currentMonth}&year=${currentYear}`);
-            if (!response.ok) throw new Error('Error al conectar con el servidor para obtener la cuadrilla.');
+            const timestamp = new Date().getTime();
+            const response = await fetch(`/api/cuadrillas/?month=${currentMonth}&year=${currentYear}&_ts=${timestamp}`, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: {
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+
+            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
             
             const cuadrillas = await response.json();
             window.appCuadrillas = cuadrillas;
 
             renderRosterGrid(cuadrillas);
         } catch (error) {
+            console.error("Error en loadRosterData:", error);
             tbodyRoster.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-red-400 font-mono">Error crítico al cargar datos: ${error.message}</td></tr>`;
         }
     }
@@ -265,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!triggerBtn) return;
 
             if (selectedOperators.size === 0) {
-                alert("⚠️ Debe seleccionar al menos un operador utilizando las casillas de verificación de la matriz antes de mover cuadrilla.");
+                alert("⚠️ Debe seleccionar al menos un operador utilizando las casillas de verificación.");
                 return;
             }
 
@@ -276,6 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!sameGroup) {
                 alert("❌ Error: No puedes mover colaboradores de diferentes cuadrillas simultáneamente.");
                 return;
+            }
+
+            if (modalDestinationSelect) modalDestinationSelect.value = '';
+            if (modalFeedback) {
+                modalFeedback.classList.add('hidden');
+                modalFeedback.textContent = '';
             }
 
             if (modalSourceNameInput) modalSourceNameInput.value = operatorsArray[0].cuadrillaNombre;
@@ -299,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 modalContinueBtn.setAttribute('disabled', 'true');
             }
             if (modalConfirmBtn) modalConfirmBtn.classList.add('hidden');
-            if (modalFeedback) modalFeedback.classList.add('hidden');
             currentStep = 'selection';
 
             if (modalMoverCuadrilla) {
@@ -367,10 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // >>> SECCIÓN MODIFICADA: Validaciones estrictas y parseo de errores de DRF <<<
         if (modalConfirmBtn) {
             modalConfirmBtn.addEventListener('click', async () => {
-                // 1. Convertir y filtrar explícitamente los IDs para evitar enviar [NaN]
                 const operadorIds = Array.from(selectedOperators.keys())
                     .map(id => parseInt(id, 10))
                     .filter(id => !isNaN(id));
@@ -378,7 +390,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const destinoRaw = modalDestinationSelect ? modalDestinationSelect.value : null;
                 const cuadrillaDestinoId = destinoRaw ? parseInt(destinoRaw, 10) : null;
 
-                // 2. Validaciones preventivas en el cliente antes de llamar al backend
                 if (operadorIds.length === 0) {
                     showFeedback('Debe seleccionar al menos un colaborador válido para mover.', 'error');
                     return;
@@ -390,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 modalConfirmBtn.setAttribute('disabled', 'true');
-                modalConfirmBtn.textContent = 'Procesando...';
+                modalConfirmBtn.textContent = 'Procesando en Servidor...';
 
                 try {
                     const response = await fetch('/api/roster/mover-cuadrilla/', {
@@ -406,48 +417,47 @@ document.addEventListener('DOMContentLoaded', () => {
                         })
                     });
 
-                    // Parsear el cuerpo de la respuesta aunque sea un error HTTP 400
+                    // Si el servidor devuelve 204 No Content
+                    if (response.status === 204) {
+                        showToast('Colaboradores movidos exitosamente', 'success');
+                        await ejecutarLimpiezaPostMovimientoAsincrona();
+                        return;
+                    }
+
                     const data = await response.json();
 
-                    if (response.ok && (data.success || response.status === 200)) {
+                    if (response.ok) {
                         showToast(data.message || 'Colaboradores movidos exitosamente', 'success');
-                        
-                        selectedOperators.clear();
-                        updateSelectionUI();
-
-                        closeMoveModal();
-                        loadRosterData();
+                        await ejecutarLimpiezaPostMovimientoAsincrona();
                     } else {
-                        // 3. Extracción robusta de errores detallados de Django REST Framework
                         let errorDetail = 'Error al procesar la solicitud.';
-                        if (data.message) {
-                            errorDetail = data.message;
-                        } else if (data.detail) {
-                            errorDetail = data.detail;
-                        } else if (data.errors) {
-                            // Errores de validación personalizados
-                            errorDetail = typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors);
-                        } else if (Object.keys(data).length > 0) {
-                            // Capturar errores a nivel de campo del Serializer (ej. {"cuadrilla_destino_id": ["..."]})
+                        if (data.message) errorDetail = data.message;
+                        else if (data.detail) errorDetail = data.detail;
+                        else if (data.errors) errorDetail = typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors);
+                        else if (Object.keys(data).length > 0) {
                             const errorMessages = [];
-                            for (const key in data) {
-                                errorMessages.push(`${key}: ${data[key]}`);
-                            }
+                            for (const key in data) errorMessages.push(`${key}: ${data[key]}`);
                             errorDetail = errorMessages.join(' | ');
                         }
-
                         showFeedback(errorDetail, 'error');
                     }
                 } catch (error) {
                     console.error('Error de red al mover cuadrilla:', error);
-                    showFeedback('Error de conexión con el servidor. Consulta la consola.', 'error');
+                    showFeedback('Error de conexión con el servidor o JSON inválido.', 'error');
                 } finally {
                     modalConfirmBtn.removeAttribute('disabled');
                     modalConfirmBtn.textContent = 'Confirmar Movimiento';
                 }
             });
         }
-        // >>> FIN SECCIÓN MODIFICADA <<<
+
+        async function ejecutarLimpiezaPostMovimientoAsincrona() {
+            selectedOperators.clear();
+            updateSelectionUI();
+            closeMoveModal();
+            // FIX ARQUITECTURA CRÍTICO: Esperar de forma síncrona la recarga completa desde PostgreSQL
+            await loadRosterData();
+        }
 
         [closeModalBtn, modalCancelBtn].forEach(btn => {
             if (btn) btn.addEventListener('click', closeMoveModal);
@@ -487,6 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[${type.toUpperCase()}] ${message}`);
         }
 
+        // Eventos para Cambio Individual de Turnos
         if (tbodyRoster) {
             tbodyRoster.addEventListener('click', async (e) => {
                 const td = e.target.closest('td[data-operador-id]');
@@ -516,7 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         })
                     });
 
-                    if (!response.ok) throw new Error('Error al actualizar el turno en el servidor.');
+                    if (!response.ok) throw new Error('Error al actualizar el turno.');
 
                     td.dataset.turnoActual = nuevoTurno;
                     td.title = `Clic para cambiar turno (${fecha}): ${nuevoTurno || 'Libre'}`;
@@ -532,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Modal Cuadrilla Básica
         if (btnOpenCuadrilla) {
             btnOpenCuadrilla.addEventListener('click', () => {
                 modalCuadrilla.classList.remove('hidden');
@@ -571,6 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Modal Nuevo Operador
         if (btnOpenOperador) {
             btnOpenOperador.addEventListener('click', async () => {
                 modalOperador.classList.remove('hidden');
@@ -579,7 +592,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     gsap.fromTo(box, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
                 }
                 try {
-                    const res = await fetch('/api/cuadrillas/', { credentials: 'include' });
+                    const res = await fetch(`/api/cuadrillas/?_ts=${new Date().getTime()}`, { 
+                        cache: 'no-store',
+                        credentials: 'include' 
+                    });
                     const cuadrillas = await res.json();
                     operadorCuadrillaSelect.innerHTML = '<option value="">-- Seleccione Cuadrilla --</option>';
                     cuadrillas.forEach(c => {
@@ -632,6 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Carga Masiva
         if (btnOpenCargaMasiva) {
             btnOpenCargaMasiva.addEventListener('click', () => {
                 modalCargaMasiva.classList.remove('hidden');
@@ -670,7 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function cargarSecuenciasDisponibles() {
             try {
-                const response = await fetch('/api/secuencias/', { credentials: 'include' });
+                const response = await fetch(`/api/secuencias/?_ts=${new Date().getTime()}`, { cache: 'no-store', credentials: 'include' });
                 if (!response.ok) throw new Error('Error al obtener las secuencias de rol.');
                 const data = await response.json();
                 secuenciasCache = data;
@@ -722,10 +739,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 cmContenedorSelector.classList.remove('hidden');
+                const ts = new Date().getTime();
                 if (tipo === 'operador') {
                     cmLabelSelector.textContent = 'Seleccionar Colaborador';
                     try {
-                        const res = await fetch('/api/operadores/?activo=true', { credentials: 'include' });
+                        const res = await fetch(`/api/operadores/?activo=true&_ts=${ts}`, { cache: 'no-store', credentials: 'include' });
                         const operadores = await res.json();
                         cmSelectReferencia.innerHTML = '<option value="">-- Seleccione Colaborador --</option>';
                         operadores.forEach(op => {
@@ -740,7 +758,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (tipo === 'cuadrilla') {
                     cmLabelSelector.textContent = 'Seleccionar Cuadrilla';
                     try {
-                        const res = await fetch('/api/cuadrillas/', { credentials: 'include' });
+                        const res = await fetch(`/api/cuadrillas/?_ts=${ts}`, { cache: 'no-store', credentials: 'include' });
                         const cuadrillas = await res.json();
                         cmSelectReferencia.innerHTML = '<option value="">-- Seleccione Cuadrilla --</option>';
                         cuadrillas.filter(c => c.activa).forEach(c => {
@@ -879,7 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function mostrarFeedbackCarga(mensaje, tipo) {
             cmFeedback.textContent = mensaje;
             cmFeedback.classList.remove('hidden', 'bg-emerald-900/50', 'text-emerald-300', 'bg-red-900/50', 'text-red-300');
-            if (type === 'success' || tipo === 'success') {
+            if (tipo === 'success') {
                 cmFeedback.classList.add('bg-emerald-900/50', 'text-emerald-300', 'border', 'border-emerald-700');
             } else {
                 cmFeedback.classList.add('bg-red-900/50', 'text-red-300', 'border', 'border-red-700');
