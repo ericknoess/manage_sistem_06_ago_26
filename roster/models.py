@@ -139,6 +139,59 @@ class TurnoDia(models.Model):
         return f"{self.operador.nombre} - {self.fecha}: {self.tipo_turno_id or 'Libre'}"
 
 
+class IncidenciaTurno(models.Model):
+    """
+    Registro de incidencias operativas, anomalías de horario o notas asociadas 
+    a la asignación diaria de un operador (TurnoDia).
+    """
+    turno_dia = models.OneToOneField(
+        TurnoDia,
+        on_delete=models.CASCADE,
+        related_name='incidencia',
+        verbose_name="Turno Asignado"
+    )
+    minutos_retardo = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Minutos de Retardo",
+        help_text="Tiempo de llegada tardía en minutos."
+    )
+    horas_salida_anticipada = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Horas de Salida Anticipada",
+        help_text="Ejemplo: 1.5 para hora y media."
+    )
+    notas = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name="Notas u Observaciones",
+        help_text="Justificación o anotación general sobre el evento."
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Registro")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
+
+    class Meta:
+        verbose_name = "Incidencia de Turno"
+        verbose_name_plural = "Incidencias de Turnos"
+        constraints = [
+            models.CheckConstraint(
+                # Asegura que al menos un campo tenga información válida. Evita registros 100% vacíos.
+                check=(
+                    models.Q(minutos_retardo__isnull=False) |
+                    models.Q(horas_salida_anticipada__isnull=False) |
+                    (~models.Q(notas__exact='') & models.Q(notas__isnull=False))
+                ),
+                name='check_incidencia_requiere_datos'
+            )
+        ]
+
+    def __str__(self):
+        return f"Incidencia de {self.turno_dia.operador.nombre} el {self.turno_dia.fecha}"
+
+
 class SecuenciaRol(models.Model):
     """
     Define un patrón de rotación reutilizable (plantilla).

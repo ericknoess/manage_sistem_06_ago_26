@@ -12,7 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import TipoTurno, Cuadrilla, Operador, SecuenciaRol, TurnoDia
+from .models import TipoTurno, Cuadrilla, Operador, SecuenciaRol, TurnoDia, IncidenciaTurno
 from .serializers import (
     TipoTurnoSerializer,
     CuadrillaSerializer,
@@ -21,6 +21,7 @@ from .serializers import (
     SecuenciaRolSerializer,
     TurnoDiaSerializer,
     UserRegistrationSerializer,
+    IncidenciaTurnoSerializer,
 )
 from .services import aplicar_carga_masiva, expandir_secuencia
 
@@ -72,15 +73,17 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
             try:
                 m = int(month)
                 y = int(year)
+                # OPTIMIZACIÓN GxP: Se agregó 'incidencia' al select_related para evitar N+1 queries.
                 turnos_prefetch = Prefetch(
                     'operadores__turnos',
-                    queryset=TurnoDia.objects.filter(fecha__year=y, fecha__month=m).select_related('tipo_turno'),
+                    queryset=TurnoDia.objects.filter(fecha__year=y, fecha__month=m).select_related('tipo_turno', 'incidencia'),
                 )
                 queryset = queryset.prefetch_related(turnos_prefetch, 'operadores')
             except ValueError:
                 pass
         else:
-            queryset = queryset.prefetch_related('operadores__turnos__tipo_turno', 'operadores')
+            # OPTIMIZACIÓN GxP: Se agregó 'operadores__turnos__incidencia' al prefetch fallback.
+            queryset = queryset.prefetch_related('operadores__turnos__tipo_turno', 'operadores__turnos__incidencia', 'operadores')
         return queryset
 
 
@@ -135,7 +138,8 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
 
             operador = get_object_or_404(Operador, id=operador_id)
 
-            # Si el código de turno está vacío, limpiamos la asignación del día
+            # Si el código de turno está vacío, limpiamos la asignación del día.
+            # Nota: Por el 'on_delete=models.CASCADE', esto eliminará automáticamente la incidencia si existía.
             if not codigo_turno or str(codigo_turno).strip() == '':
                 TurnoDia.objects.filter(operador=operador, fecha=fecha).delete()
                 return Response(
@@ -170,7 +174,7 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
             )
         except Exception as e:
             import traceback
-            traceback.print_exc()  # Imprime la traza completa en la terminal donde corre runserver
+            traceback.print_exc()
             return Response(
                 {'error': f'Error interno en servidor: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -320,6 +324,23 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class IncidenciaTurnoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet exclusivo para gestionar las incidencias y notas operacionales asociadas a un Turno.
+    """
+    queryset = IncidenciaTurno.objects.all().select_related('turno_dia__operador')
+    serializer_class = IncidenciaTurnoSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Permite filtrar desde el frontend pasando la ID del turno: /api/incidencias/?turno_dia=5
+        turno_id = self.request.query_params.get('turno_dia')
+        if turno_id:
+            queryset = queryset.filter(turno_dia_id=turno_id)
+        return queryset
 
 
 class MoverColaboradoresAPIView(APIView):

@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
-from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
 
 
 class TipoTurnoSerializer(serializers.ModelSerializer):
@@ -16,15 +16,40 @@ class TipoTurnoSerializer(serializers.ModelSerializer):
         fields = ['codigo', 'nombre', 'color_fondo', 'color_texto', 'es_descanso', 'activo']
 
 
+class IncidenciaTurnoSerializer(serializers.ModelSerializer):
+    """
+    Serializer exclusivo para el registro y actualización de incidencias operacionales.
+    Valida las reglas de negocio antes de tocar la base de datos (HTTP 400).
+    """
+    class Meta:
+        model = IncidenciaTurno
+        fields = ['id', 'turno_dia', 'minutos_retardo', 'horas_salida_anticipada', 'notas']
+
+    def validate(self, data):
+        # Validación defensiva de API: Replicamos la regla de negocio del CheckConstraint
+        retardo = data.get('minutos_retardo')
+        salida = data.get('horas_salida_anticipada')
+        notas = data.get('notas')
+
+        if retardo is None and salida is None and (not notas or str(notas).strip() == ''):
+            raise serializers.ValidationError(
+                "Debe especificar al menos un tiempo de retardo, salida anticipada o una nota."
+            )
+        return data
+
+
 class TurnoDiaSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo TurnoDia.
     Gestiona la representación JSON de los turnos operacionales con trazabilidad GxP
     y metadatos de color integrados desde el catálogo maestro, con blindaje defensivo y sin atributos redundantes.
+    Inyecta datos de incidencia para renderizado visual.
     """
     codigo_turno = serializers.SerializerMethodField()
     color_fondo = serializers.SerializerMethodField()
     color_texto = serializers.SerializerMethodField()
+    tiene_incidencia = serializers.SerializerMethodField()
+    incidencia_detalle = serializers.SerializerMethodField()
     
     # Se remueve el parámetro redundante source='tipo_turno' para evitar AssertionError en DRF
     tipo_turno = serializers.PrimaryKeyRelatedField(
@@ -36,7 +61,10 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TurnoDia
-        fields = ['id', 'operador', 'fecha', 'codigo_turno', 'color_fondo', 'color_texto', 'tipo_turno']
+        fields = [
+            'id', 'operador', 'fecha', 'codigo_turno', 'color_fondo', 'color_texto', 
+            'tipo_turno', 'tiene_incidencia', 'incidencia_detalle'
+        ]
 
     def get_codigo_turno(self, obj):
         try:
@@ -61,6 +89,27 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
         except (ObjectDoesNotExist, Exception):
             pass
         return '#ffffff'
+
+    def get_tiene_incidencia(self, obj):
+        """Retorna True si este turno tiene una incidencia asociada (OneToOne)."""
+        try:
+            return hasattr(obj, 'incidencia') and obj.incidencia is not None
+        except ObjectDoesNotExist:
+            return False
+
+    def get_incidencia_detalle(self, obj):
+        """Inyecta un payload ligero con los datos de la incidencia para evitar llamados extra a la API."""
+        try:
+            if hasattr(obj, 'incidencia') and obj.incidencia:
+                return {
+                    'id': obj.incidencia.id,
+                    'minutos_retardo': obj.incidencia.minutos_retardo,
+                    'horas_salida_anticipada': obj.incidencia.horas_salida_anticipada,
+                    'notas': obj.incidencia.notas
+                }
+        except ObjectDoesNotExist:
+            pass
+        return None
 
     def create(self, validated_data):
         if 'tipo_turno' not in validated_data and 'codigo_turno' in self.initial_data:

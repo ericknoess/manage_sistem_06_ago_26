@@ -317,6 +317,54 @@
         </div>
     </div>
 
+    <!-- MODAL: INCIDENCIA OPERATIVA (NUEVO) -->
+    <div id="modalIncidencia" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-amber-500">Registrar Incidencia / Nota</h3>
+                    <p class="text-xs text-slate-400 font-mono" id="incidenciaContextText">Cargando contexto...</p>
+                </div>
+                <button type="button" id="btnCloseIncidenciaModal" class="text-slate-400 hover:text-white font-bold text-lg px-2">✕</button>
+            </div>
+
+            <form id="formIncidencia" class="space-y-4">
+                <!-- Campos ocultos de vinculación a Base de Datos -->
+                <input type="hidden" id="incidenciaTurnoId" name="turno_dia_id">
+                
+                <!-- Inputs Opcionales de Tiempo -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-mono text-slate-400 mb-1">Minutos de Retardo</label>
+                        <input type="number" id="incidenciaRetardo" name="minutos_retardo" min="0" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none placeholder:text-slate-600" placeholder="Ej. 15">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-mono text-slate-400 mb-1">Hrs. Salida Anticipada</label>
+                        <input type="number" id="incidenciaSalida" name="horas_salida_anticipada" min="0" step="0.1" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none placeholder:text-slate-600" placeholder="Ej. 1.5">
+                    </div>
+                </div>
+
+                <!-- Input Opcional de Notas -->
+                <div>
+                    <label class="block text-[11px] font-mono text-slate-400 mb-1">Notas u Observaciones</label>
+                    <textarea id="incidenciaNotas" name="notas" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none resize-none placeholder:text-slate-600" placeholder="Justificación o anotación general sobre el evento..."></textarea>
+                </div>
+
+                <!-- Mensaje de error/éxito -->
+                <div id="incidenciaFeedback" class="p-2 rounded text-xs text-center hidden"></div>
+
+                <!-- Botonera -->
+                <div class="flex justify-between items-center pt-4 border-t border-slate-800">
+                    <button type="button" id="btnDeleteIncidencia" class="px-3 py-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 text-[11px] font-bold rounded border border-red-900 hidden transition-colors">Eliminar Registro</button>
+                    <div class="flex justify-end gap-2 w-full">
+                        <button type="button" id="btnCloseIncidenciaModal2" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded transition-colors">Cancelar</button>
+                        <button type="submit" id="btnSubmitIncidencia" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors">Guardar Registro</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- SCRIPTS DE LA APLICACIÓN -->
     <script src="{% static 'roster/js/roster.js' %}?v={% now 'U' %}"></script>
 </body>

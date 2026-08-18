@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentYear = fechaActual.getFullYear();
     let currentMonth = fechaActual.getMonth() + 1; // 1-12
     let secuenciasCache = [];
-    let tiposTurnoCache = []; // Caché local para el catálogo de turnos dinámicos
+    let tiposTurnoCache = []; 
 
     // Estado local para la selección múltiple
     const selectedOperators = new Map();
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnPrevMonth = document.getElementById('prevMonth');
     const btnNextMonth = document.getElementById('nextMonth');
 
-    // Modales y Botones
+    // Modales Generales
     const btnOpenCuadrilla = document.getElementById('btnOpenCuadrillaModal');
     const modalCuadrilla = document.getElementById('modalCuadrilla');
     const btnCloseCuadrilla = document.getElementById('btnCloseCuadrillaModal');
@@ -77,6 +77,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const confCount = document.getElementById('conf-count');
     const confSource = document.getElementById('conf-source');
     const confDest = document.getElementById('conf-dest');
+
+    // DOM Elementos - Modal Incidencias
+    const modalIncidencia = document.getElementById('modalIncidencia');
+    const formIncidencia = document.getElementById('formIncidencia');
+    const btnCloseIncidenciaModal = document.getElementById('btnCloseIncidenciaModal');
+    const btnCloseIncidenciaModal2 = document.getElementById('btnCloseIncidenciaModal2');
+    const btnSubmitIncidencia = document.getElementById('btnSubmitIncidencia');
+    const btnDeleteIncidencia = document.getElementById('btnDeleteIncidencia');
+    const incidenciaFeedback = document.getElementById('incidenciaFeedback');
 
     // --- FUNCIONES DE SOPORTE Y CARGA ---
 
@@ -218,14 +227,40 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         const estiloInline = obtenerEstiloCeldaTurnoDinamico(codigoTurno, turnoObj);
 
+                        // Badge de Incidencias optimizado con área táctil extendida (h-8 w-8, text-base)
+                        let htmlIncidenciaBadge = '';
+                        if (turnoObj && turnoObj.tiene_incidencia) {
+                            let tooltipText = "Incidencia Registrada";
+                            if (turnoObj.incidencia_detalle) {
+                                const det = turnoObj.incidencia_detalle;
+                                let detalles = [];
+                                if (det.minutos_retardo) detalles.push(`Retardo: ${det.minutos_retardo} min`);
+                                if (det.horas_salida_anticipada) detalles.push(`Salida: ${det.horas_salida_anticipada} hrs`);
+                                if (det.notas) detalles.push(`Nota: ${det.notas}`);
+                                if (detalles.length > 0) tooltipText = detalles.join(' | ');
+                            }
+
+                            htmlIncidenciaBadge = `
+                                <span class="badge-incidencia absolute -top-3.5 -right-3.5 flex h-8 w-8 cursor-pointer z-30 items-center justify-center" title="${tooltipText}">
+                                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
+                                  <span class="relative inline-flex rounded-full h-8 w-8 bg-amber-600 text-base items-center justify-center text-white font-black border-2 border-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.8)] hover:bg-amber-500 transition-all duration-300 transform hover:scale-125">!</span>
+                                </span>
+                            `;
+                        }
+
+                        const datasetTurno = turnoObj ? `data-turno-obj='${JSON.stringify(turnoObj).replace(/'/g, "&#39;")}'` : '';
+
                         html += `
                             <td class="relative p-1 border-r border-slate-800/80 text-center font-mono text-[11px] h-10 w-8 min-w-[32px] cursor-pointer hover:bg-cyan-500/10 transition-colors group"
                                 data-operador-id="${op.id}"
+                                data-operador-nombre="${op.nombre}"
                                 data-fecha="${fechaStr}"
                                 data-turno-actual="${codigoTurno}"
-                                title="Clic para asignar turno (${fechaStr})">
-                                <div class="w-full h-full rounded flex items-center justify-center font-bold shadow-sm" style="${estiloInline}">
+                                ${datasetTurno}
+                                title="Clic para opciones de turno (${fechaStr})">
+                                <div class="w-full h-full rounded flex items-center justify-center font-bold shadow-sm relative" style="${estiloInline}">
                                     ${codigoTurno}
+                                    ${htmlIncidenciaBadge}
                                 </div>
                             </td>
                         `;
@@ -255,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'background-color: rgba(15, 23, 42, 0.4); color: #475569; border: 1px dashed #334155;';
     }
 
-    // --- MANEJO DEL MENÚ DESPLEGABLE DE TURNOS (DROPDOWN) ---
+    // --- MANEJO DEL MENÚ DESPLEGABLE DE TURNOS Y ATAJOS ---
     
     function cerrarDropdownsTurnos() {
         const dropdowns = document.querySelectorAll('.roster-turno-dropdown');
@@ -285,13 +320,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) throw new Error('Error al actualizar el turno en el servidor.');
-
-            td.dataset.turnoActual = nuevoTurno;
-            const divContenedor = td.querySelector('div:not(.roster-turno-dropdown)');
-            if (divContenedor) {
-                divContenedor.style.cssText = obtenerEstiloCeldaTurnoDinamico(nuevoTurno);
-                divContenedor.textContent = nuevoTurno;
-            }
+            
+            loadRosterData();
+            
         } catch (err) {
             alert(err.message);
             console.error(err);
@@ -299,8 +330,177 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+    // --- MANEJO DEL MODAL DE INCIDENCIAS ---
+    
+    function abrirModalIncidencia(turnoObj, nombreOperador) {
+        if (!turnoObj || !turnoObj.id) return;
+
+        document.getElementById('incidenciaTurnoId').value = turnoObj.id;
+        document.getElementById('incidenciaContextText').textContent = `Operador: ${nombreOperador} | Fecha: ${turnoObj.fecha} | Turno: ${turnoObj.codigo_turno}`;
+
+        formIncidencia.reset();
+        incidenciaFeedback.classList.add('hidden');
+        btnDeleteIncidencia.classList.add('hidden');
+        btnDeleteIncidencia.dataset.incidenciaId = '';
+
+        if (turnoObj.tiene_incidencia && turnoObj.incidencia_detalle) {
+            document.getElementById('incidenciaRetardo').value = turnoObj.incidencia_detalle.minutos_retardo || '';
+            document.getElementById('incidenciaSalida').value = turnoObj.incidencia_detalle.horas_salida_anticipada || '';
+            document.getElementById('incidenciaNotas').value = turnoObj.incidencia_detalle.notas || '';
+            
+            btnDeleteIncidencia.classList.remove('hidden');
+            btnDeleteIncidencia.dataset.incidenciaId = turnoObj.incidencia_detalle.id;
+        }
+
+        modalIncidencia.classList.remove('hidden');
+        const box = modalIncidencia.querySelector('div.bg-slate-900') || modalIncidencia.firstElementChild;
+        if (box && typeof gsap !== 'undefined') {
+            gsap.fromTo(box, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: 'power2.out' });
+        }
+    }
+
+    function cerrarModalIncidencia() {
+        const box = modalIncidencia.querySelector('div.bg-slate-900') || modalIncidencia.firstElementChild;
+        if (box && typeof gsap !== 'undefined') {
+            gsap.to(box, {
+                scale: 0.9, opacity: 0, duration: 0.2, ease: 'power2.in',
+                onComplete: () => {
+                    modalIncidencia.classList.add('hidden');
+                }
+            });
+        } else {
+            modalIncidencia.classList.add('hidden');
+        }
+    }
+
     // --- CONFIGURACIÓN DE EVENT LISTENERS Y MODALES ---
     function setupEventListeners() {
+        
+        if (tbodyRoster) {
+            tbodyRoster.addEventListener('click', (e) => {
+                
+                const badgeClick = e.target.closest('.badge-incidencia');
+                if (badgeClick) {
+                    e.stopPropagation(); 
+                    cerrarDropdownsTurnos();
+                    
+                    const td = badgeClick.closest('td[data-operador-id]');
+                    if (td && td.dataset.turnoObj) {
+                        try {
+                            const turnoObj = JSON.parse(td.dataset.turnoObj.replace(/&#39;/g, "'"));
+                            abrirModalIncidencia(turnoObj, td.dataset.operadorNombre);
+                        } catch (err) { console.error("Error abriendo incidencia desde badge", err); }
+                    }
+                    return; 
+                }
+
+                const td = e.target.closest('td[data-operador-id]');
+                if (!td) {
+                    cerrarDropdownsTurnos();
+                    return;
+                }
+
+                if (td.querySelector('.roster-turno-dropdown')) {
+                    cerrarDropdownsTurnos();
+                    return;
+                }
+
+                cerrarDropdownsTurnos();
+
+                const operadorId = td.dataset.operadorId;
+                const operadorNombre = td.dataset.operadorNombre;
+                const fecha = td.dataset.fecha;
+                const rawTurnoObj = td.dataset.turnoObj;
+                let turnoObj = null;
+
+                if (rawTurnoObj) {
+                    try {
+                        turnoObj = JSON.parse(rawTurnoObj.replace(/&#39;/g, "'"));
+                    } catch (e) { console.error("Error parseando dataset turno", e); }
+                }
+                
+                const rect = td.getBoundingClientRect();
+                const dropdown = document.createElement('div');
+                
+                let dropdownClasses = 'roster-turno-dropdown absolute w-max min-w-[16rem] max-w-[20rem] max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
+                
+                if (window.innerWidth - rect.right < 200) {
+                    dropdownClasses += ' right-0';
+                } else if (rect.left < 150) {
+                    dropdownClasses += ' left-0';
+                } else {
+                    dropdownClasses += ' left-1/2 -translate-x-1/2';
+                }
+
+                if (window.innerHeight - rect.bottom < 250) {
+                    dropdownClasses += ' bottom-full mb-1'; 
+                } else {
+                    dropdownClasses += ' top-full mt-1'; 
+                }
+
+                dropdown.className = dropdownClasses;
+                
+                const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#94a3b8'}, ...tiposTurnoCache];
+                
+                opciones.forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-700 focus:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0 group';
+                    
+                    const displayCode = opt.codigo || '';
+                    
+                    const badgeStyle = opt.codigo 
+                        ? `background-color: ${opt.color_fondo}; color: ${opt.color_texto}; border-color: ${opt.color_texto};` 
+                        : `background-color: rgba(15,23,42,0.5); border-color: #475569; border-style: dashed;`;
+
+                    btn.innerHTML = `
+                        <div class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded text-[10px] font-bold border" style="${badgeStyle}">
+                            ${displayCode}
+                        </div>
+                        <div class="flex-1">
+                            <span class="block text-[11.5px] leading-snug font-semibold text-slate-200 group-hover:text-white whitespace-normal">${opt.nombre}</span>
+                        </div>
+                    `;
+                    
+                    btn.addEventListener('click', async (evt) => {
+                        evt.stopPropagation();
+                        cerrarDropdownsTurnos();
+                        await asignarTurnoAPI(td, operadorId, fecha, opt.codigo);
+                    });
+                    
+                    dropdown.appendChild(btn);
+                });
+
+                if (turnoObj && turnoObj.id) {
+                    const btnIncidencia = document.createElement('button');
+                    btnIncidencia.type = 'button';
+                    btnIncidencia.className = 'flex items-center gap-3 px-3 py-2.5 mt-1 text-left bg-slate-900/50 hover:bg-amber-900/40 focus:bg-amber-900/40 transition-colors border-t border-slate-700 group w-full shadow-inner';
+                    btnIncidencia.innerHTML = `
+                        <div class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded text-sm bg-amber-500/10 border border-amber-500/30 text-amber-500">
+                            ⚠️
+                        </div>
+                        <div class="flex-1">
+                            <span class="block text-xs font-bold text-amber-500 group-hover:text-amber-400 whitespace-normal">Registrar Incidencia / Nota</span>
+                        </div>
+                    `;
+                    btnIncidencia.addEventListener('click', (evt) => {
+                        evt.stopPropagation();
+                        cerrarDropdownsTurnos();
+                        abrirModalIncidencia(turnoObj, operadorNombre);
+                    });
+                    dropdown.appendChild(btnIncidencia);
+                }
+
+                td.appendChild(dropdown);
+                
+                if (typeof gsap !== 'undefined') {
+                    const yOffset = (window.innerHeight - rect.bottom < 250) ? 5 : -5;
+                    gsap.fromTo(dropdown, { opacity: 0, y: yOffset }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" });
+                }
+            });
+        }
+
+
         if (btnPrevMonth) {
             btnPrevMonth.addEventListener('click', () => {
                 currentMonth--;
@@ -585,83 +785,107 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[${type.toUpperCase()}] ${message}`);
         }
 
-        // --- ASIGNACIÓN DE TURNOS CON DROPDOWN AUTOPOSICIONADO E INTELIGENTE ---
-        if (tbodyRoster) {
-            tbodyRoster.addEventListener('click', (e) => {
-                const td = e.target.closest('td[data-operador-id]');
-                if (!td) {
-                    cerrarDropdownsTurnos();
+
+        // EVENTOS MODAL INCIDENCIA (GUARDAR Y ELIMINAR)
+        if (btnCloseIncidenciaModal) btnCloseIncidenciaModal.addEventListener('click', cerrarModalIncidencia);
+        if (btnCloseIncidenciaModal2) btnCloseIncidenciaModal2.addEventListener('click', cerrarModalIncidencia);
+
+        if (formIncidencia) {
+            formIncidencia.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const retardoVal = document.getElementById('incidenciaRetardo').value;
+                const salidaVal = document.getElementById('incidenciaSalida').value;
+                const notasVal = document.getElementById('incidenciaNotas').value;
+
+                if (!retardoVal && !salidaVal && (!notasVal || notasVal.trim() === '')) {
+                    incidenciaFeedback.textContent = "Debe registrar tiempo de retardo, salida o alguna nota.";
+                    incidenciaFeedback.className = "mt-2 p-2 rounded text-xs text-center bg-amber-900/50 text-amber-300 border border-amber-700";
+                    incidenciaFeedback.classList.remove('hidden');
                     return;
                 }
 
-                if (td.querySelector('.roster-turno-dropdown')) {
-                    cerrarDropdownsTurnos();
-                    return;
+                const payload = {
+                    turno_dia: document.getElementById('incidenciaTurnoId').value,
+                    minutos_retardo: retardoVal ? parseInt(retardoVal, 10) : null,
+                    horas_salida_anticipada: salidaVal ? parseFloat(salidaVal) : null,
+                    notas: notasVal ? notasVal.trim() : null
+                };
+
+                const existingId = btnDeleteIncidencia.dataset.incidenciaId;
+                let url = '/api/incidencias/';
+                let method = 'POST';
+
+                if (existingId && existingId !== '') {
+                    url = `/api/incidencias/${existingId}/`;
+                    method = 'PUT'; 
                 }
 
-                cerrarDropdownsTurnos();
+                btnSubmitIncidencia.disabled = true;
+                btnSubmitIncidencia.textContent = "Guardando...";
 
-                const operadorId = td.dataset.operadorId;
-                const fecha = td.dataset.fecha;
-                
-                const rect = td.getBoundingClientRect();
-                const dropdown = document.createElement('div');
-                
-                let dropdownClasses = 'roster-turno-dropdown absolute w-max min-w-[16rem] max-w-[20rem] max-h-64 overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
-                
-                if (window.innerWidth - rect.right < 200) {
-                    dropdownClasses += ' right-0';
-                } else if (rect.left < 150) {
-                    dropdownClasses += ' left-0';
-                } else {
-                    dropdownClasses += ' left-1/2 -translate-x-1/2';
-                }
-
-                if (window.innerHeight - rect.bottom < 250) {
-                    dropdownClasses += ' bottom-full mb-1'; 
-                } else {
-                    dropdownClasses += ' top-full mt-1'; 
-                }
-
-                dropdown.className = dropdownClasses;
-                
-                const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#94a3b8'}, ...tiposTurnoCache];
-                
-                opciones.forEach(opt => {
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-700 focus:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0 group';
-                    
-                    // AQUI: Si es la opción "Vacío" (código ''), ya NO dirá "OFF", simplemente quedará en blanco
-                    const displayCode = opt.codigo || '';
-                    
-                    const badgeStyle = opt.codigo 
-                        ? `background-color: ${opt.color_fondo}; color: ${opt.color_texto}; border-color: ${opt.color_texto};` 
-                        : `background-color: rgba(15,23,42,0.5); border-color: #475569; border-style: dashed;`;
-
-                    btn.innerHTML = `
-                        <div class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded text-[10px] font-bold border" style="${badgeStyle}">
-                            ${displayCode}
-                        </div>
-                        <div class="flex-1">
-                            <span class="block text-[11.5px] leading-snug font-semibold text-slate-200 group-hover:text-white whitespace-normal">${opt.nombre}</span>
-                        </div>
-                    `;
-                    
-                    btn.addEventListener('click', async (evt) => {
-                        evt.stopPropagation();
-                        cerrarDropdownsTurnos();
-                        await asignarTurnoAPI(td, operadorId, fecha, opt.codigo);
+                try {
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken')
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(payload)
                     });
-                    
-                    dropdown.appendChild(btn);
-                });
 
-                td.appendChild(dropdown);
-                
-                if (typeof gsap !== 'undefined') {
-                    const yOffset = (window.innerHeight - rect.bottom < 250) ? 5 : -5;
-                    gsap.fromTo(dropdown, { opacity: 0, y: yOffset }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        let errorMsg = 'Error al registrar la incidencia.';
+                        if (data.non_field_errors) errorMsg = data.non_field_errors[0];
+                        else if (typeof data === 'object') errorMsg = Object.values(data).join(' | ');
+                        throw new Error(errorMsg);
+                    }
+
+                    cerrarModalIncidencia();
+                    loadRosterData(); 
+
+                } catch (err) {
+                    incidenciaFeedback.textContent = err.message;
+                    incidenciaFeedback.className = "mt-2 p-2 rounded text-xs text-center bg-red-900/50 text-red-300 border border-red-700";
+                    incidenciaFeedback.classList.remove('hidden');
+                } finally {
+                    btnSubmitIncidencia.disabled = false;
+                    btnSubmitIncidencia.textContent = "Guardar Registro";
+                }
+            });
+        }
+
+        if (btnDeleteIncidencia) {
+            btnDeleteIncidencia.addEventListener('click', async () => {
+                const existingId = btnDeleteIncidencia.dataset.incidenciaId;
+                if (!existingId) return;
+
+                if (!confirm("¿Está seguro que desea eliminar este registro de incidencia de la base de datos?")) return;
+
+                btnDeleteIncidencia.disabled = true;
+                btnDeleteIncidencia.textContent = "Borrando...";
+
+                try {
+                    const response = await fetch(`/api/incidencias/${existingId}/`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRFToken': getCookie('csrftoken')
+                        },
+                        credentials: 'include'
+                    });
+
+                    if (!response.ok && response.status !== 204) throw new Error('Error al eliminar la incidencia.');
+
+                    cerrarModalIncidencia();
+                    loadRosterData();
+
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    btnDeleteIncidencia.disabled = false;
+                    btnDeleteIncidencia.textContent = "Eliminar Registro";
                 }
             });
         }
@@ -955,8 +1179,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.previsualizacion.length > 0) {
                         const sampleTurnos = data.previsualizacion[0].turnos;
                         cmPreviewHeadRow.innerHTML = '<th class="p-2 border-b border-slate-800">Colaborador</th>';
+                        
+                        // ACTUALIZADO A FORMATO DD/MM
                         sampleTurnos.forEach(t => {
-                            cmPreviewHeadRow.innerHTML += `<th class="p-2 border-b border-slate-800 text-center">${t.fecha.split('-').slice(1).join('/')}</th>`;
+                            const partesFecha = t.fecha.split('-'); // [YYYY, MM, DD]
+                            const diaMesFormateado = `${partesFecha[2]}/${partesFecha[1]}`; // DD/MM
+                            cmPreviewHeadRow.innerHTML += `<th class="p-2 border-b border-slate-800 text-center">${diaMesFormateado}</th>`;
                         });
 
                         cmPreviewBody.innerHTML = '';

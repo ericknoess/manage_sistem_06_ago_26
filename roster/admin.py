@@ -1,6 +1,7 @@
 # roster/admin.py
 from django.contrib import admin
-from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
+
 
 @admin.register(TipoTurno)
 class TipoTurnoAdmin(admin.ModelAdmin):
@@ -61,6 +62,16 @@ class OperadorAdmin(admin.ModelAdmin):
     list_editable = ('activo',)
 
 
+class IncidenciaTurnoInline(admin.StackedInline):
+    """
+    Permite gestionar una incidencia de forma anidada directamente al visualizar 
+    el registro de un TurnoDia.
+    """
+    model = IncidenciaTurno
+    can_delete = True
+    verbose_name_plural = 'Incidencia Operativa Asociada'
+
+
 @admin.register(TurnoDia)
 class TurnoDiaAdmin(admin.ModelAdmin):
     """
@@ -71,3 +82,26 @@ class TurnoDiaAdmin(admin.ModelAdmin):
     list_filter = ('tipo_turno', 'fecha', 'operador__cuadrilla')
     search_fields = ('operador__nombre', 'tipo_turno__codigo')
     date_hierarchy = 'fecha'
+    inlines = [IncidenciaTurnoInline]
+
+
+@admin.register(IncidenciaTurno)
+class IncidenciaTurnoAdmin(admin.ModelAdmin):
+    """
+    Panel de auditoría dedicado exclusivamente a las incidencias de nómina y notas operacionales.
+    """
+    list_display = ('id', 'get_operador', 'get_fecha', 'minutos_retardo', 'horas_salida_anticipada', 'tiene_notas')
+    search_fields = ('turno_dia__operador__nombre', 'notas')
+    list_filter = ('creado_en', 'turno_dia__fecha')
+    
+    @admin.display(description='Operador', ordering='turno_dia__operador__nombre')
+    def get_operador(self, obj):
+        return obj.turno_dia.operador.nombre
+
+    @admin.display(description='Fecha del Turno', ordering='turno_dia__fecha')
+    def get_fecha(self, obj):
+        return obj.turno_dia.fecha
+
+    @admin.display(description='¿Tiene Notas?', boolean=True)
+    def tiene_notas(self, obj):
+        return bool(obj.notas and str(obj.notas).strip() != '')

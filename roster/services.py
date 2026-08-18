@@ -2,7 +2,7 @@
 
 from django.db import transaction
 from datetime import timedelta
-from .models import TurnoDia, SecuenciaRol
+from .models import TurnoDia, SecuenciaRol, TipoTurno
 
 def expandir_secuencia(secuencia, fecha_inicio, fecha_fin):
     """
@@ -13,7 +13,8 @@ def expandir_secuencia(secuencia, fecha_inicio, fecha_fin):
     # Convertimos la secuencia en una lista plana de turnos [M, M, M, M, M, OFF, OFF, ...]
     patron = []
     for detalle in detalles:
-        patron.extend([detalle.codigo_turno] * detalle.dias)
+        codigo = detalle.tipo_turno_id if hasattr(detalle, 'tipo_turno_id') else str(detalle.tipo_turno)
+        patron.extend([codigo] * detalle.dias)
     
     longitud_patron = len(patron)
     if longitud_patron == 0:
@@ -52,18 +53,34 @@ def aplicar_carga_masiva(operadores, secuencia, fecha_inicio, fecha_fin, estrate
             ).delete()
         
         for item in plan_turnos:
-            # Si estrategia es 'mantener', filtramos/validamos antes de crear
+            # Si estrategia is 'mantener', filtramos/validamos antes de crear
             if estrategia == 'mantener':
                 if TurnoDia.objects.filter(operador=operador, fecha=item['fecha']).exists():
                     continue
             
+            # CORRECCIÓN: Resolvemos el objeto TipoTurno o su ID para asignarlo a tipo_turno_id
+            codigo_turno = item['codigo']
+            tipo_turno_obj = None
+            if codigo_turno and str(codigo_turno).strip() != '':
+                tipo_turno_obj, _ = TipoTurno.objects.get_or_create(
+                    codigo=str(codigo_turno).upper().strip(),
+                    defaults={
+                        'nombre': f'Turno {str(codigo_turno).upper().strip()}',
+                        'color_fondo': '#3b82f6',
+                        'color_texto': '#ffffff',
+                        'es_descanso': False,
+                        'activo': True
+                    }
+                )
+
             turnos_a_crear.append(TurnoDia(
                 operador=operador,
                 fecha=item['fecha'],
-                codigo_turno=item['codigo']
+                tipo_turno=tipo_turno_obj
             ))
             
     # Creamos todos los registros en lote para optimizar rendimiento
-    TurnoDia.objects.bulk_create(turnos_a_crear)
+    if turnos_a_crear:
+        TurnoDia.objects.bulk_create(turnos_a_crear)
     
     return len(turnos_a_crear)
