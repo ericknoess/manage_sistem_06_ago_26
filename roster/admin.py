@@ -1,6 +1,18 @@
 # roster/admin.py
 from django.contrib import admin
-from .models import Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+
+@admin.register(TipoTurno)
+class TipoTurnoAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel de administración para el catálogo maestro de Tipos de Turno.
+    Permite gestionar códigos, nombres y colores corporativos en formato HEX.
+    """
+    list_display = ('codigo', 'nombre', 'color_fondo', 'color_texto', 'es_descanso', 'activo', 'creado_en')
+    list_filter = ('activo', 'es_descanso')
+    search_fields = ('codigo', 'nombre')
+    list_editable = ('activo', 'es_descanso')
+
 
 class SecuenciaRolDetalleInline(admin.TabularInline):
     """
@@ -9,7 +21,7 @@ class SecuenciaRolDetalleInline(admin.TabularInline):
     """
     model = SecuenciaRolDetalle
     extra = 1
-    fields = ('orden', 'codigo_turno', 'dias')
+    fields = ('orden', 'tipo_turno', 'dias')
 
 
 @admin.register(SecuenciaRol)
@@ -53,9 +65,9 @@ class OperadorAdmin(admin.ModelAdmin):
 class TurnoDiaAdmin(admin.ModelAdmin):
     """
     Configuración del panel de administración para la matriz de turnos (TurnoDia).
-    Permite filtrar por código de turno, fecha y cuadrilla del operador.
+    Permite filtrar por tipo de turno, fecha y cuadrilla del operador.
     """
-    list_display = ('id', 'operador', 'fecha', 'codigo_turno', 'actualizado_en')
-    list_filter = ('codigo_turno', 'fecha', 'operador__cuadrilla')
-    search_fields = ('operador__nombre', 'codigo_turno')
+    list_display = ('id', 'operador', 'fecha', 'tipo_turno', 'actualizado_en')
+    list_filter = ('tipo_turno', 'fecha', 'operador__cuadrilla')
+    search_fields = ('operador__nombre', 'tipo_turno__codigo')
     date_hierarchy = 'fecha'

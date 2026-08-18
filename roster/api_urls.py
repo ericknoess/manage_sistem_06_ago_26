@@ -1,8 +1,7 @@
-# roster/api_urls.py
-
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
+    TipoTurnoViewSet,
     CuadrillaViewSet,
     OperadorViewSet,
     SecuenciaRolViewSet,
@@ -12,6 +11,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register(r'tipos-turno', TipoTurnoViewSet, basename='tipoturno')
 router.register(r'cuadrillas', CuadrillaViewSet, basename='cuadrilla')
 router.register(r'operadores', OperadorViewSet, basename='operador')
 router.register(r'secuencias', SecuenciaRolViewSet, basename='secuencia')

@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentYear = fechaActual.getFullYear();
     let currentMonth = fechaActual.getMonth() + 1; // 1-12
     let secuenciasCache = [];
+    let tiposTurnoCache = []; // Caché local para el catálogo de turnos dinámicos
 
     // Estado local para la selección múltiple
     const selectedOperators = new Map();
@@ -85,10 +86,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function cargarTiposTurno() {
+        try {
+            const response = await fetch(`/api/tipos-turno/?_ts=${new Date().getTime()}`, { 
+                method: 'GET',
+                cache: 'no-store' 
+            });
+            if (response.ok) {
+                tiposTurnoCache = await response.json();
+                renderizarLeyendaDinamica(tiposTurnoCache);
+            }
+        } catch (error) {
+            console.error("Error al cargar catálogo de tipos de turno:", error);
+        }
+    }
+
+    function renderizarLeyendaDinamica(tipos) {
+        const contenedorLeyenda = document.getElementById('leyendaGxpContainer');
+        if (!contenedorLeyenda) return;
+
+        if (!tipos || tipos.length === 0) {
+            contenedorLeyenda.innerHTML = `<span class="text-slate-600 italic">No hay tipos de turno configurados.</span>`;
+            return;
+        }
+
+        let html = '';
+        tipos.filter(t => t.activo && t.codigo !== '').forEach(t => {
+            html += `
+                <span class="flex items-center gap-1.5 px-2 py-1 bg-slate-800/80 border border-slate-700 rounded">
+                    <div class="w-3 h-3 rounded-sm border shadow-sm flex items-center justify-center text-[8px] font-bold" 
+                         style="background-color: ${t.color_fondo}; color: ${t.color_texto}; border-color: ${t.color_texto};">
+                    </div> 
+                    <span class="text-slate-300 font-semibold">${t.codigo}:</span> ${t.nombre}
+                </span>
+            `;
+        });
+        contenedorLeyenda.innerHTML = html;
+    }
+
     async function loadRosterData() {
         try {
             tbodyRoster.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-cyan-400 font-mono animate-pulse">Sincronizando matriz operacional (${mesesNombres[currentMonth - 1]} ${currentYear})...</td></tr>`;
             
+            await cargarTiposTurno();
+
             const timestamp = new Date().getTime();
             const response = await fetch(`/api/cuadrillas/?month=${currentMonth}&year=${currentYear}&_ts=${timestamp}`, {
                 method: 'GET',
@@ -123,10 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         cuadrillas.forEach(cuadrilla => {
             html += `
-                <tr class="bg-slate-950/80 border-b border-slate-700 font-mono text-xs">
-                    <td colspan="32" class="p-2.5 text-cyan-400 font-bold tracking-wide flex items-center justify-between">
-                        <span>CUADRILLA [${cuadrilla.identificador}]: ${cuadrilla.nombre}</span>
-                        <span class="text-[10px] text-slate-400 font-normal">Operadores: ${cuadrilla.operadores ? cuadrilla.operadores.length : 0}</span>
+                <tr class="bg-slate-950 border-b border-slate-700 font-mono text-xs">
+                    <td colspan="32" class="p-0 z-20">
+                        <div class="sticky left-0 flex items-center gap-4 p-2.5 w-[max-content] min-w-[280px] bg-slate-950 shadow-[2px_0_5px_rgba(0,0,0,0.3)] border-r border-slate-700">
+                            <span class="text-cyan-400 font-bold tracking-wide">CUADRILLA [${cuadrilla.identificador}]: ${cuadrilla.nombre}</span>
+                            <span class="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-900 rounded border border-slate-700">
+                                Operadores: ${cuadrilla.operadores ? cuadrilla.operadores.length : 0}
+                            </span>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -170,15 +215,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const fechaStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
                         const turnoObj = op.turnos ? op.turnos.find(t => t.fecha === fechaStr) : null;
                         const codigoTurno = turnoObj ? turnoObj.codigo_turno : '';
-                        const cssClase = obtenerEstiloCeldaTurno(codigoTurno);
+                        
+                        const estiloInline = obtenerEstiloCeldaTurnoDinamico(codigoTurno, turnoObj);
 
                         html += `
-                            <td class="p-1 border-r border-slate-800/80 text-center font-mono text-[11px] h-10 w-8 min-w-[32px] cursor-pointer hover:bg-cyan-500/10 transition-colors"
+                            <td class="relative p-1 border-r border-slate-800/80 text-center font-mono text-[11px] h-10 w-8 min-w-[32px] cursor-pointer hover:bg-cyan-500/10 transition-colors group"
                                 data-operador-id="${op.id}"
                                 data-fecha="${fechaStr}"
                                 data-turno-actual="${codigoTurno}"
-                                title="Clic para cambiar turno (${fechaStr}): ${codigoTurno || 'Libre'}">
-                                <div class="w-full h-full rounded flex items-center justify-center font-bold ${cssClase}">
+                                title="Clic para asignar turno (${fechaStr})">
+                                <div class="w-full h-full rounded flex items-center justify-center font-bold shadow-sm" style="${estiloInline}">
                                     ${codigoTurno}
                                 </div>
                             </td>
@@ -196,18 +242,62 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSelectionUI();
     }
 
-    function obtenerEstiloCeldaTurno(codigo) {
-        switch (codigo) {
-            case 'M': return 'bg-amber-500/20 border border-amber-500 text-amber-300';
-            case 'T': return 'bg-blue-500/20 border border-blue-500 text-blue-300';
-            case 'N': return 'bg-purple-500/20 border border-purple-500 text-purple-300';
-            case 'TR': return 'bg-teal-500/20 border border-teal-500 text-teal-300';
-            case 'OFF': return 'bg-slate-800 border border-slate-700 text-slate-400';
-            case 'INC': return 'bg-orange-500/20 border border-orange-500 text-orange-300';
-            case 'F': return 'bg-red-500/20 border border-red-500 text-red-300';
-            default: return 'bg-slate-900/40 text-slate-600';
+    function obtenerEstiloCeldaTurnoDinamico(codigo, turnoObj = null) {
+        if (turnoObj && turnoObj.color_fondo) {
+            return `background-color: ${turnoObj.color_fondo}; color: ${turnoObj.color_texto}; border: 1px solid rgba(255,255,255,0.15);`;
+        }
+        if (codigo) {
+            const encontrado = tiposTurnoCache.find(t => t.codigo === codigo);
+            if (encontrado) {
+                return `background-color: ${encontrado.color_fondo}; color: ${encontrado.color_texto}; border: 1px solid rgba(255,255,255,0.15);`;
+            }
+        }
+        return 'background-color: rgba(15, 23, 42, 0.4); color: #475569; border: 1px dashed #334155;';
+    }
+
+    // --- MANEJO DEL MENÚ DESPLEGABLE DE TURNOS (DROPDOWN) ---
+    
+    function cerrarDropdownsTurnos() {
+        const dropdowns = document.querySelectorAll('.roster-turno-dropdown');
+        dropdowns.forEach(dd => dd.remove());
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.roster-turno-dropdown') && !e.target.closest('td[data-operador-id]')) {
+            cerrarDropdownsTurnos();
+        }
+    });
+
+    async function asignarTurnoAPI(td, operadorId, fecha, nuevoTurno) {
+        try {
+            const response = await fetch('/api/turnos/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    operador: operadorId,
+                    fecha: fecha,
+                    codigo_turno: nuevoTurno
+                })
+            });
+
+            if (!response.ok) throw new Error('Error al actualizar el turno en el servidor.');
+
+            td.dataset.turnoActual = nuevoTurno;
+            const divContenedor = td.querySelector('div:not(.roster-turno-dropdown)');
+            if (divContenedor) {
+                divContenedor.style.cssText = obtenerEstiloCeldaTurnoDinamico(nuevoTurno);
+                divContenedor.textContent = nuevoTurno;
+            }
+        } catch (err) {
+            alert(err.message);
+            console.error(err);
         }
     }
+
 
     // --- CONFIGURACIÓN DE EVENT LISTENERS Y MODALES ---
     function setupEventListeners() {
@@ -417,7 +507,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         })
                     });
 
-                    // Si el servidor devuelve 204 No Content
                     if (response.status === 204) {
                         showToast('Colaboradores movidos exitosamente', 'success');
                         await ejecutarLimpiezaPostMovimientoAsincrona();
@@ -455,7 +544,6 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedOperators.clear();
             updateSelectionUI();
             closeMoveModal();
-            // FIX ARQUITECTURA CRÍTICO: Esperar de forma síncrona la recarga completa desde PostgreSQL
             await loadRosterData();
         }
 
@@ -497,48 +585,83 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[${type.toUpperCase()}] ${message}`);
         }
 
-        // Eventos para Cambio Individual de Turnos
+        // --- ASIGNACIÓN DE TURNOS CON DROPDOWN AUTOPOSICIONADO E INTELIGENTE ---
         if (tbodyRoster) {
-            tbodyRoster.addEventListener('click', async (e) => {
+            tbodyRoster.addEventListener('click', (e) => {
                 const td = e.target.closest('td[data-operador-id]');
-                if (!td) return;
+                if (!td) {
+                    cerrarDropdownsTurnos();
+                    return;
+                }
+
+                if (td.querySelector('.roster-turno-dropdown')) {
+                    cerrarDropdownsTurnos();
+                    return;
+                }
+
+                cerrarDropdownsTurnos();
 
                 const operadorId = td.dataset.operadorId;
                 const fecha = td.dataset.fecha;
-                const turnoActual = td.dataset.turnoActual || '';
+                
+                const rect = td.getBoundingClientRect();
+                const dropdown = document.createElement('div');
+                
+                let dropdownClasses = 'roster-turno-dropdown absolute w-max min-w-[16rem] max-w-[20rem] max-h-64 overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
+                
+                if (window.innerWidth - rect.right < 200) {
+                    dropdownClasses += ' right-0';
+                } else if (rect.left < 150) {
+                    dropdownClasses += ' left-0';
+                } else {
+                    dropdownClasses += ' left-1/2 -translate-x-1/2';
+                }
 
-                const turnosCiclo = ['', 'M', 'T', 'N', 'TR', 'OFF', 'INC', 'F'];
-                const currentIndex = turnosCiclo.indexOf(turnoActual);
-                const nextIndex = (currentIndex + 1) % turnosCiclo.length;
-                const nuevoTurno = turnosCiclo[nextIndex];
+                if (window.innerHeight - rect.bottom < 250) {
+                    dropdownClasses += ' bottom-full mb-1'; 
+                } else {
+                    dropdownClasses += ' top-full mt-1'; 
+                }
 
-                try {
-                    const response = await fetch('/api/turnos/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': getCookie('csrftoken')
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({
-                            operador: operadorId,
-                            fecha: fecha,
-                            codigo_turno: nuevoTurno
-                        })
-                    });
-
-                    if (!response.ok) throw new Error('Error al actualizar el turno.');
-
-                    td.dataset.turnoActual = nuevoTurno;
-                    td.title = `Clic para cambiar turno (${fecha}): ${nuevoTurno || 'Libre'}`;
+                dropdown.className = dropdownClasses;
+                
+                const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#94a3b8'}, ...tiposTurnoCache];
+                
+                opciones.forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-700 focus:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0 group';
                     
-                    const divContenedor = td.querySelector('div');
-                    if (divContenedor) {
-                        divContenedor.className = `w-full h-full rounded flex items-center justify-center font-bold ${obtenerEstiloCeldaTurno(nuevoTurno)}`;
-                        divContenedor.textContent = nuevoTurno;
-                    }
-                } catch (err) {
-                    alert(err.message);
+                    // AQUI: Si es la opción "Vacío" (código ''), ya NO dirá "OFF", simplemente quedará en blanco
+                    const displayCode = opt.codigo || '';
+                    
+                    const badgeStyle = opt.codigo 
+                        ? `background-color: ${opt.color_fondo}; color: ${opt.color_texto}; border-color: ${opt.color_texto};` 
+                        : `background-color: rgba(15,23,42,0.5); border-color: #475569; border-style: dashed;`;
+
+                    btn.innerHTML = `
+                        <div class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded text-[10px] font-bold border" style="${badgeStyle}">
+                            ${displayCode}
+                        </div>
+                        <div class="flex-1">
+                            <span class="block text-[11.5px] leading-snug font-semibold text-slate-200 group-hover:text-white whitespace-normal">${opt.nombre}</span>
+                        </div>
+                    `;
+                    
+                    btn.addEventListener('click', async (evt) => {
+                        evt.stopPropagation();
+                        cerrarDropdownsTurnos();
+                        await asignarTurnoAPI(td, operadorId, fecha, opt.codigo);
+                    });
+                    
+                    dropdown.appendChild(btn);
+                });
+
+                td.appendChild(dropdown);
+                
+                if (typeof gsap !== 'undefined') {
+                    const yOffset = (window.innerHeight - rect.bottom < 250) ? 5 : -5;
+                    gsap.fromTo(dropdown, { opacity: 0, y: yOffset }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" });
                 }
             });
         }
@@ -717,7 +840,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     secuencia.detalles.forEach(det => {
                         for (let i = 0; i < det.dias; i++) {
                             const badge = document.createElement('span');
-                            badge.className = `px-2 py-1 rounded text-[10px] font-bold border ${obtenerEstiloCeldaTurno(det.codigo_turno)}`;
+                            const estiloBadge = obtenerEstiloCeldaTurnoDinamico(det.codigo_turno);
+                            badge.className = `px-2 py-1 rounded text-[10px] font-bold border`;
+                            badge.style.cssText = estiloBadge;
                             badge.textContent = det.codigo_turno;
                             cmPatronVisualSteps.appendChild(badge);
                         }
@@ -838,8 +963,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         data.previsualizacion.forEach(item => {
                             let rowHtml = `<td class="p-2 border-b border-slate-800 font-bold">${item.operador_nombre}</td>`;
                             item.turnos.forEach(t => {
-                                const colorClase = obtenerEstiloCeldaTurno(t.codigo);
-                                rowHtml += `<td class="p-2 border-b border-slate-800 text-center"><span class="px-1.5 py-0.5 rounded text-[10px] border ${colorClase}">${t.codigo}</span></td>`;
+                                const estiloSpan = obtenerEstiloCeldaTurnoDinamico(t.codigo, t);
+                                rowHtml += `<td class="p-2 border-b border-slate-800 text-center"><span class="px-1.5 py-0.5 rounded text-[10px] border shadow-sm" style="${estiloSpan}">${t.codigo}</span></td>`;
                             });
                             const tr = document.createElement('tr');
                             tr.innerHTML = rowHtml;

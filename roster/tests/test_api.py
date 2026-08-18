@@ -1,61 +1,96 @@
 # roster/tests/test_api.py
 
-from django.contrib.auth.models import User
+import pytest
 from django.urls import reverse
-from rest_framework import status
-from rest_framework.test import APITestCase
-from roster.models import SecuenciaRol, SecuenciaRolDetalle
+from rest_framework.test import APIClient
+from django.contrib.auth.models import User
+from roster.models import TipoTurno, Cuadrilla, Operador, SecuenciaRol, SecuenciaRolDetalle
 
-class SecuenciaRolAPITests(APITestCase):
+
+@pytest.mark.django_db
+class SecuenciaRolAPITests:
     """
-    Suite de pruebas para validar la API de Secuencias de Rol.
-    Verifica la creación y persistencia de secuencias con sus detalles anidados.
+    Suite de pruebas de integración para los Endpoints REST del módulo Roster y Secuencias,
+    asegurando cumplimiento con GxP y estabilidad de contratos JSON.
     """
 
-    def setUp(self):
+    def setup_method(self):
+        self.client = APIClient()
+        self.user = User.objects.create_superuser(username='admin', password='password123')
+        self.tipo_turno_m = TipoTurno.objects.create(
+            codigo='M',
+            nombre='Matutino',
+            color_fondo='#3b82f6',
+            color_texto='#ffffff',
+            es_descanso=False,
+            activo=True
+        )
         self.url = reverse('secuencia-list')
-        # Creamos un usuario de prueba para cumplir con la política IsAuthenticatedOrReadOnly
-        self.user = User.objects.create_user(username='operador_test', password='password123')
-        self.valid_payload = {
-            "nombre": "Rotación 4x2",
-            "descripcion": "Ciclo estándar 4 días trabajo, 2 descanso",
-            "activa": True,
-            "detalles": [
-                {"orden": 1, "codigo_turno": "M", "dias": 4},
-                {"orden": 2, "codigo_turno": "OFF", "dias": 2}
-            ]
-        }
 
-    def test_create_secuencia_con_detalles(self):
-        """
-        Verifica que al crear una secuencia vía POST con autenticación, 
-        se creen correctamente los registros en SecuenciaRol y SecuenciaRolDetalle.
-        """
-        # Autenticamos al cliente para permitir la operación de escritura POST
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(self.url, self.valid_payload, format='json')
+    def test_get_cuadrillas_endpoint(self):
+        """Valida la obtención de cuadrillas con operadores y turnos enriquecidos con HEX."""
+        cuadrilla = Cuadrilla.objects.create(identificador='A', nombre='Equipo 1')
+        operador = Operador.objects.create(
+            nombre='Carlos Pérez',
+            codigo_empleado='OP-001',
+            cuadrilla=cuadrilla,
+            nivel_expertiz='SENIOR'
+        )
         
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(SecuenciaRol.objects.count(), 1)
-        self.assertEqual(SecuenciaRolDetalle.objects.count(), 2)
-        
-        # Validar relación
-        secuencia = SecuenciaRol.objects.first()
-        self.assertEqual(secuencia.detalles.count(), 2)
-        self.assertEqual(secuencia.nombre, "Rotación 4x2")
+        url = reverse('cuadrilla-list')
+        response = self.client.get(url)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert data[0]['identificador'] == 'A'
+        assert len(data[0]['operadores']) == 1
+        assert data[0]['operadores'][0]['nombre'] == 'Carlos Pérez'
 
     def test_get_lista_secuencias(self):
         """
-        Verifica que el endpoint GET retorne las secuencias existentes 
+        Verifica que el endpoint GET retorne las secuencias existentes
         incluyendo sus detalles anidados (acceso público de lectura).
         """
-        # Creamos una secuencia base
-        secuencia = SecuenciaRol.objects.create(nombre="Test", activa=True)
-        SecuenciaRolDetalle.objects.create(secuencia=secuencia, orden=1, codigo_turno="T", dias=5)
-        
+        secuencia = SecuenciaRol.objects.create(nombre="Test Rotación", activa=True)
+        SecuenciaRolDetalle.objects.create(
+            secuencia=secuencia,
+            orden=1,
+            tipo_turno=self.tipo_turno_m,
+            dias=5
+        )
+
         response = self.client.get(self.url)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert data[0]['nombre'] == "Test Rotación"
+        assert len(data[0]['detalles']) == 1
+        assert data[0]['detalles'][0]['codigo_turno'] == 'M'
+
+    def test_create_secuencia_con_detalles(self):
+        """
+        Verifica que al crear una secuencia vía POST con autenticación,
+        se creen correctamente los registros en SecuenciaRol y SecuenciaRolDetalle
+        utilizando la relación con el catálogo maestro TipoTurno.
+        """
+        self.client.force_authenticate(user=self.user)
         
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(len(response.data[0]['detalles']), 1)
-        self.assertEqual(response.data[0]['detalles'][0]['codigo_turno'], "T")
+        valid_payload = {
+            "nombre": "Secuencia Planta Upstream",
+            "descripcion": "Rotación de turnos estandarizada GxP",
+            "activa": True,
+            "detalles": [
+                {
+                    "orden": 1,
+                    "tipo_turno": self.tipo_turno_m.codigo,
+                    "dias": 3
+                }
+            ]
+        }
+
+        response = self.client.post(self.url, valid_payload, format='json')
+        assert response.status_code == 201
+        data = response.json()
+        assert data['nombre'] == "Secuencia Planta Upstream"
+        assert len(data['detalles']) == 1
+        assert data['detalles'][0]['codigo_turno'] == 'M'

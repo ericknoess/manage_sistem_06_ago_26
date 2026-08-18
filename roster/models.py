@@ -1,6 +1,57 @@
 # roster/models.py
 from django.db import models
 
+class TipoTurno(models.Model):
+    """
+    Catálogo maestro configurable de tipos de turnos y roles operativos.
+    Permite definir códigos personalizados y sus propiedades visuales (colores HEX).
+    """
+    codigo = models.CharField(
+        max_length=10, 
+        unique=True, 
+        primary_key=True,
+        verbose_name="Código de Turno",
+        help_text="Identificador corto único (ej. M, T, N, PERF)"
+    )
+    nombre = models.CharField(
+        max_length=100, 
+        verbose_name="Nombre Descriptivo",
+        help_text="Descripción larga del turno (ej. Mañana, Perfusión Especial)"
+    )
+    color_fondo = models.CharField(
+        max_length=7, 
+        default="#3b82f6", 
+        verbose_name="Color de Fondo (HEX)",
+        help_text="Código HEX para el fondo de la celda (ej. #3b82f6)"
+    )
+    color_texto = models.CharField(
+        max_length=7, 
+        default="#ffffff", 
+        verbose_name="Color de Texto (HEX)",
+        help_text="Código HEX para el texto de la celda (ej. #ffffff)"
+    )
+    es_descanso = models.BooleanField(
+        default=False, 
+        verbose_name="¿Es Descanso?",
+        help_text="Marca si el turno representa tiempo libre o ausencia no operativa"
+    )
+    activo = models.BooleanField(
+        default=True, 
+        verbose_name="Turno Activo",
+        help_text="Baja lógica para preservar la trazabilidad histórica GxP"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
+
+    def __str__(self):
+        return f"[{self.codigo}] {self.nombre}"
+
+    class Meta:
+        verbose_name = "Tipo de Turno"
+        verbose_name_plural = "Tipos de Turnos"
+        ordering = ['codigo']
+
+
 class Cuadrilla(models.Model):
     """
     Representa una cuadrilla de trabajo dentro del área de bioprocesos Upstream 
@@ -57,20 +108,8 @@ class Operador(models.Model):
 
 class TurnoDia(models.Model):
     """
-    Matriz de turnos operacional. Asocia a un operador con un código de turno específico en una fecha dada.
+    Matriz de turnos operacional. Asocia a un operador con un tipo de turno específico en una fecha dada.
     """
-    TURNO_CHOICES = [
-        ('M', 'Matutino'),
-        ('T', 'Vespertino'),
-        ('N', 'Nocturno'),
-        ('TR', 'Turno Rotativo / Transición'),
-        ('OFF', 'Descanso'),
-        ('F', 'Falta'),
-        ('INC', 'Incapacidad'),
-        ('--', 'Sin Asignación / Inactivo'),
-        ('', 'Sin Asignación / Inactivo'),
-    ]
-
     operador = models.ForeignKey(
         Operador, 
         on_delete=models.CASCADE, 
@@ -78,7 +117,15 @@ class TurnoDia(models.Model):
         verbose_name="Operador"
     )
     fecha = models.DateField(verbose_name="Fecha de Asignación")
-    codigo_turno = models.CharField(max_length=10, choices=TURNO_CHOICES, default='', verbose_name="Código de Turno")
+    tipo_turno = models.ForeignKey(
+        TipoTurno,
+        on_delete=models.PROTECT,
+        to_field='codigo',
+        db_column='codigo_turno',
+        related_name='asignaciones',
+        verbose_name="Tipo de Turno",
+        default='M'
+    )
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
@@ -89,7 +136,7 @@ class TurnoDia(models.Model):
         ordering = ['-fecha', 'operador']
 
     def __str__(self):
-        return f"{self.operador.nombre} - {self.fecha}: {self.codigo_turno or 'Libre'}"
+        return f"{self.operador.nombre} - {self.fecha}: {self.tipo_turno_id or 'Libre'}"
 
 
 class SecuenciaRol(models.Model):
@@ -122,10 +169,14 @@ class SecuenciaRolDetalle(models.Model):
         verbose_name="Secuencia Padre"
     )
     orden = models.PositiveIntegerField(verbose_name="Orden de Ejecución")
-    codigo_turno = models.CharField(
-        max_length=10, 
-        choices=TurnoDia.TURNO_CHOICES, 
-        verbose_name="Código de Turno"
+    tipo_turno = models.ForeignKey(
+        TipoTurno,
+        on_delete=models.PROTECT,
+        to_field='codigo',
+        db_column='codigo_turno',
+        related_name='detalles_secuencia',
+        verbose_name="Tipo de Turno",
+        default='M'
     )
     dias = models.PositiveIntegerField(default=1, verbose_name="Cantidad de Días")
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
@@ -137,4 +188,4 @@ class SecuenciaRolDetalle(models.Model):
         verbose_name_plural = "Detalles de Secuencia"
 
     def __str__(self):
-        return f"{self.secuencia.nombre} - Paso {self.orden}: {self.codigo_turno} x {self.dias} días"
+        return f"{self.secuencia.nombre} - Paso {self.orden}: {self.tipo_turno_id} x {self.dias} días"

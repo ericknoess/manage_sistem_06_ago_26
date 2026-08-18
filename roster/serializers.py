@@ -2,17 +2,89 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+from django.core.exceptions import ObjectDoesNotExist
+from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle
+
+
+class TipoTurnoSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el catálogo maestro de Tipos de Turno.
+    Expone los códigos y propiedades visuales de color HEX para la interfaz.
+    """
+    class Meta:
+        model = TipoTurno
+        fields = ['codigo', 'nombre', 'color_fondo', 'color_texto', 'es_descanso', 'activo']
 
 
 class TurnoDiaSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo TurnoDia.
-    Gestiona la representación JSON de los turnos operacionales con trazabilidad GxP.
+    Gestiona la representación JSON de los turnos operacionales con trazabilidad GxP
+    y metadatos de color integrados desde el catálogo maestro, con blindaje defensivo y sin atributos redundantes.
     """
+    codigo_turno = serializers.SerializerMethodField()
+    color_fondo = serializers.SerializerMethodField()
+    color_texto = serializers.SerializerMethodField()
+    
+    # Se remueve el parámetro redundante source='tipo_turno' para evitar AssertionError en DRF
+    tipo_turno = serializers.PrimaryKeyRelatedField(
+        queryset=TipoTurno.objects.filter(activo=True),
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = TurnoDia
-        fields = ['id', 'operador', 'fecha', 'codigo_turno']
+        fields = ['id', 'operador', 'fecha', 'codigo_turno', 'color_fondo', 'color_texto', 'tipo_turno']
+
+    def get_codigo_turno(self, obj):
+        try:
+            if obj.tipo_turno_id and obj.tipo_turno:
+                return obj.tipo_turno.codigo
+        except (ObjectDoesNotExist, Exception):
+            pass
+        return ''
+
+    def get_color_fondo(self, obj):
+        try:
+            if obj.tipo_turno_id and obj.tipo_turno:
+                return obj.tipo_turno.color_fondo
+        except (ObjectDoesNotExist, Exception):
+            pass
+        return '#3b82f6'
+
+    def get_color_texto(self, obj):
+        try:
+            if obj.tipo_turno_id and obj.tipo_turno:
+                return obj.tipo_turno.color_texto
+        except (ObjectDoesNotExist, Exception):
+            pass
+        return '#ffffff'
+
+    def create(self, validated_data):
+        if 'tipo_turno' not in validated_data and 'codigo_turno' in self.initial_data:
+            codigo = self.initial_data.get('codigo_turno')
+            if not codigo:
+                validated_data['tipo_turno'] = None
+            else:
+                try:
+                    validated_data['tipo_turno'] = TipoTurno.objects.get(codigo=codigo)
+                except TipoTurno.DoesNotExist:
+                    validated_data['tipo_turno'] = TipoTurno.objects.get_or_create(codigo=codigo)[0]
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if 'tipo_turno' not in validated_data and 'codigo_turno' in self.initial_data:
+            codigo = self.initial_data.get('codigo_turno')
+            if not codigo:
+                instance.tipo_turno = None
+            else:
+                try:
+                    instance.tipo_turno = TipoTurno.objects.get(codigo=codigo)
+                except TipoTurno.DoesNotExist:
+                    instance.tipo_turno = TipoTurno.objects.get_or_create(codigo=codigo)[0]
+        return super().update(instance, validated_data)
 
 
 class OperadorSerializer(serializers.ModelSerializer):
@@ -44,10 +116,6 @@ class OperadorSerializer(serializers.ModelSerializer):
         ]
 
     def get_turnos(self, obj):
-        """
-        Filtra los turnos del operador basándose en el mes y año 
-        enviados en la URL (?month=X&year=YYYY).
-        """
         request = self.context.get('request')
         if request:
             month = request.query_params.get('month')
@@ -93,10 +161,6 @@ class MoverColaboradoresSerializer(serializers.Serializer):
     )
 
     def validate(self, data):
-        """
-        Validaciones de negocio robustas en backend con trazas de diagnóstico GxP.
-        """
-        # 1. Validar Cuadrilla Destino
         try:
             cuadrilla_destino = Cuadrilla.objects.get(id=data['cuadrilla_destino_id'])
             if not cuadrilla_destino.activa:
@@ -108,21 +172,14 @@ class MoverColaboradoresSerializer(serializers.Serializer):
                 "cuadrilla_destino_id": "La cuadrilla destino especificada no existe."
             })
 
-        # 2. Validar Operadores y depurar estado en Base de Datos
         operador_ids = data['operador_ids']
         operadores = Operador.objects.filter(id__in=operador_ids)
-        
-        print(f"\n--- [DIAGNÓSTICO GxP MOVER COLABORADORES] ---")
-        print(f"IDs recibidos en payload: {operador_ids}")
-        for op in operadores:
-            print(f" -> Operador ID: {op.id} | Nombre: {op.nombre} | Cuadrilla ID en BD: {op.cuadrilla_id}")
 
         if operadores.count() != len(operador_ids):
             raise serializers.ValidationError({
                 "operador_ids": "Uno o más colaboradores seleccionados no existen en el sistema."
             })
 
-        # Verificar que todos los operadores estén activos
         operadores_inactivos = operadores.filter(activo=False)
         if operadores_inactivos.exists():
             nombres_inactivos = ", ".join([op.nombre for op in operadores_inactivos])
@@ -130,11 +187,7 @@ class MoverColaboradoresSerializer(serializers.Serializer):
                 "operador_ids": f"Los siguientes colaboradores están inactivos y no pueden ser movidos: {nombres_inactivos}."
             })
 
-        # 3. Validar Cuadrilla Origen (Consistencia para operaciones múltiples)
         cuadrillas_origen = set(operadores.values_list('cuadrilla_id', flat=True))
-        print(f"Cuadrillas origen únicas detectadas en BD: {cuadrillas_origen}")
-        print(f"-----------------------------------------------\n")
-
         if len(cuadrillas_origen) > 1:
             nombres_cuadrillas = list(Cuadrilla.objects.filter(id__in=cuadrillas_origen).values_list('nombre', flat=True))
             raise serializers.ValidationError({
@@ -142,8 +195,6 @@ class MoverColaboradoresSerializer(serializers.Serializer):
             })
         
         cuadrilla_origen_id = list(cuadrillas_origen)[0]
-        
-        # 4. Validar que la cuadrilla destino sea distinta a la origen
         if cuadrilla_origen_id == data['cuadrilla_destino_id']:
             raise serializers.ValidationError({
                 "cuadrilla_destino_id": "La cuadrilla destino debe ser diferente a la cuadrilla actual de los colaboradores."
@@ -166,18 +217,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'password', 'password_confirm', 'operador_id', 'is_active']
 
     def validate(self, data):
-        """
-        Valida que la contraseña y su confirmación coincidan exactamente.
-        """
         if data['password'] != data['password_confirm']:
             raise serializers.ValidationError({"password_confirm": "Las contraseñas no coinciden."})
         return data
 
     def create(self, validated_data):
-        """
-        Crea un nuevo usuario de manera segura utilizando los métodos nativos de Django
-        para el cifrado de contraseñas.
-        """
         validated_data.pop('password_confirm')
         operador_id = validated_data.pop('operador_id', None)
         
@@ -195,10 +239,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
     def to_representation(self, instance):
-        """
-        Personaliza la respuesta JSON devuelta tras la creación del usuario,
-        evitando exponer campos internos o sensibles.
-        """
         return {
             'id': instance.id,
             'username': instance.username,
@@ -211,9 +251,25 @@ class SecuenciaRolDetalleSerializer(serializers.ModelSerializer):
     """
     Serializer para los pasos individuales de una secuencia.
     """
+    codigo_turno = serializers.CharField(source='tipo_turno.codigo', read_only=True)
+    tipo_turno = serializers.PrimaryKeyRelatedField(
+        queryset=TipoTurno.objects.filter(activo=True),
+        write_only=True,
+        required=False
+    )
+
     class Meta:
         model = SecuenciaRolDetalle
-        fields = ['id', 'orden', 'codigo_turno', 'dias']
+        fields = ['id', 'orden', 'codigo_turno', 'tipo_turno', 'dias']
+
+    def create(self, validated_data):
+        if 'tipo_turno' not in validated_data and 'codigo_turno' in self.initial_data:
+            codigo = self.initial_data.get('codigo_turno')
+            try:
+                validated_data['tipo_turno'] = TipoTurno.objects.get(codigo=codigo)
+            except TipoTurno.DoesNotExist:
+                validated_data['tipo_turno'] = TipoTurno.objects.get_or_create(codigo=codigo)[0]
+        return super().create(validated_data)
 
 
 class SecuenciaRolSerializer(serializers.ModelSerializer):

@@ -12,8 +12,9 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Cuadrilla, Operador, SecuenciaRol, TurnoDia
+from .models import TipoTurno, Cuadrilla, Operador, SecuenciaRol, TurnoDia
 from .serializers import (
+    TipoTurnoSerializer,
     CuadrillaSerializer,
     MoverColaboradoresSerializer,
     OperadorSerializer,
@@ -28,12 +29,39 @@ class RosterDashboardView(TemplateView):
     template_name = 'roster/index.html'
 
 
+class TipoTurnoViewSet(viewsets.ModelViewSet):
+    """ViewSet para la gestión del catálogo maestro de Tipos de Turno y sus propiedades visuales HEX."""
+
+    queryset = TipoTurno.objects.all().order_by('codigo')
+    serializer_class = TipoTurnoSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = TipoTurno.objects.all().order_by('codigo')
+        activo_param = self.request.query_params.get('activo')
+        if activo_param is not None:
+            is_active = activo_param.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(activo=is_active)
+        return queryset
+
+
 class CuadrillaViewSet(viewsets.ModelViewSet):
     """ViewSet para la gestión de Cuadrillas y filtrado jerárquico de operadores y turnos por mes/año."""
 
     queryset = Cuadrilla.objects.all().order_by('identificador')
     serializer_class = CuadrillaSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error interno en CuadrillaViewSet: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def get_queryset(self):
         queryset = Cuadrilla.objects.all().order_by('identificador')
@@ -46,13 +74,13 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
                 y = int(year)
                 turnos_prefetch = Prefetch(
                     'operadores__turnos',
-                    queryset=TurnoDia.objects.filter(fecha__year=y, fecha__month=m),
+                    queryset=TurnoDia.objects.filter(fecha__year=y, fecha__month=m).select_related('tipo_turno'),
                 )
                 queryset = queryset.prefetch_related(turnos_prefetch, 'operadores')
             except ValueError:
                 pass
         else:
-            queryset = queryset.prefetch_related('operadores__turnos', 'operadores')
+            queryset = queryset.prefetch_related('operadores__turnos__tipo_turno', 'operadores')
         return queryset
 
 
@@ -78,7 +106,6 @@ class OperadorViewSet(viewsets.ModelViewSet):
 class SecuenciaRolViewSet(viewsets.ModelViewSet):
     """ViewSet para la gestión de Secuencias de Rol y sus patrones de turnos."""
 
-    # Se actualizó el ordenamiento al nuevo estándar GxP
     queryset = (
         SecuenciaRol.objects.all().prefetch_related('detalles').order_by('-creado_en')
     )
@@ -94,37 +121,60 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def create(self, request, *args, **kwargs):
-        """Permite crear o actualizar (Upsert) un turno individual para un operador en una fecha específica."""
-        operador_id = request.data.get('operador')
-        fecha = request.data.get('fecha')
-        codigo_turno = request.data.get('codigo_turno')
+        """Permite crear o actualizar (Upsert) un turno individual asociado al catálogo maestro TipoTurno con manejo de errores seguro."""
+        try:
+            operador_id = request.data.get('operador')
+            fecha = request.data.get('fecha')
+            codigo_turno = request.data.get('codigo_turno') or request.data.get('tipo_turno')
 
-        if not all([operador_id, fecha]):
-            return Response(
-                {'error': 'Se requiere operador y fecha.'},
-                status=status.HTTP_400_BAD_REQUEST,
+            if not all([operador_id, fecha]):
+                return Response(
+                    {'error': 'Se requiere operador y fecha.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            operador = get_object_or_404(Operador, id=operador_id)
+
+            # Si el código de turno está vacío, limpiamos la asignación del día
+            if not codigo_turno or str(codigo_turno).strip() == '':
+                TurnoDia.objects.filter(operador=operador, fecha=fecha).delete()
+                return Response(
+                    {'status': 'success', 'mensaje': 'Turno limpiado correctamente.'},
+                    status=status.HTTP_200_OK,
+                )
+
+            # Resolver o registrar dinámicamente el TipoTurno en el catálogo maestro
+            codigo_upper = str(codigo_turno).upper().strip()
+            tipo_turno, _ = TipoTurno.objects.get_or_create(
+                codigo=codigo_upper,
+                defaults={
+                    'nombre': f'Turno {codigo_upper}',
+                    'color_fondo': '#3b82f6',
+                    'color_texto': '#ffffff',
+                    'es_descanso': False,
+                    'activo': True
+                }
             )
 
-        operador = get_object_or_404(Operador, id=operador_id)
+            with transaction.atomic():
+                turno_obj, created = TurnoDia.objects.update_or_create(
+                    operador=operador,
+                    fecha=fecha,
+                    defaults={'tipo_turno': tipo_turno},
+                )
 
-        if not codigo_turno or codigo_turno.strip() == '':
-            TurnoDia.objects.filter(operador=operador, fecha=fecha).delete()
+            serializer = self.get_serializer(turno_obj)
             return Response(
-                {'status': 'success', 'mensaje': 'Turno limpiado correctamente.'},
-                status=status.HTTP_200_OK,
+                {'status': 'success', 'created': created, 'data': serializer.data},
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
             )
-
-        turno_obj, created = TurnoDia.objects.update_or_create(
-            operador=operador,
-            fecha=fecha,
-            defaults={'codigo_turno': codigo_turno.upper()},
-        )
-
-        serializer = self.get_serializer(turno_obj)
-        return Response(
-            {'status': 'success', 'created': created, 'data': serializer.data},
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()  # Imprime la traza completa en la terminal donde corre runserver
+            return Response(
+                {'error': f'Error interno en servidor: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=False, methods=['post'], url_path='previsualizar-carga-masiva')
     def previsualizar_carga_masiva(self, request):
@@ -308,7 +358,6 @@ class MoverColaboradoresAPIView(APIView):
                 for operador in operadores:
                     operador.cuadrilla = cuadrilla_destino
                     fields_to_update = ['cuadrilla']
-                    # Se actualizó el chequeo a 'actualizado_en' (estándar GxP)
                     if hasattr(operador, 'actualizado_en'):
                         fields_to_update.append('actualizado_en')
                     operador.save(update_fields=fields_to_update)
@@ -321,7 +370,7 @@ class MoverColaboradoresAPIView(APIView):
 
             return Response(
                 {
-                    'success': True,
+                    'success': 'true',
                     'message': 'Colaboradores movidos correctamente',
                     'moved_count': len(updated_operators),
                     'source_group_id': cuadrilla_origen.id,
