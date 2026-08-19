@@ -32,7 +32,7 @@ class MaterialInsumo(models.Model):
 class ActividadSemanal(models.Model):
     """
     Representa una tarea programada dentro de la vista semanal de operaciones,
-    vinculada a un operador del Roster y a recursos críticos (Equipos y Materiales).
+    vinculada a múltiples operadores del Roster y a recursos críticos.
     """
     TURNO_CHOICES = [
         ('M', 'Matutino'),
@@ -48,14 +48,15 @@ class ActividadSemanal(models.Model):
     hora_fin = models.TimeField(help_text="Hora estimada de finalización")
     turno_req = models.CharField(max_length=5, choices=TURNO_CHOICES, default='M', help_text="Turno requerido para la tarea")
     
-    # Relación con el operador del Roster (Puede estar sin asignar temporalmente)
-    operador_asignado = models.ForeignKey(
+    # Nuevo campo para definir cuántas personas requiere la tarea
+    personal_requerido = models.PositiveIntegerField(default=1, help_text="Número mínimo de operadores necesarios")
+
+    # Relación Many-to-Many con los operadores del Roster
+    operadores_asignados = models.ManyToManyField(
         Operador, 
-        on_delete=models.SET_NULL, 
-        null=True, 
         blank=True, 
         related_name='actividades_semanales',
-        help_text="Operador responsable asignado desde el Roster"
+        help_text="Operadores responsables asignados desde el Roster"
     )
 
     # Relaciones Many-to-Many para equipos y materiales requeridos

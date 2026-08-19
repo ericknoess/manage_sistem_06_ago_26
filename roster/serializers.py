@@ -9,11 +9,20 @@ from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, Secu
 class TipoTurnoSerializer(serializers.ModelSerializer):
     """
     Serializer para el catálogo maestro de Tipos de Turno.
-    Expone los códigos y propiedades visuales de color HEX para la interfaz.
+    Expone los códigos, propiedades visuales de color HEX y las franjas horarias operativas.
     """
     class Meta:
         model = TipoTurno
-        fields = ['codigo', 'nombre', 'color_fondo', 'color_texto', 'es_descanso', 'activo']
+        fields = [
+            'codigo', 
+            'nombre', 
+            'color_fondo', 
+            'color_texto', 
+            'es_descanso', 
+            'activo', 
+            'hora_inicio', 
+            'hora_fin'
+        ]
 
 
 class IncidenciaTurnoSerializer(serializers.ModelSerializer):
@@ -26,7 +35,6 @@ class IncidenciaTurnoSerializer(serializers.ModelSerializer):
         fields = ['id', 'turno_dia', 'minutos_retardo', 'horas_salida_anticipada', 'notas']
 
     def validate(self, data):
-        # Validación defensiva de API: Replicamos la regla de negocio del CheckConstraint
         retardo = data.get('minutos_retardo')
         salida = data.get('horas_salida_anticipada')
         notas = data.get('notas')
@@ -42,8 +50,7 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo TurnoDia.
     Gestiona la representación JSON de los turnos operacionales con trazabilidad GxP
-    y metadatos de color integrados desde el catálogo maestro, con blindaje defensivo y sin atributos redundantes.
-    Inyecta datos de incidencia para renderizado visual.
+    y metadatos de color integrados desde el catálogo maestro.
     """
     codigo_turno = serializers.SerializerMethodField()
     color_fondo = serializers.SerializerMethodField()
@@ -51,7 +58,6 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
     tiene_incidencia = serializers.SerializerMethodField()
     incidencia_detalle = serializers.SerializerMethodField()
     
-    # Se remueve el parámetro redundante source='tipo_turno' para evitar AssertionError en DRF
     tipo_turno = serializers.PrimaryKeyRelatedField(
         queryset=TipoTurno.objects.filter(activo=True),
         write_only=True,
@@ -91,14 +97,12 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
         return '#ffffff'
 
     def get_tiene_incidencia(self, obj):
-        """Retorna True si este turno tiene una incidencia asociada (OneToOne)."""
         try:
             return hasattr(obj, 'incidencia') and obj.incidencia is not None
         except ObjectDoesNotExist:
             return False
 
     def get_incidencia_detalle(self, obj):
-        """Inyecta un payload ligero con los datos de la incidencia para evitar llamados extra a la API."""
         try:
             if hasattr(obj, 'incidencia') and obj.incidencia:
                 return {
@@ -140,7 +144,6 @@ class OperadorSerializer(serializers.ModelSerializer):
     """
     Serializer para Operadores. Integra metadatos fotográficos, nivel de expertiz,
     código de empleado y filtrado dinámico de turnos por mes/año según query params.
-    Declara explícitamente 'foto' como ImageField para soportar subidas multipart/form-data.
     """
     turnos = serializers.SerializerMethodField()
     cuadrilla_nombre = serializers.CharField(source='cuadrilla.nombre', read_only=True)
@@ -196,10 +199,6 @@ class CuadrillaSerializer(serializers.ModelSerializer):
 
 
 class MoverColaboradoresSerializer(serializers.Serializer):
-    """
-    Serializer encargado de validar y procesar la reasignación masiva o individual 
-    de operadores entre cuadrillas, validando estados activos y consistencia GxP.
-    """
     operador_ids = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False,
@@ -253,10 +252,6 @@ class MoverColaboradoresSerializer(serializers.Serializer):
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    """
-    Serializer dedicado a la creación y registro seguro de usuarios del sistema (Django Auth)
-    con soporte para vinculación opcional a operadores de planta.
-    """
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password_confirm = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     operador_id = serializers.IntegerField(required=False, allow_null=True)
@@ -297,9 +292,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class SecuenciaRolDetalleSerializer(serializers.ModelSerializer):
-    """
-    Serializer para los pasos individuales de una secuencia.
-    """
     codigo_turno = serializers.CharField(source='tipo_turno.codigo', read_only=True)
     tipo_turno = serializers.PrimaryKeyRelatedField(
         queryset=TipoTurno.objects.filter(activo=True),
@@ -322,10 +314,6 @@ class SecuenciaRolDetalleSerializer(serializers.ModelSerializer):
 
 
 class SecuenciaRolSerializer(serializers.ModelSerializer):
-    """
-    Serializer para SecuenciaRol con soporte de escritura anidada (detalles).
-    Permite crear/editar la secuencia y sus pasos en una sola petición.
-    """
     detalles = SecuenciaRolDetalleSerializer(many=True)
 
     class Meta:

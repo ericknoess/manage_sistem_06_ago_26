@@ -3,33 +3,33 @@
 from rest_framework import viewsets
 from .models import Equipo, MaterialInsumo, ActividadSemanal
 from .serializers import EquipoSerializer, MaterialInsumoSerializer, ActividadSemanalSerializer
-from django.shortcuts import render
 
 class EquipoViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para gestionar el catálogo maestro de equipos críticos.
+    """
     queryset = Equipo.objects.all()
     serializer_class = EquipoSerializer
 
 
 class MaterialInsumoViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para gestionar el catálogo maestro de materiales e insumos.
+    """
     queryset = MaterialInsumo.objects.all()
     serializer_class = MaterialInsumoSerializer
 
 
 class ActividadSemanalViewSet(viewsets.ModelViewSet):
-    queryset = ActividadSemanal.objects.all().select_related('operador_asignado').prefetch_related('equipos', 'materiales')
+    """
+    API endpoint para la planificación, asignación de múltiples operadores 
+    y recursos en el tablero semanal de bioprocesos Upstream.
+    """
+    # Usamos prefetch_related para optimizar las consultas Many-to-Many y evitar errores de campos obsoletos
+    queryset = ActividadSemanal.objects.prefetch_related(
+        'operadores_asignados', 
+        'equipos', 
+        'materiales'
+    ).all().order_by('fecha', 'hora_inicio')
+    
     serializer_class = ActividadSemanalSerializer
-
-    def get_queryset(self):
-        """Permite filtrar opcionalmente por rango de fechas mediante parámetros GET (start_date, end_date)."""
-        queryset = super().get_queryset()
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
-        
-        if start_date and end_date:
-            queryset = queryset.filter(fecha__gte=start_date, fecha__lte=end_date)
-        return queryset
-
-
-
-def tablero_semanal_view(request):
-    return render(request, 'actividades/index.html')

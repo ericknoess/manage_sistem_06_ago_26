@@ -152,6 +152,7 @@
 
         .tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
         .tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
+        .tag-micro.op { border-color: rgba(56, 189, 248, 0.4); color: #bae6fd; }
 
         .task-assignee-box {
             display: flex;
@@ -167,6 +168,7 @@
         .avatar-lg { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); }
         .task-assignee-name { font-size: 0.68rem; color: var(--text); font-weight: 500; }
         .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
+        .badge-headcount { font-size: 0.62rem; color: #94a3b8; }
 
         .availability-panel {
             padding: 0.75rem;
@@ -221,6 +223,7 @@
 
         .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border: 1px solid var(--purple); color: #e9d5ff; }
         .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border: 1px solid var(--success); color: #bbf7d0; }
+        .resource-chip.op { background: rgba(56, 189, 248, 0.2); border: 1px solid var(--accent); color: #bae6fd; }
 
         .btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
         .btn-remove-tag:hover { color: var(--danger); }
@@ -293,7 +296,7 @@
         <div class="panel-box">
             <div class="panel-title">
                 <span>🗓️ Tareas Programadas por Día y Horario</span>
-                <span style="font-size: 0.7rem; color: #94a3b8;">Sincronizado con DRF</span>
+                <span style="font-size: 0.7rem; color: #94a3b8;">Sincronizado con DRF (Multi-Operador)</span>
             </div>
             <div class="weekly-grid" id="gridSemanal">
                 <!-- Se inyecta dinámicamente -->
@@ -327,23 +330,26 @@
         let operadoresGlobales = [];
         let equiposGlobales = [];
         let materialesGlobales = [];
+        let tiposTurnoGlobales = [];
         let tareaSeleccionadaId = null;
 
         async function cargarDatos() {
             try {
-                const [resAct, resOp, resEq, resMat] = await Promise.all([
+                const [resAct, resOp, resEq, resMat, resTurnos] = await Promise.all([
                     fetch('/api/actividades-semanales/'),
                     fetch('/api/operadores/?activo=true'),
                     fetch('/api/equipos/'),
-                    fetch('/api/materiales/')
+                    fetch('/api/materiales/'),
+                    fetch('/api/tipos-turno/')
                 ]);
 
-                if (!resAct.ok || !resOp.ok || !resEq.ok || !resMat.ok) throw new Error('Error al sincronizar datos');
+                if (!resAct.ok || !resOp.ok || !resEq.ok || !resMat.ok || !resTurnos.ok) throw new Error('Error al sincronizar datos');
 
                 actividadesGlobales = await resAct.json();
                 operadoresGlobales = await resOp.json();
                 equiposGlobales = await resEq.json();
                 materialesGlobales = await resMat.json();
+                tiposTurnoGlobales = await resTurnos.json();
                 
                 renderGrillaSemanal();
                 if (tareaSeleccionadaId) {
@@ -384,19 +390,19 @@
                     card.className = `task-card ${t.id === tareaSeleccionadaId ? 'selected' : ''}`;
                     card.onclick = () => seleccionarTarea(t.id);
 
-                    let assigneeHTML = '';
-                    if (t.operador_asignado_detalles) {
-                        const op = t.operador_asignado_detalles;
-                        assigneeHTML = `
-                            <div class="task-assignee-box">
-                                <div class="user-info">
-                                    ${op.foto ? `<img src="${op.foto}" class="avatar">` : ''}
-                                    <span class="task-assignee-name">${op.nombre}</span>
-                                </div>
-                            </div>
-                        `;
+                    // Renderizar avatares o badges de operadores asignados (Multi-operador)
+                    let assigneesHTML = '';
+                    const opsDetalles = t.operadores_asignados_detalles || [];
+                    const headcountReq = t.personal_requerido || 1;
+
+                    if (opsDetalles.length > 0) {
+                        assigneesHTML = `<div class="task-resources-preview">`;
+                        opsDetalles.forEach(op => {
+                            assigneesHTML += `<span class="tag-micro op" title="${op.nombre}">👤 ${op.nombre.split(' ')[0]}</span>`;
+                        });
+                        assigneesHTML += `</div>`;
                     } else {
-                        assigneeHTML = `
+                        assigneesHTML = `
                             <div class="task-assignee-box">
                                 <span class="badge-unassigned">⚠️ Sin Asignar</span>
                             </div>
@@ -418,9 +424,23 @@
                     card.innerHTML = `
                         <div class="task-time">⏰ ${t.hora_inicio.substring(0,5)} - ${t.hora_fin.substring(0,5)}</div>
                         <div class="task-title">${t.titulo}</div>
-                        <div style="font-size:0.6rem; color:#94a3b8;">Lote: ${t.lote_codigo}</div>
+                        <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between;">
+                            <span>Lote: ${t.lote_codigo}</span>
+                            <span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span>
+                        </div>
+                        {recursosHTML}
+                        {assigneesHTML}
+                    `;
+                    // Nota: reemplazamos la línea anterior para interpolación correcta de variables en JS
+                    card.innerHTML = `
+                        <div class="task-time">⏰ ${t.hora_inicio.substring(0,5)} - ${t.hora_fin.substring(0,5)}</div>
+                        <div class="task-title">${t.titulo}</div>
+                        <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between;">
+                            <span>Lote: ${t.lote_codigo}</span>
+                            <span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span>
+                        </div>
                         ${recursosHTML}
-                        ${assigneeHTML}
+                        ${assigneesHTML}
                     `;
 
                     tasksContainer.appendChild(card);
@@ -442,7 +462,7 @@
             const tarea = actividadesGlobales.find(t => t.id === tareaId);
             if (!tarea) return;
 
-            // Renderizar Chips de Equipos asociados
+            // Equipos y Materiales
             const equiposAsociadosIds = tarea.equipos || [];
             const equiposChips = equiposAsociadosIds.map(eqId => {
                 const eq = equiposGlobales.find(e => e.id === eqId);
@@ -454,7 +474,6 @@
                 .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`)
                 .join('');
 
-            // Renderizar Chips de Materiales asociados
             const materialesAsociadosIds = tarea.materiales || [];
             const materialesChips = materialesAsociadosIds.map(matId => {
                 const mat = materialesGlobales.find(m => m.id === matId);
@@ -466,12 +485,30 @@
                 .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`)
                 .join('');
 
+            // Operadores Asignados Actualmente (Multi-operador)
+            const operadoresAsignadosIds = tarea.operadores_asignados || [];
+            const headcountReq = tarea.personal_requerido || 1;
+
+            const operadoresChips = operadoresAsignadosIds.map(opId => {
+                const op = operadoresGlobales.find(o => o.id === opId);
+                return `<span class="resource-chip op">👤 ${op ? op.nombre : opId} <span class="btn-remove-tag" onclick="gestionarOperador(${tarea.id}, ${opId}, 'remover')">✕</span></span>`;
+            }).join('');
+
             let html = `
                 <div class="info-card">
                     <h4>${tarea.titulo}</h4>
                     <div>Lote: <strong>${tarea.lote_codigo}</strong></div>
                     <div>📅 Fecha: <strong>${tarea.fecha}</strong></div>
                     <div>⏰ Horario: <strong>${tarea.hora_inicio.substring(0,5)} - ${tarea.hora_fin.substring(0,5)} hrs</strong></div>
+                    <div>👥 Personal Asignado / Requerido: <strong>${operadoresAsignadosIds.length} / ${headcountReq}</strong></div>
+
+                    <!-- SECCIÓN OPERADORES ASIGNADOS -->
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">OPERADORES EN TAREA:</div>
+                        <div class="resource-tags-container">
+                            ${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Ningún operador asignado</span>'}
+                        </div>
+                    </div>
 
                     <!-- SECCIÓN EQUIPOS -->
                     <div class="resource-section" style="margin-top: 0.5rem;">
@@ -499,26 +536,64 @@
                 </div>
 
                 <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">
-                    Personal del Roster:
+                    Personal Disponible en Horario:
                 </div>
             `;
 
-            operadoresGlobales.forEach(op => {
-                const esAsignadoActual = tarea.operador_asignado === op.id;
-                
+            // Intervalo de tiempo absoluto de la tarea
+            const tareaInicioDT = new Date(`${tarea.fecha}T${tarea.hora_inicio}`);
+            let tareaFinDT = new Date(`${tarea.fecha}T${tarea.hora_fin}`);
+            if (tarea.hora_fin < tarea.hora_inicio) {
+                tareaFinDT.setDate(tareaFinDT.getDate() + 1);
+            }
+
+            // Filtrar operadores disponibles que NO estén ya asignados
+            const operadoresDisponibles = operadoresGlobales.filter(op => {
+                if (operadoresAsignadosIds.includes(op.id)) return false; // Ya asignado
+
+                const turnoAsignadoDia = (op.turnos || []).find(tu => tu.fecha === tarea.fecha);
+                if (!turnoAsignadoDia || !turnoAsignadoDia.codigo_turno) return false;
+
+                const tipoTurnoMaster = tiposTurnoGlobales.find(tt => tt.codigo === turnoAsignadoDia.codigo_turno);
+                if (!tipoTurnoMaster || tipoTurnoMaster.es_descanso) return false;
+
+                if (tipoTurnoMaster.hora_inicio && tipoTurnoMaster.hora_fin) {
+                    const turnoInicioDT = new Date(`${turnoAsignadoDia.fecha}T${tipoTurnoMaster.hora_inicio}`);
+                    let turnoFinDT = new Date(`${turnoAsignadoDia.fecha}T${tipoTurnoMaster.hora_fin}`);
+                    if (tipoTurnoMaster.hora_fin < tipoTurnoMaster.hora_inicio) {
+                        turnoFinDT.setDate(turnoFinDT.getDate() + 1);
+                    }
+                    return (tareaInicioDT >= turnoInicioDT && tareaFinDT <= turnoFinDT);
+                }
+                return true;
+            });
+
+            if (operadoresDisponibles.length === 0) {
+                html += `<div class="empty-state">No hay más operadores disponibles en este horario.</div>`;
+            }
+
+            operadoresDisponibles.forEach(op => {
+                const turnoAsignadoDia = (op.turnos || []).find(tu => tu.fecha === tarea.fecha);
+                let estadoHorarioTxt = "Disponible en Turno";
+                if (turnoAsignadoDia && turnoAsignadoDia.codigo_turno) {
+                    const tipoTurnoMaster = tiposTurnoGlobales.find(tt => tt.codigo === turnoAsignadoDia.codigo_turno);
+                    if (tipoTurnoMaster && tipoTurnoMaster.hora_inicio && tipoTurnoMaster.hora_fin) {
+                        estadoHorarioTxt = `Turno ${tipoTurnoMaster.codigo} (${tipoTurnoMaster.hora_inicio.substring(0, 5)} - ${tipoTurnoMaster.hora_fin.substring(0, 5)})`;
+                    } else {
+                        estadoHorarioTxt = `Turno: ${turnoAsignadoDia.codigo_turno}`;
+                    }
+                }
+
                 html += `
-                    <div class="op-availability-card ${esAsignadoActual ? 'available' : ''}">
+                    <div class="op-availability-card available">
                         <div class="op-header">
                             ${op.foto ? `<img src="${op.foto}" class="avatar-lg">` : `<div class="avatar-lg" style="background:#334155;"></div>`}
                             <div>
                                 <div class="op-name">${op.nombre}</div>
-                                <div class="op-status-text">${esAsignadoActual ? '⭐ Asignado Actual' : 'Activo en Roster'}</div>
+                                <div class="op-status-text">${estadoHorarioTxt}</div>
                             </div>
                         </div>
-                        ${esAsignadoActual ? 
-                            `<button class="btn-unassign-panel" onclick="asignarOperador(${tarea.id}, null)">Quitar</button>` : 
-                            `<button class="btn-assign" onclick="asignarOperador(${tarea.id}, ${op.id})">Asignar</button>`
-                        }
+                        <button class="btn-assign" onclick="gestionarOperador(${tarea.id}, ${op.id}, 'agregar')">Asignar</button>
                     </div>
                 `;
             });
@@ -526,7 +601,20 @@
             panel.innerHTML = html;
         }
 
-        async function asignarOperador(tareaId, operadorId) {
+        async function gestionarOperador(tareaId, operadorId, accion) {
+            const tarea = actividadesGlobales.find(t => t.id === tareaId);
+            if (!tarea) return;
+
+            let operadoresActuales = [...(tarea.operadores_asignados || [])];
+
+            if (accion === 'agregar') {
+                if (!operadoresActuales.includes(operadorId)) {
+                    operadoresActuales.push(operadorId);
+                }
+            } else if (accion === 'remover') {
+                operadoresActuales = operadoresActuales.filter(id => id !== operadorId);
+            }
+
             try {
                 const response = await fetch(`/api/actividades-semanales/${tareaId}/`, {
                     method: 'PATCH',
@@ -534,10 +622,10 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': getCookie('csrftoken')
                     },
-                    body: JSON.stringify({ operador_asignado: operadorId })
+                    body: JSON.stringify({ operadores_asignados: operadoresActuales })
                 });
 
-                if (!response.ok) throw new Error('Error al actualizar asignación');
+                if (!response.ok) throw new Error('Error al actualizar operadores asignados');
                 await cargarDatos();
             } catch (error) {
                 alert("Error: " + error.message);

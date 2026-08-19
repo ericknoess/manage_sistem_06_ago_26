@@ -1,10 +1,12 @@
 # roster/models.py
+
 from django.db import models
 
 class TipoTurno(models.Model):
     """
     Catálogo maestro configurable de tipos de turnos y roles operativos.
-    Permite definir códigos personalizados y sus propiedades visuales (colores HEX).
+    Permite definir códigos personalizados, propiedades visuales (colores HEX)
+    y su franja horaria oficial de operación.
     """
     codigo = models.CharField(
         max_length=10, 
@@ -40,11 +42,27 @@ class TipoTurno(models.Model):
         verbose_name="Turno Activo",
         help_text="Baja lógica para preservar la trazabilidad histórica GxP"
     )
+    
+    # Nuevos atributos de franja horaria operativa
+    hora_inicio = models.TimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Hora de Inicio",
+        help_text="Hora oficial de entrada para el turno (Formato HH:MM)"
+    )
+    hora_fin = models.TimeField(
+        null=True, 
+        blank=True, 
+        verbose_name="Hora de Fin",
+        help_text="Hora oficial de salida para el turno (Formato HH:MM)"
+    )
+
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     def __str__(self):
-        return f"[{self.codigo}] {self.nombre}"
+        horario = f" ({self.hora_inicio.strftime('%H:%M')} - {self.hora_fin.strftime('%H:%M')})" if self.hora_inicio and self.hora_fin else ""
+        return f"[{self.codigo}] {self.nombre}{horario}"
 
     class Meta:
         verbose_name = "Tipo de Turno"
@@ -178,7 +196,6 @@ class IncidenciaTurno(models.Model):
         verbose_name_plural = "Incidencias de Turnos"
         constraints = [
             models.CheckConstraint(
-                # Asegura que al menos un campo tenga información válida. Evita registros 100% vacíos.
                 check=(
                     models.Q(minutos_retardo__isnull=False) |
                     models.Q(horas_salida_anticipada__isnull=False) |

@@ -17,8 +17,12 @@ class MaterialInsumoAdmin(admin.ModelAdmin):
 
 @admin.register(ActividadSemanal)
 class ActividadSemanalAdmin(admin.ModelAdmin):
-    list_display = ('lote_codigo', 'titulo', 'fecha', 'hora_inicio', 'hora_fin', 'turno_req', 'operador_asignado')
+    list_display = ('lote_codigo', 'titulo', 'fecha', 'hora_inicio', 'hora_fin', 'turno_req', 'personal_requerido', 'get_operadores')
     search_fields = ('lote_codigo', 'titulo')
-    list_filter = ('fecha', 'turno_req', 'operador_asignado')
-    filter_horizontal = ('equipos', 'materiales')
+    list_filter = ('fecha', 'turno_req')
+    filter_horizontal = ('operadores_asignados', 'equipos', 'materiales')
     date_hierarchy = 'fecha'
+
+    def get_operadores(self, obj):
+        return ", ".join([op.nombre for op in obj.operadores_asignados.all()])
+    get_operadores.short_description = 'Operadores Asignados'
