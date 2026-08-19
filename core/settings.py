@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     
     # Aplicaciones locales (Nuestras)
     'roster',
+    'actividades',  # <-- NUEVA APLICACIÓN REGISTRADA
 ]
 
 MIDDLEWARE = [

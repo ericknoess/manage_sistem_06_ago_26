@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asignación por Disponibilidad Semanal con Recursos - Upstream GxP</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --warning: #f59e0b;
+            --success: #22c65e;
+            --danger: #ef4444;
+            --purple: #a855f7;
+        }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            gap: 0.75rem;
+        }
+
+        .supervisor-toolbar {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .toolbar-title {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 0.75rem;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-box {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            padding: 0.6rem 0.8rem;
+            background-color: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .weekly-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: var(--border-color);
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .day-column {
+            background-color: var(--panel-bg);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .day-header {
+            background-color: var(--bg-dark);
+            padding: 0.5rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+
+        .day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
+        .day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
+
+        .day-tasks {
+            padding: 0.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            flex: 1;
+        }
+
+        .task-card {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent);
+            border-radius: 6px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
+
+        .task-time { font-size: 0.65rem; font-weight: bold; color: var(--accent); }
+        .task-title { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+
+        .task-resources-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            margin-top: 2px;
+        }
+
+        .tag-micro {
+            font-size: 0.58rem;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: #cbd5e1;
+        }
+
+        .tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
+        .tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
+
+        .task-assignee-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .user-info { display: flex; align-items: center; gap: 0.4rem; }
+        .avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid var(--accent); }
+        .avatar-lg { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); }
+        .task-assignee-name { font-size: 0.68rem; color: var(--text); font-weight: 500; }
+        .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
+
+        .availability-panel {
+            padding: 0.75rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .info-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.6rem;
+            font-size: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
+
+        .resource-section {
+            background: var(--bg-dark);
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .resource-title {
+            font-size: 0.68rem;
+            font-weight: bold;
+            color: #94a3b8;
+            margin-bottom: 0.3rem;
+        }
+
+        .resource-tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 0.4rem;
+        }
+
+        .resource-chip {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border: 1px solid var(--purple); color: #e9d5ff; }
+        .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border: 1px solid var(--success); color: #bbf7d0; }
+
+        .btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
+        .btn-remove-tag:hover { color: var(--danger); }
+
+        .select-resource {
+            width: 100%;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text);
+            font-size: 0.7rem;
+            padding: 4px;
+            border-radius: 4px;
+            outline: none;
+        }
+        
+        .op-availability-card {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .op-availability-card.available { border-left: 3px solid var(--success); }
+
+        .op-header { display: flex; align-items: center; gap: 0.5rem; }
+        .op-name { font-size: 0.78rem; font-weight: bold; }
+        .op-status-text { font-size: 0.68rem; color: #94a3b8; }
+
+        .btn-assign {
+            background-color: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-assign:hover { opacity: 0.9; }
+
+        .btn-unassign-panel {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-unassign-panel:hover { background-color: var(--danger); color: white; }
+
+        .empty-state { text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+
+    <div class="supervisor-toolbar">
+        <div class="toolbar-title">
+            <span>📅 Programación Semanal, Personal y Recursos (GxP Ready)</span>
+        </div>
+        <div style="font-size: 0.78rem; color: #94a3b8;">
+            Planta: <strong>Bioprocesos - Upstream</strong>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="panel-box">
+            <div class="panel-title">
+                <span>🗓️ Tareas Programadas por Día y Horario</span>
+                <span style="font-size: 0.7rem; color: #94a3b8;">Sincronizado con DRF</span>
+            </div>
+            <div class="weekly-grid" id="gridSemanal">
+                <!-- Se inyecta dinámicamente -->
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-title">
+                <span>⚙️ Configuración & Disponibilidad</span>
+            </div>
+            <div class="availability-panel" id="panelDisponibilidad">
+                <div class="empty-state">
+                    👈 Selecciona una tarea del calendario para consultar personal, asignar equipos y materiales.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const diasSemana = [
+            { nombre: "Mié", fecha: "2026-07-01" },
+            { nombre: "Jue", fecha: "2026-07-02" },
+            { nombre: "Vie", fecha: "2026-07-03" },
+            { nombre: "Sáb", fecha: "2026-07-04" },
+            { nombre: "Dom", fecha: "2026-07-05" },
+            { nombre: "Lun", fecha: "2026-07-06" },
+            { nombre: "Mar", fecha: "2026-07-07" }
+        ];
+
+        let actividadesGlobales = [];
+        let operadoresGlobales = [];
+        let equiposGlobales = [];
+        let materialesGlobales = [];
+        let tareaSeleccionadaId = null;
+
+        async function cargarDatos() {
+            try {
+                const [resAct, resOp, resEq, resMat] = await Promise.all([
+                    fetch('/api/actividades-semanales/'),
+                    fetch('/api/operadores/?activo=true'),
+                    fetch('/api/equipos/'),
+                    fetch('/api/materiales/')
+                ]);
+
+                if (!resAct.ok || !resOp.ok || !resEq.ok || !resMat.ok) throw new Error('Error al sincronizar datos');
+
+                actividadesGlobales = await resAct.json();
+                operadoresGlobales = await resOp.json();
+                equiposGlobales = await resEq.json();
+                materialesGlobales = await resMat.json();
+                
+                renderGrillaSemanal();
+                if (tareaSeleccionadaId) {
+                    renderPanelDetalle(tareaSeleccionadaId);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+        function renderGrillaSemanal() {
+            const grid = document.getElementById('gridSemanal');
+            grid.innerHTML = '';
+
+            diasSemana.forEach(dia => {
+                const col = document.createElement('div');
+                col.className = 'day-column';
+
+                const partesFecha = dia.fecha.split('-');
+                col.innerHTML = `
+                    <div class="day-header">
+                        <div class="day-name">${dia.nombre}</div>
+                        <div class="day-date">${partesFecha[2]} Jul</div>
+                    </div>
+                `;
+
+                const tasksContainer = document.createElement('div');
+                tasksContainer.className = 'day-tasks';
+
+                const tareasDia = actividadesGlobales.filter(t => t.fecha === dia.fecha);
+
+                if (tareasDia.length === 0) {
+                    tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin tareas</div>`;
+                }
+
+                tareasDia.forEach(t => {
+                    const card = document.createElement('div');
+                    card.className = `task-card ${t.id === tareaSeleccionadaId ? 'selected' : ''}`;
+                    card.onclick = () => seleccionarTarea(t.id);
+
+                    let assigneeHTML = '';
+                    if (t.operador_asignado_detalles) {
+                        const op = t.operador_asignado_detalles;
+                        assigneeHTML = `
+                            <div class="task-assignee-box">
+                                <div class="user-info">
+                                    ${op.foto ? `<img src="${op.foto}" class="avatar">` : ''}
+                                    <span class="task-assignee-name">${op.nombre}</span>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        assigneeHTML = `
+                            <div class="task-assignee-box">
+                                <span class="badge-unassigned">⚠️ Sin Asignar</span>
+                            </div>
+                        `;
+                    }
+
+                    let recursosHTML = '';
+                    if ((t.equipos_detalles && t.equipos_detalles.length) || (t.materiales_detalles && t.materiales_detalles.length)) {
+                        recursosHTML = '<div class="task-resources-preview">';
+                        (t.equipos_detalles || []).forEach(eq => {
+                            recursosHTML += `<span class="tag-micro eq" title="${eq.nombre}">⚙️ ${eq.id}</span>`;
+                        });
+                        (t.materiales_detalles || []).forEach(mat => {
+                            recursosHTML += `<span class="tag-micro mat" title="${mat.nombre}">🧪 ${mat.id}</span>`;
+                        });
+                        recursosHTML += '</div>';
+                    }
+
+                    card.innerHTML = `
+                        <div class="task-time">⏰ ${t.hora_inicio.substring(0,5)} - ${t.hora_fin.substring(0,5)}</div>
+                        <div class="task-title">${t.titulo}</div>
+                        <div style="font-size:0.6rem; color:#94a3b8;">Lote: ${t.lote_codigo}</div>
+                        ${recursosHTML}
+                        ${assigneeHTML}
+                    `;
+
+                    tasksContainer.appendChild(card);
+                });
+
+                col.appendChild(tasksContainer);
+                grid.appendChild(col);
+            });
+        }
+
+        function seleccionarTarea(tareaId) {
+            tareaSeleccionadaId = tareaId;
+            renderGrillaSemanal();
+            renderPanelDetalle(tareaId);
+        }
+
+        function renderPanelDetalle(tareaId) {
+            const panel = document.getElementById('panelDisponibilidad');
+            const tarea = actividadesGlobales.find(t => t.id === tareaId);
+            if (!tarea) return;
+
+            // Renderizar Chips de Equipos asociados
+            const equiposAsociadosIds = tarea.equipos || [];
+            const equiposChips = equiposAsociadosIds.map(eqId => {
+                const eq = equiposGlobales.find(e => e.id === eqId);
+                return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} <span class="btn-remove-tag" onclick="actualizarRecursos(${tarea.id}, 'equipo', '${eqId}', 'remover')">✕</span></span>`;
+            }).join('');
+
+            const equiposDisponiblesOpts = equiposGlobales
+                .filter(eq => !equiposAsociadosIds.includes(eq.id))
+                .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`)
+                .join('');
+
+            // Renderizar Chips de Materiales asociados
+            const materialesAsociadosIds = tarea.materiales || [];
+            const materialesChips = materialesAsociadosIds.map(matId => {
+                const mat = materialesGlobales.find(m => m.id === matId);
+                return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} <span class="btn-remove-tag" onclick="actualizarRecursos(${tarea.id}, 'material', '${matId}', 'remover')">✕</span></span>`;
+            }).join('');
+
+            const materialesDisponiblesOpts = materialesGlobales
+                .filter(mat => !materialesAsociadosIds.includes(mat.id))
+                .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`)
+                .join('');
+
+            let html = `
+                <div class="info-card">
+                    <h4>${tarea.titulo}</h4>
+                    <div>Lote: <strong>${tarea.lote_codigo}</strong></div>
+                    <div>📅 Fecha: <strong>${tarea.fecha}</strong></div>
+                    <div>⏰ Horario: <strong>${tarea.hora_inicio.substring(0,5)} - ${tarea.hora_fin.substring(0,5)} hrs</strong></div>
+
+                    <!-- SECCIÓN EQUIPOS -->
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">EQUIPOS REQUERIDOS:</div>
+                        <div class="resource-tags-container">
+                            ${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
+                        </div>
+                        <select class="select-resource" onchange="actualizarRecursos(${tarea.id}, 'equipo', this.value, 'agregar')">
+                            <option value="" disabled selected>+ Agregar Equipo...</option>
+                            ${equiposDisponiblesOpts}
+                        </select>
+                    </div>
+
+                    <!-- SECCIÓN MATERIALES -->
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">MATERIALES Y INSUMOS:</div>
+                        <div class="resource-tags-container">
+                            ${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
+                        </div>
+                        <select class="select-resource" onchange="actualizarRecursos(${tarea.id}, 'material', this.value, 'agregar')">
+                            <option value="" disabled selected>+ Agregar Material...</option>
+                            ${materialesDisponiblesOpts}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">
+                    Personal del Roster:
+                </div>
+            `;
+
+            operadoresGlobales.forEach(op => {
+                const esAsignadoActual = tarea.operador_asignado === op.id;
+                
+                html += `
+                    <div class="op-availability-card ${esAsignadoActual ? 'available' : ''}">
+                        <div class="op-header">
+                            ${op.foto ? `<img src="${op.foto}" class="avatar-lg">` : `<div class="avatar-lg" style="background:#334155;"></div>`}
+                            <div>
+                                <div class="op-name">${op.nombre}</div>
+                                <div class="op-status-text">${esAsignadoActual ? '⭐ Asignado Actual' : 'Activo en Roster'}</div>
+                            </div>
+                        </div>
+                        ${esAsignadoActual ? 
+                            `<button class="btn-unassign-panel" onclick="asignarOperador(${tarea.id}, null)">Quitar</button>` : 
+                            `<button class="btn-assign" onclick="asignarOperador(${tarea.id}, ${op.id})">Asignar</button>`
+                        }
+                    </div>
+                `;
+            });
+
+            panel.innerHTML = html;
+        }
+
+        async function asignarOperador(tareaId, operadorId) {
+            try {
+                const response = await fetch(`/api/actividades-semanales/${tareaId}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ operador_asignado: operadorId })
+                });
+
+                if (!response.ok) throw new Error('Error al actualizar asignación');
+                await cargarDatos();
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        async function actualizarRecursos(tareaId, tipo, recursoId, accion) {
+            if (!recursoId) return;
+            const tarea = actividadesGlobales.find(t => t.id === tareaId);
+            if (!tarea) return;
+
+            let nuevosEquipos = [...(tarea.equipos || [])];
+            let nuevosMateriales = [...(tarea.materiales || [])];
+
+            if (tipo === 'equipo') {
+                if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
+                if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
+            } else if (tipo === 'material') {
+                if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
+                if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
+            }
+
+            try {
+                const response = await fetch(`/api/actividades-semanales/${tareaId}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        equipos: nuevosEquipos,
+                        materiales: nuevosMateriales
+                    })
+                });
+
+                if (!response.ok) throw new Error('Error al actualizar recursos');
+                await cargarDatos();
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        cargarDatos();
+    </script>
+</body>
+</html>
