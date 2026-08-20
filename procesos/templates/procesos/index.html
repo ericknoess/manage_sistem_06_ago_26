@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bioprocesos - CPM, Holguras y Rutas de Proceso (GxP Ready)</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --warning: #f59e0b;
+            --success: #22c65e;
+            --danger: #ef4444;
+            --critical: #f43f5e;
+            --incubation: #8b5cf6;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .page-header {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.85rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header-title h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-title p {
+            margin: 0.2rem 0 0 0;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 0.75rem;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-box {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 0.75rem 1rem;
+            background-color: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .process-list-container {
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .process-item {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.65rem 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .process-item:hover { border-color: var(--accent); }
+        .process-item.active {
+            border-color: var(--accent);
+            background-color: rgba(56, 189, 248, 0.08);
+            border-left: 4px solid var(--accent);
+        }
+
+        .process-info h4 { margin: 0; font-size: 0.82rem; color: var(--text); }
+        .process-info span { font-size: 0.7rem; color: var(--text-muted); }
+
+        .task-editor-body {
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            flex: 1;
+        }
+
+        .cpm-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+
+        .summary-card {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.65rem 0.85rem;
+        }
+
+        .summary-card label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold; }
+        .summary-card .val { font-size: 1.05rem; font-weight: bold; margin-top: 2px; }
+
+        .form-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            background-color: var(--bg-dark);
+            padding: 0.85rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            flex: 1;
+            min-width: 75px;
+        }
+
+        /* Ajustes para campos específicos en el grid flexible */
+        .fg-wide { min-width: 130px; }
+        .fg-btn { min-width: 100px; }
+
+        .form-group label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        input[type="text"], select, input[type="number"] {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text);
+            padding: 0.4rem 0.4rem;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            outline: none;
+            width: 100%;
+        }
+
+        input[readonly], select[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: rgba(0,0,0,0.2);
+        }
+
+        select[multiple] {
+            height: 30px;
+            padding: 0.1rem;
+        }
+
+        input[type="text"]:focus:not([readonly]), select:focus:not([disabled]), input[type="number"]:focus:not([readonly]) {
+            border-color: var(--accent);
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 0.45rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-primary:hover { background-color: var(--accent-hover); color: white; }
+        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+
+        .tasks-table-container {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.74rem;
+            text-align: left;
+        }
+
+        thead {
+            background-color: var(--bg-dark);
+            color: var(--accent);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th, td { padding: 0.5rem 0.6rem; vertical-align: middle; }
+        tbody tr { border-bottom: 1px solid var(--border-color); }
+        tbody tr.incubation-row { background-color: rgba(139, 92, 246, 0.03); }
+
+        .badge-cpm {
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 0.62rem;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .badge-incubation { background-color: rgba(139, 92, 246, 0.2); color: var(--incubation); border: 1px solid var(--incubation); }
+        .badge-active { background-color: rgba(34, 197, 94, 0.15); color: var(--success); }
+
+        .tag-resource {
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            display: inline-block;
+            margin: 1px;
+        }
+
+        .gantt-preview-cell { width: 140px; }
+        .gantt-track {
+            background-color: var(--bg-dark);
+            height: 18px;
+            border-radius: 4px;
+            position: relative;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+        }
+        .gantt-bar {
+            height: 100%;
+            position: absolute;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .gantt-bar.regular { background-color: var(--accent); }
+        .gantt-bar.critical { background-color: var(--critical); }
+        .gantt-bar.incubation {
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(139, 92, 246, 0.8),
+                rgba(139, 92, 246, 0.8) 8px,
+                rgba(124, 58, 237, 0.9) 8px,
+                rgba(124, 58, 237, 0.9) 16px
+            );
+            border: 1px solid var(--incubation);
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .btn-icon:hover { background-color: var(--border-color); }
+        .btn-icon.delete:hover { background-color: rgba(239, 68, 68, 0.2); }
+        .btn-icon.edit:hover { background-color: rgba(56, 189, 248, 0.2); }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 480px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        .modal-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.8rem;
+        }
+        .modal-grid .full-width { grid-column: span 3; }
+        .modal-grid .two-thirds { grid-column: span 2; }
+    </style>
+</head>
+<body>
+
+    <div class="page-header">
+        <div class="header-title">
+            <h2>🧫 Planificador CPM, Holguras y Rutas (GxP Ready)</h2>
+            <p>Control de dependencias, muestreos dinámicos y análisis de ruta crítica.</p>
+        </div>
+        <a href="/tablero/" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">📊 Ver Tablero Semanal</a>
+    </div>
+
+    <div class="main-layout">
+        <div class="panel-box">
+            <div class="panel-header">
+                <span>📁 Bioprocesos / Plantillas</span>
+                <button class="btn-primary btn-sm" onclick="abrirModalNuevoProceso()">➕ Nuevo</button>
+            </div>
+            <div class="process-list-container" id="listaProcesos">
+                <!-- Inyectado dinámicamente -->
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-header" id="tituloProcesoActivo">
+                <span>⚡ Mapeo Operacional: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
+            </div>
+
+            <div class="task-editor-body" id="editorTareas" style="display: none;">
+                <div class="cpm-summary">
+                    <div class="summary-card">
+                        <label>Tiempo Total Proceso</label>
+                        <div class="val" id="totalTiempo" style="color: var(--accent);">0h</div>
+                    </div>
+                    <div class="summary-card">
+                        <label>Incubación / Bloqueo Eq.</label>
+                        <div class="val" id="totalIncubacion" style="color: var(--incubation);">0h</div>
+                    </div>
+                    <div class="summary-card">
+                        <label>Horas-Hombre Planeadas</label>
+                        <div class="val" id="totalHorasHombre" style="color: var(--success);">0h</div>
+                    </div>
+                    <div class="summary-card">
+                        <label>Fases Críticas / Total</label>
+                        <div class="val" id="totalCriticas" style="color: var(--critical);">0 / 0</div>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label title="ID Paso">ID</label>
+                        <input type="text" id="inputPasoId" placeholder="T1">
+                    </div>
+                    <div class="form-group fg-wide">
+                        <label>Nombre Fase</label>
+                        <input type="text" id="inputTareaNombre" placeholder="ej. Inoculación">
+                    </div>
+                    <div class="form-group fg-wide">
+                        <label>Tipo Operación</label>
+                        <select id="selectTipoTarea" onchange="toggleIncubacionFields(false)">
+                            <option value="ACTIVA">⚙️ Activa</option>
+                            <option value="INCUBACION">🧫 Incubación</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label title="Duración Total (h)">Dur(h)</label>
+                        <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5">
+                    </div>
+                    <!-- Nuevos campos Muestreo -->
+                    <div class="form-group">
+                        <label title="Frecuencia Muestreo (h)">Frec(h)</label>
+                        <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label title="Duración Muestreo (h)">D.M(h)</label>
+                        <input type="number" id="inputDuracionMuestreo" value="0" min="0" step="0.1" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label title="Operadores por Muestreo">Op.M</label>
+                        <input type="number" id="inputOpsMuestreo" value="0" min="0" step="1" readonly>
+                    </div>
+                    <!-- Fin nuevos campos -->
+                    <div class="form-group fg-wide">
+                        <label>Predecesora</label>
+                        <select id="selectPredecesora">
+                            <option value="">- Ninguna -</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Regla</label>
+                        <select id="selectTipoDep">
+                            <option value="FS">FS</option>
+                            <option value="SS">SS</option>
+                            <option value="OFFSET">Desfase</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label title="Desfase (h)">Desf(h)</label>
+                        <input type="number" id="inputDesfase" value="0" step="0.5">
+                    </div>
+                    <div class="form-group fg-wide">
+                        <label>Equipo Req.</label>
+                        <select id="selectTipoEquipoReq">
+                            <option value="N/A">N/A</option>
+                            <option value="Biorreactor">Biorreactor</option>
+                            <option value="Autoclave">Autoclave</option>
+                            <option value="Centrífuga">Centrífuga</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ops</label>
+                        <input type="number" id="inputOpsReq" value="1" min="0">
+                    </div>
+                    <div class="form-group fg-wide">
+                        <label>Materiales</label>
+                        <select id="selectMaterialesReq" multiple>
+                            <!-- Inyectado desde API -->
+                        </select>
+                    </div>
+                    <div class="form-group fg-btn">
+                        <button class="btn-primary" style="width:100%; height:30px;" onclick="crearOperacionAPI()">➕ Añadir</button>
+                    </div>
+                </div>
+
+                <div class="tasks-table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">ID</th>
+                                <th>Operación / Fase</th>
+                                <th style="width: 55px;">Duración</th>
+                                <th>Holgura (ES/LS)</th>
+                                <th>Requerimientos</th>
+                                <th style="width: 60px;">Inicio-Fin</th>
+                                <th style="width: 65px;">Tipo</th>
+                                <th>Gantt CPM</th>
+                                <th style="width: 70px; text-align:center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaCPMBody">
+                            <!-- Inyectado dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="empty-tasks" id="emptyState" style="text-align:center; padding:3rem; color:var(--text-muted);">
+                👈 Selecciona un bioproceso maestro del panel izquierdo.
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL NUEVO PROCESO -->
+    <div class="modal-overlay" id="modalNuevoProceso" style="display: none;">
+        <div class="modal-content" style="width: 360px;">
+            <div class="modal-header">
+                <h3>🧪 Crear Nuevo Proceso Maestro</h3>
+            </div>
+            <div class="form-group">
+                <label>Nombre del Proceso / Receta</label>
+                <input type="text" id="nuevoProcesoNombre" placeholder="ej. Fermentación Fed-Batch CHO">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalNuevoProceso()">Cancelar</button>
+                <button class="btn-primary" onclick="crearProcesoMaestroAPI()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR OPERACIÓN -->
+    <div class="modal-overlay" id="modalEditarOperacion" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Editar Operación / Fase</h3>
+            </div>
+            <input type="hidden" id="editOpId">
+            <div class="modal-grid">
+                <div class="form-group">
+                    <label>ID Paso</label>
+                    <input type="text" id="editOpPasoId">
+                </div>
+                <div class="form-group two-thirds">
+                    <label>Nombre Operación</label>
+                    <input type="text" id="editOpNombre">
+                </div>
+                
+                <div class="form-group">
+                    <label>Tipo Operación</label>
+                    <select id="editOpTipo" onchange="toggleIncubacionFields(true)">
+                        <option value="ACTIVA">⚙️ Activa</option>
+                        <option value="INCUBACION">🧫 Incubación</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Duración (h)</label>
+                    <input type="number" id="editOpDuracion" step="0.5" min="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Ops Fase</label>
+                    <input type="number" id="editOpOps" min="0">
+                </div>
+
+                <!-- Bloque de Muestreo (Visualmente Agrupado) -->
+                <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
+                    <label>Frec. Muestreo (h)</label>
+                    <input type="number" id="editOpFrecMuestreo" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Dur. Muestreo (h)</label>
+                    <input type="number" id="editOpDuracionMuestreo" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Ops Muestreo</label>
+                    <input type="number" id="editOpOpsMuestreo" min="0" step="1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Regla Dep.</label>
+                    <select id="editOpTipoDep">
+                        <option value="FS">Fin-Inicio (FS)</option>
+                        <option value="SS">Inicio-Inicio (SS)</option>
+                        <option value="OFFSET">Desfase Fijo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Desfase (h)</label>
+                    <input type="number" id="editOpDesfase" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Equipo Req.</label>
+                    <select id="editOpEquipo">
+                        <option value="N/A">N/A</option>
+                        <option value="Biorreactor">Biorreactor</option>
+                        <option value="Autoclave">Autoclave</option>
+                        <option value="Centrífuga">Centrífuga</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalEditarOperacion()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarEdicionOperacionAPI()">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let procesosGlobales = [];
+        let materialesGlobales = [];
+        let procesoSeleccionado = null;
+
+        // Función que gestiona dinámicamente los campos según el Tipo de Operación
+        function toggleIncubacionFields(isEdit = false) {
+            const tipoId = isEdit ? 'editOpTipo' : 'selectTipoTarea';
+            const opsId = isEdit ? 'editOpOps' : 'inputOpsReq';
+            const frecId = isEdit ? 'editOpFrecMuestreo' : 'inputFrecMuestreo';
+            const durMuestreoId = isEdit ? 'editOpDuracionMuestreo' : 'inputDuracionMuestreo';
+            const opsMuestreoId = isEdit ? 'editOpOpsMuestreo' : 'inputOpsMuestreo';
+
+            const tipo = document.getElementById(tipoId).value;
+            const opsInput = document.getElementById(opsId);
+            const frecInput = document.getElementById(frecId);
+            const durMuestreoInput = document.getElementById(durMuestreoId);
+            const opsMuestreoInput = document.getElementById(opsMuestreoId);
+
+            if (tipo === 'INCUBACION') {
+                // Operadores principales = 0 (Pasiva)
+                opsInput.value = 0;
+                opsInput.setAttribute('readonly', 'readonly');
+                // Habilitar campos de Muestreo Cíclico
+                frecInput.removeAttribute('readonly');
+                durMuestreoInput.removeAttribute('readonly');
+                opsMuestreoInput.removeAttribute('readonly');
+                
+                // Sugerencias por defecto si están vacíos o en 0
+                if (durMuestreoInput.value == 0) durMuestreoInput.value = 0.5;
+                if (opsMuestreoInput.value == 0) opsMuestreoInput.value = 1;
+            } else {
+                // Tarea Activa: Habilitar operadores principales
+                if (opsInput.value == 0) opsInput.value = 1;
+                opsInput.removeAttribute('readonly');
+                // Deshabilitar campos de muestreo
+                frecInput.value = 0;
+                frecInput.setAttribute('readonly', 'readonly');
+                durMuestreoInput.value = 0;
+                durMuestreoInput.setAttribute('readonly', 'readonly');
+                opsMuestreoInput.value = 0;
+                opsMuestreoInput.setAttribute('readonly', 'readonly');
+            }
+        }
+
+        async function cargarDatosProcesos() {
+            try {
+                const [resProc, resMat] = await Promise.all([
+                    fetch('/api/procesos-maestros/'),
+                    fetch('/api/materiales/')
+                ]);
+                procesosGlobales = await resProc.json();
+                materialesGlobales = await resMat.json();
+
+                renderizarCatalogoMateriales();
+                renderizarListaProcesos();
+
+                if (procesoSeleccionado) {
+                    const actualizado = procesosGlobales.find(p => p.id === procesoSeleccionado.id);
+                    if (actualizado) {
+                        seleccionarProceso(actualizado.id);
+                    } else {
+                        procesoSeleccionado = null;
+                        document.getElementById('editorTareas').style.display = 'none';
+                        document.getElementById('emptyState').style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                console.error("Error sincronizando procesos:", err);
+            }
+        }
+
+        function renderizarCatalogoMateriales() {
+            const select = document.getElementById('selectMaterialesReq');
+            select.innerHTML = '';
+            materialesGlobales.forEach(m => {
+                select.innerHTML += `<option value="${m.id}">${m.nombre}</option>`;
+            });
+        }
+
+        function renderizarListaProcesos() {
+            const container = document.getElementById('listaProcesos');
+            container.innerHTML = '';
+            procesosGlobales.forEach(p => {
+                const card = document.createElement('div');
+                card.className = `process-item ${procesoSeleccionado && procesoSeleccionado.id === p.id ? 'active' : ''}`;
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'process-info';
+                infoDiv.style.flex = '1';
+                infoDiv.onclick = () => seleccionarProceso(p.id);
+                infoDiv.innerHTML = `
+                    <h4>${p.nombre}</h4>
+                    <span>${p.operaciones.length} etapas registradas</span>
+                `;
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-icon delete';
+                delBtn.title = 'Eliminar Proceso Maestro';
+                delBtn.innerHTML = '🗑️';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    eliminarProcesoAPI(p.id, p.nombre);
+                };
+
+                card.appendChild(infoDiv);
+                card.appendChild(delBtn);
+                container.appendChild(card);
+            });
+        }
+
+        async function seleccionarProceso(id) {
+            procesoSeleccionado = procesosGlobales.find(p => p.id === id);
+            renderizarListaProcesos();
+            if (!procesoSeleccionado) return;
+
+            document.getElementById('nombreProcesoSelec').innerText = procesoSeleccionado.nombre;
+            document.getElementById('editorTareas').style.display = 'flex';
+            document.getElementById('emptyState').style.display = 'none';
+
+            actualizarSelectPredecesoras(procesoSeleccionado);
+
+            try {
+                const resCpm = await fetch(`/api/procesos-maestros/${id}/cpm-analisis/`);
+                if (resCpm.ok) {
+                    const cpmData = await resCpm.json();
+                    renderizarCPMConHolguras(cpmData);
+                } else {
+                    calcularYRenderizarCPM(procesoSeleccionado);
+                }
+            } catch (e) {
+                console.error("Error obteniendo análisis CPM:", e);
+                calcularYRenderizarCPM(procesoSeleccionado);
+            }
+        }
+
+        function renderizarCPMConHolguras(cpmData) {
+            let tiempoTotal = cpmData.tiempo_total_proceso || 0;
+            let tareas = cpmData.operaciones_cpm || [];
+
+            let totalInc = 0;
+            let totalCriticas = 0;
+            let totalHorasHombre = 0;
+
+            tareas.forEach(t => {
+                let opOrig = procesoSeleccionado.operaciones.find(op => op.id === t.id) || {};
+                
+                if (t.tipo_operacion === 'INCUBACION') {
+                    totalInc += t.duracion_horas;
+                    // Sumar horas hombre derivadas de los muestreos de esta incubación
+                    if (opOrig.frecuencia_muestreo_horas > 0) {
+                        let cantidadMuestreos = Math.floor(t.duracion_horas / opOrig.frecuencia_muestreo_horas);
+                        totalHorasHombre += (cantidadMuestreos * (opOrig.duracion_muestreo_horas || 0) * (opOrig.ops_muestreo || 0));
+                    }
+                } else {
+                    totalHorasHombre += (t.duracion_horas * (t.personal_requerido || 1));
+                }
+                if (t.es_critica) totalCriticas += 1;
+            });
+
+            document.getElementById('totalTiempo').innerText = `${tiempoTotal}h`;
+            document.getElementById('totalIncubacion').innerText = `${totalInc}h`;
+            document.getElementById('totalHorasHombre').innerText = `${totalHorasHombre.toFixed(1)}h`;
+            document.getElementById('totalCriticas').innerText = `${totalCriticas} / ${tareas.length}`;
+
+            const tbody = document.getElementById('tablaCPMBody');
+            tbody.innerHTML = '';
+
+            tareas.forEach((t, index) => {
+                let opOriginal = procesoSeleccionado.operaciones.find(op => op.id === t.id) || {};
+                let frecMuestreo = opOriginal.frecuencia_muestreo_horas || 0;
+                let durMuestreo = opOriginal.duracion_muestreo_horas || 0;
+                let opsMuestreo = opOriginal.ops_muestreo || 0;
+                let tipoDepVal = opOriginal.tipo_dependencia || 'FS';
+                let desfaseVal = opOriginal.desfase_horas || 0;
+
+                const tr = document.createElement('tr');
+                if (t.tipo_operacion === 'INCUBACION') tr.className = 'incubation-row';
+                if (t.es_critica) tr.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
+
+                const leftPct = (Math.max(0, t.es) / (tiempoTotal || 1)) * 100;
+                const widthPct = (t.duracion_horas / (tiempoTotal || 1)) * 100;
+
+                let holguraBadge = t.es_critica 
+                    ? `<span class="tag-resource" style="border-color:var(--critical); color:var(--critical);">🚨 Crítica (0h)</span>` 
+                    : `<span class="tag-resource" style="border-color:var(--success); color:var(--success);">✅ Holgura: ${t.holgura}h</span>`;
+
+                let subTxtFrecuencia = (t.tipo_operacion === 'INCUBACION' && frecMuestreo > 0) 
+                    ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h, ${opsMuestreo}Op)</span>` 
+                    : '';
+
+                tr.innerHTML = `
+                    <td><strong>#${index + 1}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
+                    <td><strong>${t.nombre}</strong></td>
+                    <td>⏱️ ${t.duracion_horas}h ${subTxtFrecuencia}</td>
+                    <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
+                    <td>
+                        <span class="tag-resource">👥 Ops Fase: ${t.personal_requerido}</span>
+                        <span class="tag-resource">🏗️ ${t.tipo_equipo_requerido}</span>
+                    </td>
+                    <td>${t.es}h ➔ ${t.ef}h</td>
+                    <td>
+                        <span class="badge-cpm ${t.tipo_operacion === 'INCUBACION' ? 'badge-incubation' : 'badge-active'}">
+                            ${t.tipo_operacion === 'INCUBACION' ? '🧫 PASIVA' : '⚙️ ACTIVA'}
+                        </span>
+                    </td>
+                    <td class="gantt-preview-cell">
+                        <div class="gantt-track">
+                            <div class="gantt-bar ${t.es_critica ? 'critical' : 'regular'}" 
+                                 style="left: ${leftPct}%; width: ${widthPct}%; ${t.es_critica ? 'background-color: var(--critical);' : ''}"></div>
+                        </div>
+                    </td>
+                    <td style="text-align: center; white-space: nowrap;">
+                        <button class="btn-icon edit" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id}, '${t.identificador_paso}', '${t.nombre}', '${t.tipo_operacion}', ${t.duracion_horas}, ${frecMuestreo}, ${durMuestreo}, ${opsMuestreo}, '${tipoDepVal}', ${desfaseVal}, '${t.tipo_equipo_requerido}', ${t.personal_requerido})">✏️</button>
+                        <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${t.nombre}')">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function actualizarSelectPredecesoras(proc) {
+            const select = document.getElementById('selectPredecesora');
+            select.innerHTML = '<option value="">-- Ninguna --</option>';
+            proc.operaciones.forEach(op => {
+                select.innerHTML += `<option value="${op.id}">${op.identificador_paso}: ${op.nombre}</option>`;
+            });
+        }
+
+        function abrirModalNuevoProceso() {
+            document.getElementById('nuevoProcesoNombre').value = '';
+            document.getElementById('modalNuevoProceso').style.display = 'flex';
+        }
+
+        function cerrarModalNuevoProceso() {
+            document.getElementById('modalNuevoProceso').style.display = 'none';
+        }
+
+        async function crearProcesoMaestroAPI() {
+            const nombre = document.getElementById('nuevoProcesoNombre').value.trim();
+            if (!nombre) return alert("Ingresa un nombre.");
+
+            const res = await fetch('/api/procesos-maestros/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({ nombre, descripcion: "Generado desde interfaz web", activo: true })
+            });
+
+            if (res.ok) {
+                cerrarModalNuevoProceso();
+                cargarDatosProcesos();
+            } else {
+                alert("Error al crear proceso maestro.");
+            }
+        }
+
+        async function eliminarProcesoAPI(id, nombre) {
+            if (!confirm(`¿Estás seguro de eliminar el proceso maestro "${nombre}" y todas sus etapas?`)) return;
+
+            const res = await fetch(`/api/procesos-maestros/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') }
+            });
+
+            if (res.ok) {
+                cargarDatosProcesos();
+            } else {
+                alert("Error al eliminar el proceso maestro.");
+            }
+        }
+
+        async function crearOperacionAPI() {
+            if (!procesoSeleccionado) return;
+            const identificador_paso = document.getElementById('inputPasoId').value.trim();
+            const nombre = document.getElementById('inputTareaNombre').value.trim();
+            const tipo_operacion = document.getElementById('selectTipoTarea').value;
+            const duracion_horas = parseFloat(document.getElementById('inputTareaDuracion').value);
+            
+            // Nuevos valores para muestreo
+            const frecuencia_muestreo_horas = parseInt(document.getElementById('inputFrecMuestreo').value) || 0;
+            const duracion_muestreo_horas = parseFloat(document.getElementById('inputDuracionMuestreo').value) || 0.0;
+            const ops_muestreo = parseInt(document.getElementById('inputOpsMuestreo').value) || 0;
+            
+            const predecesora = document.getElementById('selectPredecesora').value || null;
+            const tipo_dependencia = document.getElementById('selectTipoDep').value;
+            const desfase_horas = parseFloat(document.getElementById('inputDesfase').value) || 0;
+            const tipo_equipo_requerido = document.getElementById('selectTipoEquipoReq').value;
+            
+            let personal_requerido = tipo_operacion === 'INCUBACION' ? 0 : (parseInt(document.getElementById('inputOpsReq').value) || 1);
+            const materiales_requeridos = Array.from(document.getElementById('selectMaterialesReq').selectedOptions).map(o => o.value);
+
+            if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
+
+            const res = await fetch('/api/operaciones-proceso/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({
+                    proceso: procesoSeleccionado.id,
+                    identificador_paso,
+                    nombre,
+                    tipo_operacion,
+                    duracion_horas,
+                    frecuencia_muestreo_horas,
+                    duracion_muestreo_horas,
+                    ops_muestreo,
+                    predecesora,
+                    tipo_dependencia,
+                    desfase_horas,
+                    personal_requerido,
+                    tipo_equipo_requerido,
+                    materiales_requeridos
+                })
+            });
+
+            if (res.ok) {
+                document.getElementById('inputPasoId').value = '';
+                document.getElementById('inputTareaNombre').value = '';
+                document.getElementById('inputTareaDuracion').value = '';
+                document.getElementById('inputFrecMuestreo').value = '0';
+                document.getElementById('inputDuracionMuestreo').value = '0';
+                document.getElementById('inputOpsMuestreo').value = '0';
+                document.getElementById('inputDesfase').value = '0';
+                cargarDatosProcesos();
+            } else {
+                alert("Error al registrar operación (revisa dependencias circulares).");
+            }
+        }
+
+        function abrirModalEditarOperacion(id, pasoId, nombre, tipo, duracion, frec, durM, opsM, tipoDep, desfase, equipo, ops) {
+            document.getElementById('editOpId').value = id;
+            document.getElementById('editOpPasoId').value = pasoId;
+            document.getElementById('editOpNombre').value = nombre;
+            document.getElementById('editOpTipo').value = tipo;
+            document.getElementById('editOpDuracion').value = duracion;
+            
+            document.getElementById('editOpFrecMuestreo').value = frec;
+            document.getElementById('editOpDuracionMuestreo').value = durM;
+            document.getElementById('editOpOpsMuestreo').value = opsM;
+
+            document.getElementById('editOpTipoDep').value = tipoDep;
+            document.getElementById('editOpDesfase').value = desfase;
+            document.getElementById('editOpEquipo').value = equipo;
+            document.getElementById('editOpOps').value = ops;
+
+            toggleIncubacionFields(true);
+            document.getElementById('modalEditarOperacion').style.display = 'flex';
+        }
+
+        function cerrarModalEditarOperacion() {
+            document.getElementById('modalEditarOperacion').style.display = 'none';
+        }
+
+        async function guardarEdicionOperacionAPI() {
+            const id = document.getElementById('editOpId').value;
+            const identificador_paso = document.getElementById('editOpPasoId').value.trim();
+            const nombre = document.getElementById('editOpNombre').value.trim();
+            const tipo_operacion = document.getElementById('editOpTipo').value;
+            const duracion_horas = parseFloat(document.getElementById('editOpDuracion').value);
+            
+            const frecuencia_muestreo_horas = parseInt(document.getElementById('editOpFrecMuestreo').value) || 0;
+            const duracion_muestreo_horas = parseFloat(document.getElementById('editOpDuracionMuestreo').value) || 0.0;
+            const ops_muestreo = parseInt(document.getElementById('editOpOpsMuestreo').value) || 0;
+
+            const tipo_dependencia = document.getElementById('editOpTipoDep').value;
+            const desfase_horas = parseFloat(document.getElementById('editOpDesfase').value) || 0;
+            const tipo_equipo_requerido = document.getElementById('editOpEquipo').value;
+            let personal_requerido = tipo_operacion === 'INCUBACION' ? 0 : (parseInt(document.getElementById('editOpOps').value) || 1);
+
+            if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
+
+            const res = await fetch(`/api/operaciones-proceso/${id}/`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({
+                    identificador_paso,
+                    nombre,
+                    tipo_operacion,
+                    duracion_horas,
+                    frecuencia_muestreo_horas,
+                    duracion_muestreo_horas,
+                    ops_muestreo,
+                    tipo_dependencia,
+                    desfase_horas,
+                    tipo_equipo_requerido,
+                    personal_requerido
+                })
+            });
+
+            if (res.ok) {
+                cerrarModalEditarOperacion();
+                cargarDatosProcesos();
+            } else {
+                alert("Error al actualizar la operación (revisa dependencias circulares).");
+            }
+        }
+
+        async function eliminarOperacionAPI(id, nombre) {
+            if (!confirm(`¿Estás seguro de eliminar la operación "${nombre}"?`)) return;
+
+            const res = await fetch(`/api/operaciones-proceso/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') }
+            });
+
+            if (res.ok) {
+                cargarDatosProcesos();
+            } else {
+                alert("Error al eliminar la operación.");
+            }
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        cargarDatosProcesos();
+    </script>
+</body>
+</html>
