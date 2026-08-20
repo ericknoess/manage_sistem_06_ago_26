@@ -91,16 +91,31 @@ class Cuadrilla(models.Model):
         ordering = ['identificador']
 
 
+class RolOperador(models.Model):
+    """
+    NUEVO CATÁLOGO: Define los niveles de experiencia, roles o certificaciones 
+    (Ej: Junior, Senior, Especialista, Supervisor). Reemplaza al hardcode anterior.
+    """
+    nombre = models.CharField(max_length=100, unique=True, verbose_name="Nombre del Rol / Nivel")
+    descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción de Competencias")
+    activo = models.BooleanField(default=True, verbose_name="Rol Activo", help_text="Baja lógica")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.nombre
+
+    class Meta:
+        verbose_name = "Rol Operacional"
+        verbose_name_plural = "Roles Operacionales"
+        ordering = ['nombre']
+
+
 class Operador(models.Model):
     """
-    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta.
+    Representa a un colaborador asignado a una cuadrilla específica dentro de la planta,
+    ahora vinculado dinámicamente a un catálogo de Roles/Competencias.
     """
-    EXPERTISE_CHOICES = [
-        ('JUNIOR', 'Operador Junior'),
-        ('SENIOR', 'Operador Senior'),
-        ('ESPECIALISTA', 'Especialista Upstream'),
-    ]
-
     cuadrilla = models.ForeignKey(
         Cuadrilla, 
         on_delete=models.CASCADE, 
@@ -110,13 +125,24 @@ class Operador(models.Model):
     nombre = models.CharField(max_length=150, verbose_name="Nombre del Operador")
     codigo_empleado = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="Código de Empleado")
     foto = models.ImageField(upload_to='operadores/fotos/', blank=True, null=True, verbose_name="Fotografía del Colaborador")
-    nivel_expertiz = models.CharField(max_length=30, choices=EXPERTISE_CHOICES, default='JUNIOR', verbose_name="Nivel de Expertiz")
+    
+    # NUEVO CAMPO: Relación dinámica con el catálogo de Roles
+    rol = models.ForeignKey(
+        RolOperador,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='operadores',
+        verbose_name="Rol / Nivel de Expertiz"
+    )
+    
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
 
     def __str__(self):
-        return f"{self.codigo_empleado or 'S/C'} | {self.nombre} ({self.cuadrilla.identificador if self.cuadrilla else 'Sin Cuadrilla'})"
+        rol_nombre = self.rol.nombre if self.rol else "Sin Rol"
+        return f"{self.codigo_empleado or 'S/C'} | {self.nombre} ({rol_nombre})"
 
     class Meta:
         verbose_name = "Operador"

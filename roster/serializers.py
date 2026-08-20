@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
-from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
+from .models import TipoTurno, Cuadrilla, RolOperador, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
 
 
 class TipoTurnoSerializer(serializers.ModelSerializer):
@@ -140,16 +140,28 @@ class TurnoDiaSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class RolOperadorSerializer(serializers.ModelSerializer):
+    """
+    Serializer para exponer el catálogo de competencias operacionales.
+    """
+    class Meta:
+        model = RolOperador
+        fields = ['id', 'nombre', 'descripcion', 'activo']
+
+
 class OperadorSerializer(serializers.ModelSerializer):
     """
-    Serializer para Operadores. Integra metadatos fotográficos, nivel de expertiz,
+    Serializer para Operadores. Integra metadatos fotográficos, el rol/expertiz dinámico,
     código de empleado y filtrado dinámico de turnos por mes/año según query params.
     """
     turnos = serializers.SerializerMethodField()
     cuadrilla_nombre = serializers.CharField(source='cuadrilla.nombre', read_only=True)
     cuadrilla_identificador = serializers.CharField(source='cuadrilla.identificador', read_only=True)
-    nivel_expertiz_display = serializers.CharField(source='get_nivel_expertiz_display', read_only=True)
     foto = serializers.ImageField(required=False, allow_null=True)
+    
+    # CAMPOS DE ROL SEGUROS PARA EL FRONTEND (Soluciona el problema de undefined)
+    rol_nombre = serializers.SerializerMethodField()
+    rol_detalle = RolOperadorSerializer(source='rol', read_only=True)
 
     class Meta:
         model = Operador
@@ -161,11 +173,18 @@ class OperadorSerializer(serializers.ModelSerializer):
             'cuadrilla_nombre',
             'cuadrilla_identificador',
             'foto',
-            'nivel_expertiz',
-            'nivel_expertiz_display',
+            'rol',               # Permite POST/PATCH enviando el ID del rol
+            'rol_nombre',        # Para display rápido en frontend sin undefined
+            'rol_detalle',       # Para obtener todos los datos del rol asociado
             'activo',
             'turnos'
         ]
+
+    def get_rol_nombre(self, obj):
+        """Retorna de manera segura el nombre del rol o 'Sin Rol' si es nulo."""
+        if obj.rol:
+            return obj.rol.nombre
+        return 'Sin Rol'
 
     def get_turnos(self, obj):
         request = self.context.get('request')

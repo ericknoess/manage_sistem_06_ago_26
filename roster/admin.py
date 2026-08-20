@@ -1,7 +1,10 @@
 # roster/admin.py
-from django.contrib import admin
-from .models import TipoTurno, Cuadrilla, Operador, TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
 
+from django.contrib import admin
+from .models import (
+    TipoTurno, Cuadrilla, RolOperador, Operador, 
+    TurnoDia, SecuenciaRol, SecuenciaRolDetalle, IncidenciaTurno
+)
 
 @admin.register(TipoTurno)
 class TipoTurnoAdmin(admin.ModelAdmin):
@@ -50,14 +53,27 @@ class CuadrillaAdmin(admin.ModelAdmin):
     list_editable = ('activa',)
 
 
+@admin.register(RolOperador)
+class RolOperadorAdmin(admin.ModelAdmin):
+    """
+    NUEVO: Configuración del panel de administración para el catálogo maestro 
+    de Roles y Competencias operacionales (ej. Junior, Senior, Especialista).
+    """
+    list_display = ('id', 'nombre', 'descripcion', 'activo', 'creado_en')
+    list_filter = ('activo', 'creado_en')
+    search_fields = ('nombre', 'descripcion')
+    list_editable = ('activo',)
+
+
 @admin.register(Operador)
 class OperadorAdmin(admin.ModelAdmin):
     """
     Configuración del panel de administración para el modelo Operador.
-    Incluye filtros por cuadrilla y estado activo para auditoría GxP.
+    Incluye filtros por cuadrilla, rol dinámico y estado activo para auditoría GxP.
     """
-    list_display = ('id', 'codigo_empleado', 'nombre', 'cuadrilla', 'nivel_expertiz', 'activo')
-    list_filter = ('cuadrilla', 'activo', 'nivel_expertiz')
+    # CORRECCIÓN: Se reemplaza 'nivel_expertiz' por 'rol'
+    list_display = ('id', 'codigo_empleado', 'nombre', 'cuadrilla', 'rol', 'activo')
+    list_filter = ('cuadrilla', 'activo', 'rol')
     search_fields = ('nombre', 'codigo_empleado')
     list_editable = ('activo',)
 

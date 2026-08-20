@@ -2,6 +2,7 @@
 
 from django.db import models
 from actividades.models import Equipo, MaterialInsumo
+from roster.models import RolOperador  # <-- NUEVA INTEGRACIÓN CROSS-DOMAIN
 
 class ProcesoMaestro(models.Model):
     """
@@ -47,7 +48,7 @@ class OperacionProceso(models.Model):
     # Parámetros para operaciones de incubación / pasivas (Generador de Muestreos)
     frecuencia_muestreo_horas = models.PositiveIntegerField(default=0, help_text="Frecuencia de muestreo cíclico en horas (0 si no aplica)")
     duracion_muestreo_horas = models.FloatField(default=0.0, help_text="Duración en horas de cada evento de muestreo")
-    ops_muestreo = models.PositiveIntegerField(default=1, help_text="Número de operadores requeridos para cada muestreo cíclico")
+    ops_muestreo = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos para cada muestreo")
     
     # Dependencia CPM Avanzada con Desfase
     predecesora = models.ForeignKey(
@@ -62,7 +63,7 @@ class OperacionProceso(models.Model):
     desfase_horas = models.FloatField(default=0, help_text="Holgura o anticipación en horas respecto a la predecesora (Ej: -24 para 1 día antes)")
 
     # Requerimientos Técnicos y de Recursos (GxP)
-    personal_requerido = models.PositiveIntegerField(default=1, help_text="Número de operadores requeridos para la actividad")
+    personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos (Se migrará a requerimientos específicos por rol)")
     tipo_equipo_requerido = models.CharField(
         max_length=100, 
         default='N/A', 
@@ -80,3 +81,37 @@ class OperacionProceso(models.Model):
 
     def __str__(self):
         return f"{self.proceso.nombre} | {self.identificador_paso}: {self.nombre} ({self.duracion_horas}h)"
+
+
+class RequerimientoPersonalFase(models.Model):
+    """
+    NUEVO MODELO (Skill-based demand): 
+    Permite definir qué cantidad de operadores de un nivel específico (Rol) 
+    se necesitan para una operación concreta.
+    Ej: Fase 'Inoculación' requiere 2 x 'Senior' y 1 x 'Junior'.
+    """
+    operacion = models.ForeignKey(
+        OperacionProceso,
+        on_delete=models.CASCADE,
+        related_name='requerimientos_rol',
+        verbose_name="Operación / Fase CPM"
+    )
+    rol = models.ForeignKey(
+        RolOperador,
+        on_delete=models.RESTRICT,  # Protegemos el catálogo: no se puede borrar un rol si se usa aquí
+        related_name='requerido_en_operaciones',
+        verbose_name="Rol / Competencia Requerida"
+    )
+    cantidad = models.PositiveIntegerField(
+        default=1,
+        help_text="Cantidad de operadores con este rol que deben ser asignados"
+    )
+
+    class Meta:
+        verbose_name = "Requerimiento de Personal"
+        verbose_name_plural = "Requerimientos de Personal"
+        # Regla de Integridad: No duplicar el mismo rol en una misma operación
+        unique_together = ('operacion', 'rol') 
+
+    def __str__(self):
+        return f"{self.cantidad}x {self.rol.nombre} para [{self.operacion.identificador_paso}]"

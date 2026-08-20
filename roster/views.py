@@ -12,10 +12,19 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import TipoTurno, Cuadrilla, Operador, SecuenciaRol, TurnoDia, IncidenciaTurno
+from .models import (
+    TipoTurno, 
+    Cuadrilla, 
+    RolOperador,  # <-- Importación del modelo de Roles
+    Operador, 
+    SecuenciaRol, 
+    TurnoDia, 
+    IncidenciaTurno
+)
 from .serializers import (
     TipoTurnoSerializer,
     CuadrillaSerializer,
+    RolOperadorSerializer,  # <-- Importación del Serializer de Roles
     MoverColaboradoresSerializer,
     OperadorSerializer,
     SecuenciaRolSerializer,
@@ -28,6 +37,24 @@ from .services import aplicar_carga_masiva, expandir_secuencia
 
 class RosterDashboardView(TemplateView):
     template_name = 'roster/index.html'
+
+
+class RolOperadorViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para la gestión y consulta del catálogo maestro de Roles y Competencias (Skills).
+    Permite listar roles activos para el planificador CPM y administración de personal.
+    """
+    queryset = RolOperador.objects.all().order_by('nombre')
+    serializer_class = RolOperadorSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        activo_param = self.request.query_params.get('activo')
+        if activo_param is not None:
+            is_active = activo_param.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(activo=is_active)
+        return queryset
 
 
 class TipoTurnoViewSet(viewsets.ModelViewSet):
@@ -73,7 +100,6 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
             try:
                 m = int(month)
                 y = int(year)
-                # OPTIMIZACIÓN GxP: Se agregó 'incidencia' al select_related para evitar N+1 queries.
                 turnos_prefetch = Prefetch(
                     'operadores__turnos',
                     queryset=TurnoDia.objects.filter(fecha__year=y, fecha__month=m).select_related('tipo_turno', 'incidencia'),
@@ -82,7 +108,6 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
         else:
-            # OPTIMIZACIÓN GxP: Se agregó 'operadores__turnos__incidencia' al prefetch fallback.
             queryset = queryset.prefetch_related('operadores__turnos__tipo_turno', 'operadores__turnos__incidencia', 'operadores')
         return queryset
 
@@ -138,8 +163,6 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
 
             operador = get_object_or_404(Operador, id=operador_id)
 
-            # Si el código de turno está vacío, limpiamos la asignación del día.
-            # Nota: Por el 'on_delete=models.CASCADE', esto eliminará automáticamente la incidencia si existía.
             if not codigo_turno or str(codigo_turno).strip() == '':
                 TurnoDia.objects.filter(operador=operador, fecha=fecha).delete()
                 return Response(
@@ -147,7 +170,6 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_200_OK,
                 )
 
-            # Resolver o registrar dinámicamente el TipoTurno en el catálogo maestro
             codigo_upper = str(codigo_turno).upper().strip()
             tipo_turno, _ = TipoTurno.objects.get_or_create(
                 codigo=codigo_upper,
@@ -336,7 +358,6 @@ class IncidenciaTurnoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Permite filtrar desde el frontend pasando la ID del turno: /api/incidencias/?turno_dia=5
         turno_id = self.request.query_params.get('turno_dia')
         if turno_id:
             queryset = queryset.filter(turno_dia_id=turno_id)

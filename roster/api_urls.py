@@ -1,10 +1,11 @@
-# api_urls.py
+# api_urls.py (o roster/api_urls.py)
 
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     TipoTurnoViewSet,
     CuadrillaViewSet,
+    RolOperadorViewSet,  # <-- Importamos el ViewSet
     OperadorViewSet,
     SecuenciaRolViewSet,
     TurnoDiaViewSet,
@@ -16,10 +17,10 @@ from .views import (
 router = DefaultRouter()
 router.register(r'tipos-turno', TipoTurnoViewSet, basename='tipoturno')
 router.register(r'cuadrillas', CuadrillaViewSet, basename='cuadrilla')
+router.register(r'roles-operador', RolOperadorViewSet, basename='roloperador')  # <-- REGISTRO DEL ENDPOINT
 router.register(r'operadores', OperadorViewSet, basename='operador')
 router.register(r'secuencias', SecuenciaRolViewSet, basename='secuencia')
 router.register(r'turnos', TurnoDiaViewSet, basename='turno')
-# Registrar el nuevo endpoint de incidencias operativas
 router.register(r'incidencias', IncidenciaTurnoViewSet, basename='incidencia')
 router.register(r'users', UserRegistrationViewSet, basename='user')
 

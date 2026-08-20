@@ -48,6 +48,9 @@
                     <button id="btnOpenCargaMasivaModal" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>⚡ Carga Masiva</span>
                     </button>
+                    <a href="/procesos/" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1" style="text-decoration: none;">
+                        <span>🧪 Ir a Procesos (CPM)</span>
+                    </a>
                 </div>
 
                 <!-- Navegador de Meses -->
@@ -120,7 +123,7 @@
         </div>
     </div>
 
-    <!-- MODAL: NUEVO OPERADOR -->
+    <!-- MODAL: NUEVO OPERADOR (Actualizado con Catálogo de Roles Dinámico) -->
     <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div id="modalOperadorContent" class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador GxP</h3>
@@ -140,11 +143,9 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-mono text-slate-400 mb-1">Nivel de Expertiz</label>
-                    <select id="operadorExpertiz" name="nivel_expertiz" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
-                        <option value="JUNIOR">Operador Junior</option>
-                        <option value="SENIOR">Operador Senior</option>
-                        <option value="ESPECIALISTA">Especialista Upstream</option>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">Rol / Competencia Operacional (Skill)</label>
+                    <select id="operadorRolSelect" name="rol" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
+                        <!-- Se llena dinámicamente desde /api/roles-operador/ -->
                     </select>
                 </div>
                 <div>
@@ -317,7 +318,7 @@
         </div>
     </div>
 
-    <!-- MODAL: INCIDENCIA OPERATIVA (NUEVO) -->
+    <!-- MODAL: INCIDENCIA OPERATIVA -->
     <div id="modalIncidencia" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
@@ -329,10 +330,8 @@
             </div>
 
             <form id="formIncidencia" class="space-y-4">
-                <!-- Campos ocultos de vinculación a Base de Datos -->
                 <input type="hidden" id="incidenciaTurnoId" name="turno_dia_id">
                 
-                <!-- Inputs Opcionales de Tiempo -->
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-[11px] font-mono text-slate-400 mb-1">Minutos de Retardo</label>
@@ -344,16 +343,13 @@
                     </div>
                 </div>
 
-                <!-- Input Opcional de Notas -->
                 <div>
                     <label class="block text-[11px] font-mono text-slate-400 mb-1">Notas u Observaciones</label>
                     <textarea id="incidenciaNotas" name="notas" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:border-amber-500 focus:outline-none resize-none placeholder:text-slate-600" placeholder="Justificación o anotación general sobre el evento..."></textarea>
                 </div>
 
-                <!-- Mensaje de error/éxito -->
                 <div id="incidenciaFeedback" class="p-2 rounded text-xs text-center hidden"></div>
 
-                <!-- Botonera -->
                 <div class="flex justify-between items-center pt-4 border-t border-slate-800">
                     <button type="button" id="btnDeleteIncidencia" class="px-3 py-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 text-[11px] font-bold rounded border border-red-900 hidden transition-colors">Eliminar Registro</button>
                     <div class="flex justify-end gap-2 w-full">
@@ -367,5 +363,31 @@
 
     <!-- SCRIPTS DE LA APLICACIÓN -->
     <script src="{% static 'roster/js/roster.js' %}?v={% now 'U' %}"></script>
+    <script>
+        // Script complementario para poblar el selector de roles operacionales en el modal de operador
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnOpenOperador = document.getElementById('btnOpenOperadorModal');
+            if (btnOpenOperador) {
+                const originalClick = btnOpenOperador.onclick;
+                btnOpenOperador.addEventListener('click', async () => {
+                    try {
+                        const res = await fetch('/api/roles-operador/?_ts=' + new Date().getTime(), { cache: 'no-store' });
+                        if (res.ok) {
+                            const roles = await res.json();
+                            const selectRol = document.getElementById('operadorRolSelect');
+                            if (selectRol) {
+                                selectRol.innerHTML = '<option value="">-- Seleccione Rol / Competencia --</option>';
+                                roles.filter(r => r.activo).forEach(r => {
+                                    selectRol.innerHTML += `<option value="${r.id}">${r.nombre}</option>`;
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Error al cargar catálogo de roles para el operador:", err);
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

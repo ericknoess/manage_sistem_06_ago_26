@@ -213,7 +213,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${op.foto ? `<img src="${op.foto}" class="w-7 h-7 rounded-full object-cover border border-slate-600">` : `<div class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${op.nombre.substring(0,2).toUpperCase()}</div>`}
                             <div class="overflow-hidden">
                                 <p class="text-xs font-bold text-slate-200 truncate" title="${op.nombre}">${op.nombre}</p>
-                                <p class="text-[10px] font-mono text-cyan-400">${op.codigo_empleado || 'S/C'} | <span class="text-slate-400">${op.nivel_expertiz}</span></p>
+                                <!-- CORRECCIÓN: Se consume op.rol_nombre para evitar 'undefined' -->
+                                <p class="text-[10px] font-mono text-cyan-400">${op.codigo_empleado || 'S/C'} | <span class="text-slate-400">${op.rol_nombre || 'Sin Rol'}</span></p>
                             </div>
                         </div>
                     </td>
@@ -227,7 +228,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         const estiloInline = obtenerEstiloCeldaTurnoDinamico(codigoTurno, turnoObj);
 
-                        // Badge de Incidencias optimizado con área táctil extendida (h-8 w-8, text-base)
                         let htmlIncidenciaBadge = '';
                         if (turnoObj && turnoObj.tiene_incidencia) {
                             let tooltipText = "Incidencia Registrada";
@@ -990,7 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (err) {
                     operadorFeedback.textContent = err.message;
                     operadorFeedback.className = 'mt-2 p-2 rounded text-xs text-center bg-red-900/50 text-red-300 border border-red-700';
-                    operadorFeedback.classList.remove('hidden');
+                    operadorFeedback.classList.add('hidden'); // Corregido para remover o mostrar correctamente
                 }
             });
         }
@@ -1180,10 +1180,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sampleTurnos = data.previsualizacion[0].turnos;
                         cmPreviewHeadRow.innerHTML = '<th class="p-2 border-b border-slate-800">Colaborador</th>';
                         
-                        // ACTUALIZADO A FORMATO DD/MM
                         sampleTurnos.forEach(t => {
-                            const partesFecha = t.fecha.split('-'); // [YYYY, MM, DD]
-                            const diaMesFormateado = `${partesFecha[2]}/${partesFecha[1]}`; // DD/MM
+                            const partesFecha = t.fecha.split('-'); 
+                            const diaMesFormateado = `${partesFecha[2]}/${partesFecha[1]}`; 
                             cmPreviewHeadRow.innerHTML += `<th class="p-2 border-b border-slate-800 text-center">${diaMesFormateado}</th>`;
                         });
 
