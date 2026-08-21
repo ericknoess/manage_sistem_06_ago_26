@@ -2,7 +2,11 @@
 
 from django.db import models
 from actividades.models import Equipo, MaterialInsumo
-from roster.models import RolOperador  # <-- NUEVA INTEGRACIÓN CROSS-DOMAIN
+from roster.models import RolOperador, Operador
+
+# ==============================================================================
+# 1. MODELOS MAESTROS (PLANTILLAS Y DISEÑO DEL BIOPROCESO)
+# ==============================================================================
 
 class ProcesoMaestro(models.Model):
     """
@@ -85,10 +89,8 @@ class OperacionProceso(models.Model):
 
 class RequerimientoPersonalFase(models.Model):
     """
-    NUEVO MODELO (Skill-based demand): 
     Permite definir qué cantidad de operadores de un nivel específico (Rol) 
     se necesitan para una operación concreta.
-    Ej: Fase 'Inoculación' requiere 2 x 'Senior' y 1 x 'Junior'.
     """
     operacion = models.ForeignKey(
         OperacionProceso,
@@ -98,7 +100,7 @@ class RequerimientoPersonalFase(models.Model):
     )
     rol = models.ForeignKey(
         RolOperador,
-        on_delete=models.RESTRICT,  # Protegemos el catálogo: no se puede borrar un rol si se usa aquí
+        on_delete=models.RESTRICT,
         related_name='requerido_en_operaciones',
         verbose_name="Rol / Competencia Requerida"
     )
@@ -110,8 +112,98 @@ class RequerimientoPersonalFase(models.Model):
     class Meta:
         verbose_name = "Requerimiento de Personal"
         verbose_name_plural = "Requerimientos de Personal"
-        # Regla de Integridad: No duplicar el mismo rol en una misma operación
         unique_together = ('operacion', 'rol') 
 
     def __str__(self):
         return f"{self.cantidad}x {self.rol.nombre} para [{self.operacion.identificador_paso}]"
+
+
+# ==============================================================================
+# 2. MODELOS TRANSACCIONALES (EJECUCIÓN DE LOTE Y EBR - ELECTRONIC BATCH RECORD)
+# ==============================================================================
+
+class LoteProduccion(models.Model):
+    """
+    Instancia física a manufacturar basada en una receta maestra.
+    """
+    ESTADO_LOTE_CHOICES = [
+        ('PLANEADO', 'Planeado'),
+        ('EN_PROGRESO', 'En Progreso'),
+        ('COMPLETADO', 'Completado'),
+        ('DESVIACION', 'Desviación / Detenido'),
+    ]
+
+    identificador_lote = models.CharField(max_length=100, unique=True, help_text="ID oficial del Lote (Ej: LOTE-EPO-2026X)")
+    proceso_maestro = models.ForeignKey(
+        ProcesoMaestro, 
+        on_delete=models.RESTRICT,
+        related_name='lotes_instanciados'
+    )
+    estado = models.CharField(max_length=20, choices=ESTADO_LOTE_CHOICES, default='PLANEADO')
+    
+    # MODIFICACIÓN: Cambiado de DateField a DateTimeField para incluir hora exacta
+    fecha_inicio_planeada = models.DateTimeField(help_text="Fecha y hora estimada o programada de inicio")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Lote de Producción"
+        verbose_name_plural = "Lotes de Producción"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.identificador_lote} [{self.estado}] - {self.proceso_maestro.nombre}"
+
+
+class FaseLote(models.Model):
+    """
+    Instancia individual de una OperacionProceso correspondiente a un Lote específico.
+    Registra los tiempos reales de ejecución.
+    """
+    ESTADO_FASE_CHOICES = [
+        ('PENDIENTE', 'Pendiente'),
+        ('EN_PROGRESO', 'En Progreso'),
+        ('COMPLETADA', 'Completada'),
+        ('OMITIDA', 'Omitida / Cancelada'),
+    ]
+
+    lote = models.ForeignKey(LoteProduccion, on_delete=models.CASCADE, related_name='fases')
+    operacion_maestra = models.ForeignKey(OperacionProceso, on_delete=models.RESTRICT, related_name='fases_ejecutadas')
+    estado = models.CharField(max_length=20, choices=ESTADO_FASE_CHOICES, default='PENDIENTE')
+    
+    fecha_inicio_real = models.DateTimeField(null=True, blank=True, help_text="Timestamp real de inicio de la tarea")
+    fecha_fin_real = models.DateTimeField(null=True, blank=True, help_text="Timestamp real de fin de la tarea")
+
+    class Meta:
+        verbose_name = "Fase de Lote"
+        verbose_name_plural = "Fases de Lote"
+        unique_together = ('lote', 'operacion_maestra')
+        ordering = ['operacion_maestra__identificador_paso']
+
+    def __str__(self):
+        return f"Lote: {self.lote.identificador_lote} | Fase: {self.operacion_maestra.nombre} ({self.estado})"
+
+
+class AsignacionFaseOperador(models.Model):
+    """
+    Registro GxP inmutable que vincula a un operador real del Roster con una fase de un lote,
+    especificando qué competencia/rol ejerció durante dicha tarea.
+    """
+    fase_lote = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='operadores_asignados')
+    operador = models.ForeignKey(Operador, on_delete=models.RESTRICT, related_name='fases_lote_ejecutadas')
+    rol_ejercido = models.ForeignKey(
+        RolOperador, 
+        on_delete=models.RESTRICT, 
+        help_text="La competencia bajo la cual se asignó al operador a esta tarea"
+    )
+    horas_invertidas = models.FloatField(default=0.0, help_text="Horas reales registradas por el operador en esta fase")
+    asignado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Asignación de Operador a Fase"
+        verbose_name_plural = "Asignaciones de Operadores a Fases"
+        unique_together = ('fase_lote', 'operador')
+
+    def __str__(self):
+        return f"{self.operador.nombre} -> {self.fase_lote.operacion_maestra.nombre} [{self.rol_ejercido.nombre}]"

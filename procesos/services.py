@@ -1,5 +1,11 @@
 # procesos/services.py
 
+from datetime import date
+from django.db.models import Count
+from roster.models import TurnoDia, Operador
+from .models import OperacionProceso, RequerimientoPersonalFase
+
+
 class CPMCalculatorService:
     """
     Servicio de dominio para calcular la Ruta Crítica (CPM), tiempos tempranos (ES, EF),
@@ -7,17 +13,15 @@ class CPMCalculatorService:
     """
 
     def __init__(self, operaciones):
-        # operaciones: queryset o lista de objetos OperacionProceso ordenados o recuperados del proceso
         self.operaciones = list(operaciones)
 
     def calcular_cpm(self):
         if not self.operaciones:
             return {
-                "tiempo_total": 0,
-                "detalles": []
+                "tiempo_total_proceso": 0.0,
+                "operaciones_cpm": []
             }
 
-        # Diccionarios de almacenamiento temporal para el grafo
         tiempos = {}
         
         # 1. FORWARD PASS (Paso hacia adelante: cálculo de ES y EF)
@@ -27,7 +31,6 @@ class CPMCalculatorService:
             desfase = op.desfase_horas or 0.0
             duracion = op.duracion_horas or 0.0
             
-            # Buscar predecesora si existe
             pred_id = op.predecesora_id
             if pred_id and pred_id in tiempos:
                 pred_info = tiempos[pred_id]
@@ -48,22 +51,15 @@ class CPMCalculatorService:
                 'op': op
             }
 
-        # Tiempo total del proyecto (el mayor EF de todas las operaciones)
         tiempo_total_proyecto = max([info['ef'] for info in tiempos.values()], default=0.0)
 
         # 2. BACKWARD PASS (Paso hacia atrás: cálculo de LS y LF)
-        # Ordenamos inversamente para evaluar desde el final hacia el inicio
-        ops_inverso = sorted(self.operaciones, key=lambda x: tiempos[x.id]['ef'], reverse=True)
-        
-        # Inicializamos LF tardíos con el tiempo total del proyecto
         for op in self.operaciones:
             tiempos[op.id]['lf'] = tiempo_total_proyecto
             tiempos[op.id]['ls'] = tiempo_total_proyecto - tiempos[op.id]['duracion']
 
-        # Recálculo de backward pass considerando las sucesoras
         for op in reversed(self.operaciones):
             current_info = tiempos[op.id]
-            # Buscar qué operaciones tienen a 'op' como predecesora
             sucesora_ops = [o for o in self.operaciones if o.predecesora_id == op.id]
             
             if sucesora_ops:
@@ -71,11 +67,10 @@ class CPMCalculatorService:
                 for suc in sucesora_ops:
                     suc_info = tiempos[suc.id]
                     tipo_dep = suc.tipo_dependencia or 'FS'
-                    # Ajuste inverso según la dependencia
                     if tipo_dep == 'SS':
                         val = suc_info['ls'] - suc.desfase_horas
                     else:
-                        val = suc_info['ls'] - suc.desfase_horas # Simplificación de desfase en backward
+                        val = suc_info['ls'] - suc.desfase_horas
                     if val < min_ls_sucesora:
                         min_ls_sucesora = val
                 current_info['lf'] = min(current_info['lf'], min_ls_sucesora)
@@ -90,9 +85,7 @@ class CPMCalculatorService:
             ls = info['ls']
             lf = info['lf']
             
-            # Holgura Total (Total Float)
             holgura = round(ls - es, 2)
-            # Si la holgura es 0 (o muy cercana a 0 por redondeo), es Ruta Crítica
             es_critica = abs(holgura) <= 0.01
 
             resultado_detalles.append({
@@ -115,3 +108,75 @@ class CPMCalculatorService:
             "tiempo_total_proceso": round(tiempo_total_proyecto, 2),
             "operaciones_cpm": resultado_detalles
         }
+
+
+def validar_disponibilidad_personal_fase(operacion_id: int, fecha_evaluacion: date):
+    """
+    Motor de Validación por Competencias (Skill-Matching Engine):
+    Compara los requerimientos de personal por rol de una operación CPM 
+    frente a la disponibilidad real de operadores en el Roster para una fecha dada.
+    
+    Reglas GxP:
+    - Se ignoran operadores inactivos.
+    - Se ignoran turnos de descanso (es_descanso=True).
+    - Se evalúa si la cantidad de personal disponible por rol cubre la demanda exacta.
+    """
+    try:
+        operacion = OperacionProceso.objects.prefetch_related('requerimientos_rol__rol').get(id=operacion_id)
+    except OperacionProceso.DoesNotExist:
+        return {
+            "valido": False,
+            "error": "La operación especificada no existe."
+        }
+
+    requerimientos = operacion.requerimientos_rol.all()
+    
+    if not requerimientos.exists():
+        return {
+            "valido": True,
+            "mensaje": "La fase no tiene requerimientos específicos de roles configurados."
+        }
+
+    turnos_activos = TurnoDia.objects.filter(
+        fecha=fecha_evaluacion,
+        operador__activo=True,
+        tipo_turno__activo=True,
+        tipo_turno__es_descanso=False
+    ).select_related('operador__rol', 'tipo_turno')
+
+    disponibilidad_por_rol = {}
+    for turno in turnos_activos:
+        operador = turno.operador
+        if operador and operador.rol:
+            rol_id = operador.rol.id
+            disponibilidad_por_rol[rol_id] = disponibilidad_por_rol.get(rol_id, 0) + 1
+
+    detalles_cumplimiento = []
+    cumple_total = True
+
+    for req in requerimientos:
+        rol_requerido = req.rol
+        cantidad_demandada = req.cantidad
+        cantidad_disponible = disponibilidad_por_rol.get(rol_requerido.id, 0)
+
+        satisfecho = cantidad_disponible >= cantidad_demandada
+        if not satisfecho:
+            cumple_total = False
+
+        detalles_cumplimiento.append({
+            "rol_id": rol_requerido.id,
+            "rol_nombre": rol_requerido.nombre,
+            "cantidad_demandada": cantidad_demandada,
+            "cantidad_disponible": cantidad_disponible,
+            "brecha": max(0, cantidad_demandada - cantidad_disponible),
+            "cumplido": satisfecho
+        })
+
+    return {
+        "valido": True,
+        "operacion_id": operacion.id,
+        "operacion_nombre": operacion.nombre,
+        "fecha": fecha_evaluacion.strftime('%Y-%m-%d'),
+        "cumple_requerimientos_global": cumple_total,
+        "detalles": detalles_cumplimiento
+    }

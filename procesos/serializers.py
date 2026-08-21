@@ -2,10 +2,17 @@
 
 from rest_framework import serializers
 from django.db import transaction
-from .models import ProcesoMaestro, OperacionProceso, RequerimientoPersonalFase
+from .models import (
+    ProcesoMaestro, OperacionProceso, RequerimientoPersonalFase,
+    LoteProduccion, FaseLote, AsignacionFaseOperador
+)
 from actividades.serializers import MaterialInsumoSerializer
 from roster.models import RolOperador
 
+
+# ==============================================================================
+# 1. SERIALIZADORES MAESTROS (PLANTILLAS Y DISEÑO)
+# ==============================================================================
 
 class RequerimientoPersonalFaseSerializer(serializers.ModelSerializer):
     """
@@ -143,6 +150,78 @@ class ProcesoMaestroSerializer(serializers.ModelSerializer):
             'descripcion',
             'activo',
             'operaciones',
+            'created_at',
+            'updated_at'
+        ]
+
+# ==============================================================================
+# 2. SERIALIZADORES TRANSACCIONALES (EJECUCIÓN DE LOTES GxP)
+# ==============================================================================
+
+class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el registro inmutable de qué operador y bajo qué rol 
+    ejecutó una tarea específica en un lote real.
+    """
+    operador_nombre = serializers.CharField(source='operador.nombre', read_only=True)
+    rol_nombre = serializers.CharField(source='rol_ejercido.nombre', read_only=True)
+
+    class Meta:
+        model = AsignacionFaseOperador
+        fields = [
+            'id',
+            'fase_lote',
+            'operador',
+            'operador_nombre',
+            'rol_ejercido',
+            'rol_nombre',
+            'horas_invertidas',
+            'asignado_en'
+        ]
+
+
+class FaseLoteSerializer(serializers.ModelSerializer):
+    """
+    Serializer para la instancia de ejecución de una fase, 
+    anidando a los operadores que han sido asignados a ella.
+    """
+    operacion_nombre = serializers.CharField(source='operacion_maestra.nombre', read_only=True)
+    operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
+    operadores_asignados = AsignacionFaseOperadorSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = FaseLote
+        fields = [
+            'id',
+            'lote',
+            'operacion_maestra',
+            'operacion_nombre',
+            'operacion_id_paso',
+            'estado',
+            'fecha_inicio_real',
+            'fecha_fin_real',
+            'operadores_asignados'
+        ]
+
+
+class LoteProduccionSerializer(serializers.ModelSerializer):
+    """
+    Serializer para la instancia principal del Lote de Producción,
+    anidando todo el Batch Record Electrónico (eBR).
+    """
+    proceso_nombre = serializers.CharField(source='proceso_maestro.nombre', read_only=True)
+    fases = FaseLoteSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = LoteProduccion
+        fields = [
+            'id',
+            'identificador_lote',
+            'proceso_maestro',
+            'proceso_nombre',
+            'estado',
+            'fecha_inicio_planeada',
+            'fases',
             'created_at',
             'updated_at'
         ]

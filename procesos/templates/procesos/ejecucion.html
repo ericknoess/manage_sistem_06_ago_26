@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ejecución de Lotes (eBR) - Piso de Planta</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --accent: #10b981; 
+            --accent-hover: #059669;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #38bdf8;
+            --success: #22c65e;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .page-header {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.85rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header-title h2 { margin: 0; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 0.5rem; }
+        .header-title p { margin: 0.2rem 0 0 0; font-size: 0.75rem; color: var(--text-muted); }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 0.75rem;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-box {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 0.75rem 1rem;
+            background-color: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn-primary { background-color: var(--info); color: #0f172a; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; transition: all 0.2s; }
+        .btn-primary:hover { background-color: #0284c7; color: white; }
+        
+        .btn-action { background-color: var(--accent); color: #fff; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .btn-action:hover { background-color: var(--accent-hover); }
+
+        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 4px; border-radius: 4px; transition: background-color 0.2s; }
+        .btn-icon:hover { background-color: rgba(255,255,255,0.1); }
+
+        .list-container { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; flex: 1; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.9rem; }
+
+        .lote-item { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; cursor: pointer; transition: all 0.15s ease; display: flex; justify-content: space-between; align-items: center; }
+        .lote-item:hover { border-color: var(--accent); }
+        .lote-item.active { border-color: var(--accent); background-color: rgba(16, 185, 129, 0.08); border-left: 4px solid var(--accent); }
+        .lote-info h4 { margin: 0; font-size: 0.85rem; color: var(--text); }
+        .lote-info span { font-size: 0.7rem; color: var(--text-muted); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.8rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .modal-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+        .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+        input[type="text"], input[type="date"], input[type="datetime-local"], select { 
+            background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; 
+        }
+        input:focus, select:focus { border-color: var(--accent); }
+
+        .badge-status { padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; white-space: nowrap; }
+        .status-planeado, .status-pendiente { background-color: rgba(56, 189, 248, 0.15); color: var(--info); border: 1px solid var(--info); }
+        .status-progreso { background-color: rgba(16, 185, 129, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+        .status-completado { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; }
+        thead { background-color: rgba(0,0,0,0.2); color: var(--text-muted); }
+        th, td { padding: 0.6rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
+        tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+
+        .tag-resource { background-color: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-color); padding: 2px 5px; border-radius: 3px; font-size: 0.65rem; display: inline-block; margin: 1px; color: var(--accent); }
+    </style>
+</head>
+<body>
+
+    <div class="page-header">
+        <div class="header-title">
+            <h2>🏭 Piso de Planta - Electronic Batch Record (eBR)</h2>
+            <p>Ejecución de lotes, seguimiento de fases Upstream y asignación real de operadores.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="/procesos/" class="btn-primary">⬅️ Volver a Diseño CPM</a>
+            <button class="btn-action" onclick="abrirModalInstanciarLote()">➕ Instanciar Lote</button>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="panel-box">
+            <div class="panel-header" style="color: var(--info);">
+                <span>📋 Lotes en Progreso</span>
+            </div>
+            <div class="list-container" id="listaLotes">
+                <!-- Se inyectarán los lotes aquí dinámicamente -->
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-header" id="tituloLoteActivo">
+                <span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>
+            </div>
+            <div id="editorLote" style="overflow-y: auto; flex: 1;">
+                <div class="empty-state">
+                    👈 Selecciona un lote activo del panel izquierdo para ver sus fases y registrar firmas GxP.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INSTANCIAR LOTE -->
+    <div class="modal-overlay" id="modalInstanciarLote" style="display: none;">
+        <div class="modal-content" style="width: 420px;">
+            <div class="modal-header">
+                <h3>➕ Instanciar Nuevo Lote</h3>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                Al instanciar un lote, el sistema clonará automáticamente todas las operaciones de la receta maestra para crear el Batch Record Electrónico.
+            </div>
+            
+            <div class="form-group" style="margin-top: 0.5rem;">
+                <label>ID Oficial del Lote</label>
+                <input type="text" id="nuevoLoteId" placeholder="Ej: LOTE-EPO-2026X">
+            </div>
+            <div class="form-group">
+                <label>Proceso Maestro (Receta)</label>
+                <select id="selectProcesoMaestro">
+                    <option value="">Cargando procesos...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Fecha y Hora de Inicio Planeada (GxP)</label>
+                <input type="datetime-local" id="nuevoLoteFecha">
+            </div>
+            
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button class="btn-secondary" onclick="cerrarModalInstanciarLote()">Cancelar</button>
+                <button class="btn-action" onclick="crearLoteAPI()">Instanciar Lote</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVO: MODAL ASIGNACIÓN DE OPERADOR GxP -->
+    <div class="modal-overlay" id="modalAsignarOperador" style="display: none;">
+        <div class="modal-content" style="width: 450px;">
+            <div class="modal-header">
+                <h3>👤 Asignar Operador a Fase</h3>
+            </div>
+            <input type="hidden" id="asignarFaseId">
+            
+            <div class="form-group" style="margin-top: 0.5rem;">
+                <label>Seleccionar Operador del Roster</label>
+                <select id="selectOperador">
+                    <option value="">Cargando operadores...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Rol / Competencia a Ejercer</label>
+                <select id="selectRolAsignado">
+                    <option value="">-- Seleccionar Rol --</option>
+                </select>
+            </div>
+            
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button class="btn-secondary" onclick="document.getElementById('modalAsignarOperador').style.display='none'">Cancelar</button>
+                <button class="btn-action" onclick="ejecutarAsignacionAPI()">Confirmar Firma GxP</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lotesGlobales = [];
+        let procesosMaestrosGlobales = [];
+        let loteSeleccionado = null;
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        async function cargarCatalogos() {
+            try {
+                const [resLotes, resProcesos] = await Promise.all([
+                    fetch('/api/lotes/'),
+                    fetch('/api/procesos-maestros/')
+                ]);
+                
+                lotesGlobales = await resLotes.json();
+                procesosMaestrosGlobales = await resProcesos.json();
+
+                renderizarLotes();
+                llenarSelectProcesos();
+                
+                if(loteSeleccionado) {
+                    const actualizado = lotesGlobales.find(l => l.id === loteSeleccionado.id);
+                    if(actualizado) seleccionarLote(actualizado.id);
+                }
+            } catch (err) {
+                console.error("Error al cargar datos del servidor:", err);
+            }
+        }
+
+        function renderizarLotes() {
+            const container = document.getElementById('listaLotes');
+            container.innerHTML = '';
+            
+            if (lotesGlobales.length === 0) {
+                container.innerHTML = `<div class="empty-state">No hay lotes registrados. Haz clic en 'Instanciar Lote'.</div>`;
+                return;
+            }
+
+            lotesGlobales.forEach(lote => {
+                const card = document.createElement('div');
+                card.className = `lote-item ${loteSeleccionado && loteSeleccionado.id === lote.id ? 'active' : ''}`;
+                
+                let badgeClass = lote.estado === 'PLANEADO' ? 'status-planeado' : (lote.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
+
+                card.innerHTML = `
+                    <div class="lote-info">
+                        <h4>${lote.identificador_lote}</h4>
+                        <span>${lote.proceso_nombre}</span>
+                    </div>
+                    <div>
+                        <span class="badge-status ${badgeClass}">${lote.estado}</span>
+                    </div>
+                `;
+                
+                card.onclick = () => seleccionarLote(lote.id);
+                
+                container.appendChild(card);
+            });
+        }
+
+        function seleccionarLote(id) {
+            loteSeleccionado = lotesGlobales.find(l => l.id === id);
+            renderizarLotes(); 
+            renderizarDetalleLote(); 
+        }
+
+        function renderizarDetalleLote() {
+            const container = document.getElementById('editorLote');
+            const headerTitle = document.getElementById('tituloLoteActivo');
+
+            if (!loteSeleccionado) {
+                container.innerHTML = '<div class="empty-state">👈 Selecciona un lote activo del panel izquierdo para ver sus fases y registrar firmas GxP.</div>';
+                headerTitle.innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>';
+                return;
+            }
+
+            let headerBadge = loteSeleccionado.estado === 'PLANEADO' ? 'status-planeado' : (loteSeleccionado.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
+            headerTitle.innerHTML = `
+                <span>⚡ eBR - Lote: <strong style="color: var(--text);">${loteSeleccionado.identificador_lote}</strong></span>
+                <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
+            `;
+
+            let fechaPlaneadaTxt = loteSeleccionado.fecha_inicio_planeada 
+                ? new Date(loteSeleccionado.fecha_inicio_planeada).toLocaleString() 
+                : '-';
+
+            let html = `
+                <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.2); display: flex; gap: 3rem;">
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Proceso / Receta Maestra</div>
+                        <div style="font-weight: bold; color: var(--info);">${loteSeleccionado.proceso_nombre}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha y Hora Planeada (Inicio)</div>
+                        <div style="font-weight: bold;">${fechaPlaneadaTxt}</div>
+                    </div>
+                </div>
+                
+                <div style="padding: 1rem;">
+                    <h4 style="margin-top: 0; margin-bottom: 0.8rem; color: var(--accent);">Fases de Producción (Ruta Crítica Instanciada)</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">ID</th>
+                                <th>Operación / Fase</th>
+                                <th>Estado</th>
+                                <th>Inicio Real</th>
+                                <th>Fin Real</th>
+                                <th>Operadores Asignados</th>
+                                <th style="text-align: center; width: 100px;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            loteSeleccionado.fases.forEach(fase => {
+                let badgeClass = 'status-pendiente';
+                if(fase.estado === 'EN_PROGRESO') badgeClass = 'status-progreso';
+                if(fase.estado === 'COMPLETADA') badgeClass = 'status-completado';
+
+                let inicioTxt = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleString() : '-';
+                let finTxt = fase.fecha_fin_real ? new Date(fase.fecha_fin_real).toLocaleString() : '-';
+
+                let asignacionesHtml = fase.operadores_asignados.length > 0 
+                    ? fase.operadores_asignados.map(a => `<div class="tag-resource">👤 ${a.operador_nombre} (${a.rol_nombre})</div>`).join('') 
+                    : '<span style="color: var(--text-muted); font-size: 0.7rem;">Sin asignar</span>';
+
+                html += `
+                    <tr>
+                        <td style="color: var(--info); font-weight: bold;">${fase.operacion_id_paso}</td>
+                        <td style="font-weight: bold;">${fase.operacion_nombre}</td>
+                        <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
+                        <td style="font-size: 0.75rem;">${inicioTxt}</td>
+                        <td style="font-size: 0.75rem;">${finTxt}</td>
+                        <td>${asignacionesHtml}</td>
+                        <td style="text-align: center; white-space: nowrap;">
+                            <button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>
+                            <button class="btn-icon" title="Actualizar Estado (Iniciar/Finalizar)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        function llenarSelectProcesos() {
+            const select = document.getElementById('selectProcesoMaestro');
+            select.innerHTML = '<option value="">-- Seleccione una Receta Maestra --</option>';
+            procesosMaestrosGlobales.forEach(p => {
+                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.operaciones.length} fases)</option>`;
+            });
+        }
+
+        function abrirModalInstanciarLote() {
+            document.getElementById('nuevoLoteId').value = '';
+            document.getElementById('selectProcesoMaestro').value = '';
+            
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('nuevoLoteFecha').value = now.toISOString().slice(0, 16);
+            
+            document.getElementById('modalInstanciarLote').style.display = 'flex';
+        }
+
+        function cerrarModalInstanciarLote() { document.getElementById('modalInstanciarLote').style.display = 'none'; }
+
+        async function crearLoteAPI() {
+            const identificador_lote = document.getElementById('nuevoLoteId').value.trim();
+            const proceso_maestro = document.getElementById('selectProcesoMaestro').value;
+            const fecha_inicio_planeada = document.getElementById('nuevoLoteFecha').value;
+
+            if (!identificador_lote || !proceso_maestro || !fecha_inicio_planeada) {
+                return alert("Por favor complete todos los campos obligatorios GxP.");
+            }
+
+            let fechaIsoParaDjango = new Date(fecha_inicio_planeada).toISOString();
+
+            try {
+                const res = await fetch('/api/lotes/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ 
+                        identificador_lote: identificador_lote, 
+                        proceso_maestro: parseInt(proceso_maestro), 
+                        estado: 'PLANEADO', 
+                        fecha_inicio_planeada: fechaIsoParaDjango 
+                    })
+                });
+
+                if (res.ok) {
+                    cerrarModalInstanciarLote();
+                    await cargarCatalogos(); 
+                } else {
+                    const data = await res.json();
+                    alert("Error al instanciar lote: " + JSON.stringify(data));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        async function cambiarEstadoFase(faseId, estadoActual) {
+            let siguienteEstado = '';
+            if (estadoActual === 'PENDIENTE') {
+                siguienteEstado = 'EN_PROGRESO';
+            } else if (estadoActual === 'EN_PROGRESO') {
+                siguienteEstado = 'COMPLETADA';
+            } else {
+                alert("Esta fase ya se encuentra completada.");
+                return;
+            }
+
+            if (!confirm(`¿Confirma cambiar el estado de la fase a [${siguienteEstado}]? Se estampará la marca de tiempo oficial del servidor.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-CSRFToken': getCookie('csrftoken') 
+                    },
+                    body: JSON.stringify({ estado: siguienteEstado })
+                });
+
+                if (res.ok) {
+                    await cargarCatalogos(); 
+                } else {
+                    const data = await res.json();
+                    alert("Error al actualizar estado GxP: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error de red al intentar actualizar el estado.");
+            }
+        }
+
+        // ---- LÓGICA GxP DE ASIGNACIÓN DE PERSONAL ACTUALIZADA ----
+        async function abrirModalAsignacion(faseId) {
+            document.getElementById('asignarFaseId').value = faseId;
+            
+            try {
+                // CORRECCIÓN: Rutas de la API apuntando a la raíz del enrutador
+                const [resOps, resRoles] = await Promise.all([
+                    fetch('/api/operadores/'), 
+                    fetch('/api/roles-operador/')
+                ]);
+                
+                const ops = await resOps.json();
+                const roles = await resRoles.json();
+                
+                const selOp = document.getElementById('selectOperador');
+                const selRol = document.getElementById('selectRolAsignado');
+                
+                // Mapeo defensivo por si 'turno' no está directamente expuesto en el serializer de operadores
+                selOp.innerHTML = ops.map(o => {
+                    const turnoStr = o.turno ? ` (${o.turno})` : '';
+                    return `<option value="${o.id}">${o.nombre}${turnoStr}</option>`;
+                }).join('');
+                
+                selRol.innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('');
+                
+                document.getElementById('modalAsignarOperador').style.display = 'flex';
+            } catch (err) {
+                console.error("Error al cargar catálogos del Roster:", err);
+                alert("No se pudieron cargar los operadores o roles desde el servidor.");
+            }
+        }
+
+        async function ejecutarAsignacionAPI() {
+            const fase_lote = document.getElementById('asignarFaseId').value;
+            const operador = document.getElementById('selectOperador').value;
+            const rol_ejercido = document.getElementById('selectRolAsignado').value;
+
+            if (!operador || !rol_ejercido) {
+                alert("Debe seleccionar un operador y un rol válido.");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/asignaciones-operador/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ 
+                        fase_lote: parseInt(fase_lote), 
+                        operador: parseInt(operador), 
+                        rol_ejercido: parseInt(rol_ejercido), 
+                        horas_invertidas: 0.0 
+                    })
+                });
+
+                if (res.ok) {
+                    document.getElementById('modalAsignarOperador').style.display = 'none';
+                    await cargarCatalogos(); 
+                } else {
+                    const data = await res.json();
+                    alert("Error en validación GxP: " + JSON.stringify(data));
+                }
+            } catch (err) { 
+                console.error(err);
+                alert("Error de red al registrar la asignación."); 
+            }
+        }
+
+        // Inicializar
+        cargarCatalogos();
+    </script>
+</body>
+</html>

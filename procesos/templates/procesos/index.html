@@ -176,7 +176,7 @@
             text-overflow: ellipsis;
         }
 
-        input[type="text"], select, input[type="number"] {
+        input[type="text"], select, input[type="number"], input[type="date"] {
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
             color: var(--text);
@@ -198,7 +198,7 @@
             padding: 0.1rem;
         }
 
-        input[type="text"]:focus:not([readonly]), select:focus:not([disabled]), input[type="number"]:focus:not([readonly]) {
+        input[type="text"]:focus:not([readonly]), select:focus:not([disabled]), input[type="number"]:focus:not([readonly]), input[type="date"]:focus {
             border-color: var(--accent);
         }
 
@@ -212,9 +212,12 @@
             font-weight: bold;
             cursor: pointer;
             white-space: nowrap;
+            transition: all 0.2s;
         }
 
-        .btn-primary:hover { background-color: var(--accent-hover); color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); color: white; }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        
         .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
         .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
 
@@ -294,6 +297,7 @@
         .btn-icon:hover { background-color: var(--border-color); }
         .btn-icon.delete:hover { background-color: rgba(239, 68, 68, 0.2); }
         .btn-icon.edit:hover { background-color: rgba(56, 189, 248, 0.2); }
+        .btn-icon.validate:hover { background-color: rgba(34, 197, 94, 0.2); }
 
         .modal-overlay {
             position: fixed;
@@ -339,6 +343,36 @@
             align-items: center;
             margin-bottom: 0.4rem;
         }
+
+        /* ESTILOS PARA VALIDACIÓN GXP */
+        .validation-results {
+            margin-top: 0.5rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1rem;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .validation-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            align-items: center;
+        }
+        .validation-row:last-child { border-bottom: none; }
+        .status-badge {
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.65rem;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .status-ok { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); }
+        .status-fail { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
     </style>
 </head>
 <body>
@@ -348,7 +382,7 @@
             <h2>🧫 Planificador CPM, Holguras y Habilidades GxP</h2>
             <p>Control de dependencias, muestreos dinámicos y asignación por competencias (Skill-based).</p>
         </div>
-        <a href="/tablero/" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">📊 Ver Tablero Semanal</a>
+        <a href="/roster/" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">👥 Ir al Roster de Personal</a>
     </div>
 
     <div class="main-layout">
@@ -457,9 +491,9 @@
                     <div class="form-group" style="flex: 2; min-width: 240px;" id="containerRolesCreacion">
                         <label class="flex justify-between items-center">
                             <span>Requerimiento de Roles / Competencias</span>
-                            <button type="button" class="text-xs text-cyan-400 hover:underline" onclick="agregarFilaRolBuilder('crear')">➕ Añadir Rol</button>
+                            <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-accent hover:underline" onclick="agregarFilaRolBuilder('crear')">➕ Añadir Rol</button>
                         </label>
-                        <div id="rolesBuilderCrear" class="bg-slate-900 border border-slate-700 rounded p-2 space-y-2 mt-1">
+                        <div id="rolesBuilderCrear" class="bg-slate-900 border border-slate-700 rounded p-2 space-y-2 mt-1" style="background: rgba(15,23,42,0.5); padding: 5px; border-radius: 4px;">
                             <!-- Filas dinámicas de roles -->
                         </div>
                     </div>
@@ -481,7 +515,7 @@
                                 <th style="width: 60px;">Inicio-Fin</th>
                                 <th style="width: 65px;">Tipo</th>
                                 <th>Gantt CPM</th>
-                                <th style="width: 70px; text-align:center;">Acciones</th>
+                                <th style="width: 90px; text-align:center;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="tablaCPMBody">
@@ -582,9 +616,9 @@
                 <div class="form-group" style="grid-column: span 3;">
                     <label class="flex justify-between items-center">
                         <span>Requerimiento de Roles / Competencias (Skill-based)</span>
-                        <button type="button" class="text-xs text-cyan-400 hover:underline" onclick="agregarFilaRolBuilder('editar')">➕ Añadir Rol</button>
+                        <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-cyan-400 hover:underline" onclick="agregarFilaRolBuilder('editar')">➕ Añadir Rol</button>
                     </label>
-                    <div id="rolesBuilderEditar" class="bg-slate-950 border border-slate-700 rounded p-2 space-y-2 mt-1">
+                    <div id="rolesBuilderEditar" style="background: rgba(15,23,42,0.5); padding: 5px; border-radius: 4px; margin-top: 5px;">
                         <!-- Filas dinámicas -->
                     </div>
                 </div>
@@ -596,10 +630,41 @@
         </div>
     </div>
 
+    <!-- MODAL VALIDACIÓN GXP (SKILL-MATCHING) -->
+    <div class="modal-overlay" id="modalValidacionGxp" style="display: none;">
+        <div class="modal-content" style="width: 480px;">
+            <div class="modal-header">
+                <h3>🔍 Simulación y Auditoría GxP de Personal</h3>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); padding-bottom: 0.5rem;">
+                Compruebe si el Roster actual cuenta con el personal calificado requerido para ejecutar esta fase operativa en una fecha específica.
+            </div>
+            
+            <input type="hidden" id="valOpId">
+            <div class="form-group" style="background-color: rgba(255,255,255,0.02); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color);">
+                <strong id="valOpNombre" style="color: var(--accent); font-size: 0.9rem;"></strong>
+            </div>
+
+            <div class="form-group" style="margin-top: 0.5rem;">
+                <label>Fecha Proyectada de Ejecución del Lote</label>
+                <input type="date" id="valFecha" required style="cursor: pointer;">
+            </div>
+            
+            <div class="modal-actions" style="margin-top: 0.5rem;">
+                <button class="btn-secondary" onclick="cerrarModalValidacion()">Cerrar</button>
+                <button class="btn-primary" onclick="ejecutarValidacionGxpAPI()" id="btnEjecutarValidacion">Ejecutar Simulación</button>
+            </div>
+
+            <!-- Contenedor dinámico de resultados -->
+            <div id="validationResults" class="validation-results">
+            </div>
+        </div>
+    </div>
+
     <script>
         let procesosGlobales = [];
         let materialesGlobales = [];
-        let rolesGlobales = []; // Catálogo de roles cargados desde API
+        let rolesGlobales = []; 
         let procesoSeleccionado = null;
 
         async function cargarCatalogosGlobales() {
@@ -616,7 +681,6 @@
                 renderizarCatalogoMateriales();
                 renderizarListaProcesos();
                 
-                // Inicializar una fila por defecto en el constructor de creación
                 if (document.getElementById('rolesBuilderCrear').children.length === 0) {
                     agregarFilaRolBuilder('crear');
                 }
@@ -644,7 +708,6 @@
             });
         }
 
-        // --- CONSTRUCTOR DINÁMICO DE ROLES (BUILDER) ---
         function agregarFilaRolBuilder(modo, rolId = '', cantidad = 1) {
             const containerId = modo === 'crear' ? 'rolesBuilderCrear' : 'rolesBuilderEditar';
             const container = document.getElementById(containerId);
@@ -785,7 +848,6 @@
                         totalHorasHombre += (cantidadMuestreos * (opOrig.duracion_muestreo_horas || 0) * (opOrig.ops_muestreo || 0));
                     }
                 } else {
-                    // Sumar horas hombre basadas en los requerimientos de roles múltiples
                     let sumaOpsFase = 0;
                     if (opOrig.requerimientos_rol_detalles && opOrig.requerimientos_rol_detalles.length > 0) {
                         opOrig.requerimientos_rol_detalles.forEach(req => {
@@ -812,8 +874,6 @@
                 let frecMuestreo = opOriginal.frecuencia_muestreo_horas || 0;
                 let durMuestreo = opOriginal.duracion_muestreo_horas || 0;
                 let opsMuestreo = opOriginal.ops_muestreo || 0;
-                let tipoDepVal = opOriginal.tipo_dependencia || 'FS';
-                let desfaseVal = opOriginal.desfase_horas || 0;
 
                 const tr = document.createElement('tr');
                 if (t.tipo_operacion === 'INCUBACION') tr.className = 'incubation-row';
@@ -830,7 +890,6 @@
                     ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h, ${opsMuestreo}Op)</span>` 
                     : '';
 
-                // Renderizar badges de roles específicos requeridos
                 let badgesRolesHtml = '';
                 if (opOriginal.requerimientos_rol_detalles && opOriginal.requerimientos_rol_detalles.length > 0) {
                     opOriginal.requerimientos_rol_detalles.forEach(req => {
@@ -839,6 +898,8 @@
                 } else {
                     badgesRolesHtml = `<span class="tag-resource">👥 Ops: ${t.personal_requerido}</span>`;
                 }
+
+                const safeName = t.nombre.replace(/'/g, "\\'");
 
                 tr.innerHTML = `
                     <td><strong>#${index + 1}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
@@ -862,8 +923,9 @@
                         </div>
                     </td>
                     <td style="text-align: center; white-space: nowrap;">
+                        <button class="btn-icon validate" title="Auditoría / Validación de Personal GxP" onclick="abrirModalValidacion(${t.id}, '${safeName}')">🔍</button>
                         <button class="btn-icon edit" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id})">✏️</button>
-                        <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${t.nombre}')">🗑️</button>
+                        <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${safeName}')">🗑️</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -997,7 +1059,6 @@
             document.getElementById('editOpDesfase').value = op.desfase_horas || 0;
             document.getElementById('editOpEquipo').value = op.tipo_equipo_requerido || 'N/A';
 
-            // Rellenar builder de roles en edición
             const container = document.getElementById('rolesBuilderEditar');
             container.innerHTML = '';
             if (op.requerimientos_rol_detalles && op.requerimientos_rol_detalles.length > 0) {
@@ -1074,6 +1135,103 @@
                 cargarCatalogosGlobales();
             } else {
                 alert("Error al eliminar la operación.");
+            }
+        }
+
+        // --- LÓGICA DE VALIDACIÓN GXP (SKILL-MATCHING) CORREGIDA ---
+        function abrirModalValidacion(id, nombre) {
+            document.getElementById('valOpId').value = id;
+            document.getElementById('valOpNombre').innerText = nombre;
+            
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('valFecha').value = `${yyyy}-${mm}-${dd}`;
+            
+            document.getElementById('validationResults').style.display = 'none';
+            document.getElementById('modalValidacionGxp').style.display = 'flex';
+        }
+
+        function cerrarModalValidacion() {
+            document.getElementById('modalValidacionGxp').style.display = 'none';
+            document.getElementById('validationResults').innerHTML = '';
+        }
+
+        async function ejecutarValidacionGxpAPI() {
+            const opId = document.getElementById('valOpId').value;
+            const fecha = document.getElementById('valFecha').value;
+            const btn = document.getElementById('btnEjecutarValidacion');
+            const resContainer = document.getElementById('validationResults');
+
+            if (!fecha) {
+                alert("Seleccione una fecha proyectada para la evaluación.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "Calculando...";
+
+            try {
+                const response = await fetch(`/api/operaciones-proceso/${opId}/validar-disponibilidad/`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-CSRFToken': getCookie('csrftoken') 
+                    },
+                    body: JSON.stringify({ fecha: fecha })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || "Error al validar competencias en el servidor.");
+                }
+
+                resContainer.style.display = 'block';
+                
+                // CORRECCIÓN: Validación robusta para casos sin arreglos 'detalles'
+                if (!data.detalles || data.detalles.length === 0) {
+                    resContainer.innerHTML = `<div style="text-align:center; padding: 1rem; color: var(--success); font-weight:bold;">${data.mensaje || 'Fase sin requerimientos específicos de roles. 100% Cubierto.'}</div>`;
+                    return;
+                }
+
+                let globalBadge = data.cumple_requerimientos_global 
+                    ? `<span class="status-badge status-ok">✅ COBERTURA GxP COMPLETADA</span>`
+                    : `<span class="status-badge status-fail">🚨 ALERTA: BRECHA DE PERSONAL DETECTADA</span>`;
+
+                let html = `
+                    <div style="margin-bottom: 1rem; text-align: center;">${globalBadge}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem; margin-bottom: 0.3rem;">
+                        <strong>Rol/Competencia</strong>
+                        <strong style="text-align:center;">Requerido</strong>
+                        <strong style="text-align:center;">Disponible</strong>
+                        <strong style="text-align:center;">Estado GxP</strong>
+                    </div>
+                `;
+
+                data.detalles.forEach(det => {
+                    let estadoHtml = det.cumplido 
+                        ? `<span class="status-badge status-ok" style="font-size: 0.6rem;">OK</span>`
+                        : `<span class="status-badge status-fail" style="font-size: 0.6rem;">Faltan ${det.brecha}</span>`;
+
+                    html += `
+                        <div class="validation-row">
+                            <span style="font-weight: 500;">${det.rol_nombre}</span>
+                            <span style="text-align:center;">${det.cantidad_demandada}</span>
+                            <span style="text-align:center; font-weight:bold; color: ${det.cumplido ? 'var(--success)' : 'var(--danger)'};">${det.cantidad_disponible}</span>
+                            <span style="text-align:center;">${estadoHtml}</span>
+                        </div>
+                    `;
+                });
+
+                resContainer.innerHTML = html;
+
+            } catch (error) {
+                alert(error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Ejecutar Simulación";
             }
         }
 
