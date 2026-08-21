@@ -183,11 +183,16 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
 class FaseLoteSerializer(serializers.ModelSerializer):
     """
     Serializer para la instancia de ejecución de una fase, 
-    anidando a los operadores que han sido asignados a ella.
+    anidando a los operadores y calculando el rendimiento (Desviación).
     """
     operacion_nombre = serializers.CharField(source='operacion_maestra.nombre', read_only=True)
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
+    duracion_estimada = serializers.FloatField(source='operacion_maestra.duracion_horas', read_only=True)
     operadores_asignados = AsignacionFaseOperadorSerializer(many=True, read_only=True)
+    
+    # NUEVO: KPIs calculados al vuelo
+    duracion_real_horas = serializers.SerializerMethodField()
+    desviacion_horas = serializers.SerializerMethodField()
 
     class Meta:
         model = FaseLote
@@ -200,17 +205,41 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'estado',
             'fecha_inicio_real',
             'fecha_fin_real',
+            'duracion_estimada',
+            'duracion_real_horas',
+            'desviacion_horas',
             'operadores_asignados'
         ]
+
+    def get_duracion_real_horas(self, obj):
+        """Calcula el tiempo real invertido en la fase en horas."""
+        if obj.fecha_inicio_real and obj.fecha_fin_real:
+            delta = obj.fecha_fin_real - obj.fecha_inicio_real
+            return round(delta.total_seconds() / 3600.0, 4)
+        return None
+
+    def get_desviacion_horas(self, obj):
+        """
+        Calcula la diferencia contra la receta.
+        (+) Retraso / (-) Eficiencia.
+        """
+        duracion_real = self.get_duracion_real_horas(obj)
+        if duracion_real is not None:
+            estimada = obj.operacion_maestra.duracion_horas
+            return round(duracion_real - estimada, 4)
+        return None
 
 
 class LoteProduccionSerializer(serializers.ModelSerializer):
     """
     Serializer para la instancia principal del Lote de Producción,
-    anidando todo el Batch Record Electrónico (eBR).
+    incluyendo barra de progreso general.
     """
     proceso_nombre = serializers.CharField(source='proceso_maestro.nombre', read_only=True)
     fases = FaseLoteSerializer(many=True, read_only=True)
+    
+    # NUEVO: Porcentaje de avance del lote
+    progreso_porcentual = serializers.SerializerMethodField()
 
     class Meta:
         model = LoteProduccion
@@ -221,7 +250,18 @@ class LoteProduccionSerializer(serializers.ModelSerializer):
             'proceso_nombre',
             'estado',
             'fecha_inicio_planeada',
+            'progreso_porcentual',
             'fases',
             'created_at',
             'updated_at'
         ]
+
+    def get_progreso_porcentual(self, obj):
+        """Calcula dinámicamente el porcentaje de fases completadas."""
+        fases_totales = obj.fases.all()
+        total = len(fases_totales)
+        if total == 0:
+            return 0.0
+        
+        completadas = sum(1 for f in fases_totales if f.estado in ['COMPLETADA', 'OMITIDA'])
+        return round((completadas / total) * 100, 1)

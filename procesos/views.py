@@ -108,6 +108,13 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def cambiar_estado(self, request, pk=None):
         fase = self.get_object()
+        
+        # REGLA GxP 3: Bloqueo de Inmutabilidad de Lote (Data Lock)
+        if fase.lote.estado == 'COMPLETADO':
+            return Response({
+                "error": "Violación GxP (Data Lock): El Lote de Producción ya está cerrado y liberado. Sus registros son estrictamente inmutables."
+            }, status=status.HTTP_403_FORBIDDEN)
+
         nuevo_estado = request.data.get('estado')
 
         estados_validos = dict(FaseLote.ESTADO_FASE_CHOICES).keys()
@@ -158,7 +165,7 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         """
-        Sobreescritura para inyectar validación de estado de la fase antes de asignar.
+        Sobreescritura para inyectar validación de estado de la fase y del lote antes de asignar.
         """
         fase_id = request.data.get('fase_lote')
         
@@ -167,7 +174,13 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
         except FaseLote.DoesNotExist:
             return Response({"error": "La fase especificada no existe."}, status=status.HTTP_404_NOT_FOUND)
 
-        # REGLA GxP 2: Prevención de Asignaciones Póstumas
+        # REGLA GxP 3: Bloqueo de Inmutabilidad de Lote (Data Lock)
+        if fase.lote.estado == 'COMPLETADO':
+            return Response({
+                "error": "Violación GxP (Data Lock): No se puede asignar personal a un Lote de Producción que ya fue cerrado y liberado."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # REGLA GxP 2: Prevención de Asignaciones Póstumas a fases individuales
         if fase.estado in ['COMPLETADA', 'OMITIDA']:
             return Response({
                 "error": f"Violación GxP: No se puede modificar el registro de personal de una fase que ya se encuentra {fase.estado}."

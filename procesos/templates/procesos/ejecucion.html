@@ -119,6 +119,14 @@
         tbody tr:hover { background-color: rgba(255,255,255,0.02); }
 
         .tag-resource { background-color: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-color); padding: 2px 5px; border-radius: 3px; font-size: 0.65rem; display: inline-block; margin: 1px; color: var(--accent); }
+        
+        .progress-container { width: 100%; background-color: rgba(255, 255, 255, 0.05); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 4px; }
+        .progress-fill { height: 100%; background-color: var(--success); transition: width 0.5s ease-in-out; }
+        .tag-delay { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .tag-ontime { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        
+        /* NUEVO: Estilo para el Banner de Auditoría GxP */
+        .gxp-lock-banner { background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--warning); padding: 0.75rem; margin: 1rem 1rem 0 1rem; border-radius: 6px; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
     </style>
 </head>
 <body>
@@ -188,7 +196,7 @@
         </div>
     </div>
 
-    <!-- NUEVO: MODAL ASIGNACIÓN DE OPERADOR GxP -->
+    <!-- MODAL ASIGNACIÓN DE OPERADOR GxP -->
     <div class="modal-overlay" id="modalAsignarOperador" style="display: none;">
         <div class="modal-content" style="width: 450px;">
             <div class="modal-header">
@@ -273,13 +281,18 @@
                 
                 let badgeClass = lote.estado === 'PLANEADO' ? 'status-planeado' : (lote.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
 
+                let progress = lote.progreso_porcentual !== undefined ? lote.progreso_porcentual : 0;
+
                 card.innerHTML = `
-                    <div class="lote-info">
-                        <h4>${lote.identificador_lote}</h4>
-                        <span>${lote.proceso_nombre}</span>
-                    </div>
-                    <div>
-                        <span class="badge-status ${badgeClass}">${lote.estado}</span>
+                    <div style="flex: 1;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <h4 style="margin: 0; font-size: 0.85rem; color: var(--text);">${lote.identificador_lote}</h4>
+                            <span class="badge-status ${badgeClass}">${lote.estado}</span>
+                        </div>
+                        <span style="font-size: 0.7rem; color: var(--text-muted);">${lote.proceso_nombre}</span>
+                        <div class="progress-container">
+                            <div class="progress-fill" style="width: ${progress}%;"></div>
+                        </div>
                     </div>
                 `;
                 
@@ -314,6 +327,21 @@
             let fechaPlaneadaTxt = loteSeleccionado.fecha_inicio_planeada 
                 ? new Date(loteSeleccionado.fecha_inicio_planeada).toLocaleString() 
                 : '-';
+                
+            let progress = loteSeleccionado.progreso_porcentual !== undefined ? loteSeleccionado.progreso_porcentual : 0;
+            
+            // LÓGICA DE BLOQUEO VISUAL
+            let isLocked = loteSeleccionado.estado === 'COMPLETADO';
+            
+            let bannerLockHtml = isLocked ? `
+                <div class="gxp-lock-banner">
+                    <span style="font-size: 1.2rem;">🔒</span> 
+                    <div>
+                        <strong>Data Lock (QA Release):</strong> Este Lote de Producción ha sido cerrado. 
+                        Sus registros son estrictamente inmutables cumpliendo con la normativa 21 CFR Part 11.
+                    </div>
+                </div>
+            ` : '';
 
             let html = `
                 <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.2); display: flex; gap: 3rem;">
@@ -322,10 +350,21 @@
                         <div style="font-weight: bold; color: var(--info);">${loteSeleccionado.proceso_nombre}</div>
                     </div>
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha y Hora Planeada (Inicio)</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha y Hora Planeada</div>
                         <div style="font-weight: bold;">${fechaPlaneadaTxt}</div>
                     </div>
+                    <div style="flex: 1; max-width: 200px;">
+                        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                            <span>Progreso de Receta</span>
+                            <span style="font-weight: bold; color: var(--success);">${progress}%</span>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-fill" style="width: ${progress}%;"></div>
+                        </div>
+                    </div>
                 </div>
+                
+                ${bannerLockHtml}
                 
                 <div style="padding: 1rem;">
                     <h4 style="margin-top: 0; margin-bottom: 0.8rem; color: var(--accent);">Fases de Producción (Ruta Crítica Instanciada)</h4>
@@ -337,6 +376,7 @@
                                 <th>Estado</th>
                                 <th>Inicio Real</th>
                                 <th>Fin Real</th>
+                                <th>Rendimiento (MES)</th>
                                 <th>Operadores Asignados</th>
                                 <th style="text-align: center; width: 100px;">Acciones</th>
                             </tr>
@@ -349,24 +389,47 @@
                 if(fase.estado === 'EN_PROGRESO') badgeClass = 'status-progreso';
                 if(fase.estado === 'COMPLETADA') badgeClass = 'status-completado';
 
-                let inicioTxt = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleString() : '-';
-                let finTxt = fase.fecha_fin_real ? new Date(fase.fecha_fin_real).toLocaleString() : '-';
+                let inicioTxt = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : '-';
+                let finTxt = fase.fecha_fin_real ? new Date(fase.fecha_fin_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : '-';
 
                 let asignacionesHtml = fase.operadores_asignados.length > 0 
                     ? fase.operadores_asignados.map(a => `<div class="tag-resource">👤 ${a.operador_nombre} (${a.rol_nombre})</div>`).join('') 
                     : '<span style="color: var(--text-muted); font-size: 0.7rem;">Sin asignar</span>';
 
+                let rendimientoHtml = '<span style="color: var(--text-muted); font-size: 0.7rem;">-</span>';
+                if (fase.desviacion_horas !== null) {
+                    if (fase.desviacion_horas > 0) {
+                        rendimientoHtml = `<span class="tag-delay" title="Retraso respecto a receta">+${fase.desviacion_horas}h ⚠️</span>`;
+                    } else {
+                        rendimientoHtml = `<span class="tag-ontime" title="A tiempo / Eficiente">${fase.desviacion_horas}h ✓</span>`;
+                    }
+                }
+                
+                // CONDICIONAL DE BLOQUEO DE BOTONES
+                let accionesHtml = '';
+                if (isLocked) {
+                    accionesHtml = `<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
+                } else {
+                    accionesHtml = `
+                        <button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>
+                        <button class="btn-icon" title="Actualizar Estado (Iniciar/Finalizar)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
+                    `;
+                }
+
                 html += `
                     <tr>
                         <td style="color: var(--info); font-weight: bold;">${fase.operacion_id_paso}</td>
-                        <td style="font-weight: bold;">${fase.operacion_nombre}</td>
+                        <td style="font-weight: bold;">
+                            ${fase.operacion_nombre}
+                            <div style="font-size: 0.65rem; color: var(--text-muted);">Teórico: ${fase.duracion_estimada}h</div>
+                        </td>
                         <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
                         <td style="font-size: 0.75rem;">${inicioTxt}</td>
                         <td style="font-size: 0.75rem;">${finTxt}</td>
+                        <td>${rendimientoHtml}</td>
                         <td>${asignacionesHtml}</td>
                         <td style="text-align: center; white-space: nowrap;">
-                            <button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>
-                            <button class="btn-icon" title="Actualizar Estado (Iniciar/Finalizar)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
+                            ${accionesHtml}
                         </td>
                     </tr>
                 `;
@@ -442,7 +505,7 @@
             } else if (estadoActual === 'EN_PROGRESO') {
                 siguienteEstado = 'COMPLETADA';
             } else {
-                alert("Esta fase ya se encuentra completada.");
+                alert("Esta fase ya se encuentra completada o fue omitida.");
                 return;
             }
 
@@ -472,12 +535,10 @@
             }
         }
 
-        // ---- LÓGICA GxP DE ASIGNACIÓN DE PERSONAL ACTUALIZADA ----
         async function abrirModalAsignacion(faseId) {
             document.getElementById('asignarFaseId').value = faseId;
             
             try {
-                // CORRECCIÓN: Rutas de la API apuntando a la raíz del enrutador
                 const [resOps, resRoles] = await Promise.all([
                     fetch('/api/operadores/'), 
                     fetch('/api/roles-operador/')
@@ -489,7 +550,6 @@
                 const selOp = document.getElementById('selectOperador');
                 const selRol = document.getElementById('selectRolAsignado');
                 
-                // Mapeo defensivo por si 'turno' no está directamente expuesto en el serializer de operadores
                 selOp.innerHTML = ops.map(o => {
                     const turnoStr = o.turno ? ` (${o.turno})` : '';
                     return `<option value="${o.id}">${o.nombre}${turnoStr}</option>`;
