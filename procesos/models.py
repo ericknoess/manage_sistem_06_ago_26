@@ -140,8 +140,6 @@ class LoteProduccion(models.Model):
         related_name='lotes_instanciados'
     )
     estado = models.CharField(max_length=20, choices=ESTADO_LOTE_CHOICES, default='PLANEADO')
-    
-    # MODIFICACIÓN: Cambiado de DateField a DateTimeField para incluir hora exacta
     fecha_inicio_planeada = models.DateTimeField(help_text="Fecha y hora estimada o programada de inicio")
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -159,7 +157,7 @@ class LoteProduccion(models.Model):
 class FaseLote(models.Model):
     """
     Instancia individual de una OperacionProceso correspondiente a un Lote específico.
-    Registra los tiempos reales de ejecución.
+    Actúa como Tarea Planificada (MES) y como Registro Inmutable (eBR).
     """
     ESTADO_FASE_CHOICES = [
         ('PENDIENTE', 'Pendiente'),
@@ -172,6 +170,29 @@ class FaseLote(models.Model):
     operacion_maestra = models.ForeignKey(OperacionProceso, on_delete=models.RESTRICT, related_name='fases_ejecutadas')
     estado = models.CharField(max_length=20, choices=ESTADO_FASE_CHOICES, default='PENDIENTE')
     
+    # --------------------------------------------------------------------------
+    # NUEVOS CAMPOS: Planificación y Programación Semanal (MES)
+    # Estos campos se calcularán dinámicamente con el Algoritmo CPM al instanciar el lote
+    # --------------------------------------------------------------------------
+    fecha_programada = models.DateField(null=True, blank=True, help_text="Fecha calculada por el algoritmo para su ejecución")
+    hora_inicio_programada = models.TimeField(null=True, blank=True, help_text="Hora calculada de inicio")
+    hora_fin_programada = models.TimeField(null=True, blank=True, help_text="Hora calculada de finalización")
+    
+    equipos_asignados = models.ManyToManyField(
+        Equipo, 
+        blank=True, 
+        related_name='fases_asignadas',
+        help_text="Equipos reservados/asignados a esta fase"
+    )
+    materiales_asignados = models.ManyToManyField(
+        MaterialInsumo, 
+        blank=True, 
+        related_name='fases_asignadas',
+        help_text="Materiales o lotes de insumos asignados a esta fase"
+    )
+    # --------------------------------------------------------------------------
+
+    # Campos de Ejecución Real GxP (eBR)
     fecha_inicio_real = models.DateTimeField(null=True, blank=True, help_text="Timestamp real de inicio de la tarea")
     fecha_fin_real = models.DateTimeField(null=True, blank=True, help_text="Timestamp real de fin de la tarea")
 

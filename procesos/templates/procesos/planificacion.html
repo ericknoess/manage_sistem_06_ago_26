@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificación y Asignación Semanal - MES Upstream GxP</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --warning: #f59e0b;
+            --success: #22c65e;
+            --danger: #ef4444;
+            --purple: #a855f7;
+        }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            gap: 0.75rem;
+        }
+
+        .supervisor-toolbar {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .toolbar-title {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; }
+        .btn-primary:hover { opacity: 0.9; }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 0.75rem;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-box {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            padding: 0.6rem 0.8rem;
+            background-color: rgba(15, 23, 42, 0.6);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .weekly-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: var(--border-color);
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .day-column {
+            background-color: var(--panel-bg);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .day-header {
+            background-color: var(--bg-dark);
+            padding: 0.5rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+
+        .day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
+        .day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
+
+        .day-tasks {
+            padding: 0.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            flex: 1;
+        }
+
+        .task-card {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent);
+            border-radius: 6px;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
+
+        .task-time { font-size: 0.65rem; font-weight: bold; color: var(--accent); }
+        .task-title { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+
+        .task-resources-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            margin-top: 2px;
+        }
+
+        .tag-micro {
+            font-size: 0.58rem;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: #cbd5e1;
+        }
+
+        .tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
+        .tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
+        .tag-micro.op { border-color: rgba(56, 189, 248, 0.4); color: #bae6fd; }
+
+        .task-assignee-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
+        .badge-headcount { font-size: 0.62rem; color: #94a3b8; }
+
+        .availability-panel {
+            padding: 0.75rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .info-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.6rem;
+            font-size: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
+
+        .resource-section {
+            background: var(--bg-dark);
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .resource-title {
+            font-size: 0.68rem;
+            font-weight: bold;
+            color: #94a3b8;
+            margin-bottom: 0.3rem;
+        }
+
+        .resource-tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 0.4rem;
+        }
+
+        .resource-chip {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border: 1px solid var(--purple); color: #e9d5ff; }
+        .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border: 1px solid var(--success); color: #bbf7d0; }
+        .resource-chip.op { background: rgba(56, 189, 248, 0.2); border: 1px solid var(--accent); color: #bae6fd; }
+
+        .btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
+        .btn-remove-tag:hover { color: var(--danger); }
+
+        .select-resource {
+            width: 100%;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text);
+            font-size: 0.7rem;
+            padding: 4px;
+            border-radius: 4px;
+            outline: none;
+        }
+        
+        .op-availability-card {
+            background-color: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .op-availability-card.available { border-left: 3px solid var(--success); }
+
+        .op-header { display: flex; align-items: center; gap: 0.5rem; }
+        .op-name { font-size: 0.78rem; font-weight: bold; }
+        .op-status-text { font-size: 0.68rem; color: #94a3b8; }
+
+        .btn-assign {
+            background-color: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-assign:hover { opacity: 0.9; }
+
+        .empty-state { text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+
+    <div class="supervisor-toolbar">
+        <div class="toolbar-title">
+            <span>📅 Tablero de Asignación y Planificación Semanal (MES)</span>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <a href="/ejecucion/" class="btn-primary">🏭 Ir a eBR (Piso de Planta)</a>
+            <span style="font-size: 0.78rem; color: #94a3b8;">Planta: <strong>Upstream GxP</strong></span>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="panel-box">
+            <div class="panel-title">
+                <span>🗓️ Fases de Lotes Programadas (CPM Forward Scheduling)</span>
+                <span style="font-size: 0.7rem; color: #94a3b8;">Sincronizado con FaseLote</span>
+            </div>
+            <div class="weekly-grid" id="gridSemanal">
+                <!-- Se inyecta dinámicamente -->
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-title">
+                <span>⚙️ Configuración de Recursos & Roster</span>
+            </div>
+            <div class="availability-panel" id="panelDisponibilidad">
+                <div class="empty-state">
+                    👈 Selecciona una fase del calendario para asignar equipos, materiales y personal calificado.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const diasSemana = [
+            { nombre: "Mié", fecha: "2026-08-19" },
+            { nombre: "Jue", fecha: "2026-08-20" },
+            { nombre: "Vie", fecha: "2026-08-21" },
+            { nombre: "Sáb", fecha: "2026-08-22" },
+            { nombre: "Dom", fecha: "2026-08-23" },
+            { nombre: "Lun", fecha: "2026-08-24" },
+            { nombre: "Mar", fecha: "2026-08-25" }
+        ];
+
+        let fasesGlobales = [];
+        let operadoresGlobales = [];
+        let equiposGlobales = [];
+        let materialesGlobales = [];
+        let faseSeleccionadaId = null;
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        async function cargarDatosPlanificacion() {
+            try {
+                const [resFases, resOp, resEq, resMat] = await Promise.all([
+                    fetch('/api/fases-lote/'),
+                    fetch('/api/operadores/?activo=true'),
+                    fetch('/api/equipos/'),
+                    fetch('/api/materiales/')
+                ]);
+
+                if (!resFases.ok || !resOp.ok || !resEq.ok || !resMat.ok) throw new Error('Error al sincronizar datos del servidor');
+
+                fasesGlobales = await resFases.json();
+                operadoresGlobales = await resOp.json();
+                equiposGlobales = await resEq.json();
+                materialesGlobales = await resMat.json();
+                
+                renderGrillaSemanal();
+                if (faseSeleccionadaId) {
+                    renderPanelDetalle(faseSeleccionadaId);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+        function renderGrillaSemanal() {
+            const grid = document.getElementById('gridSemanal');
+            grid.innerHTML = '';
+
+            diasSemana.forEach(dia => {
+                const col = document.createElement('div');
+                col.className = 'day-column';
+
+                const partesFecha = dia.fecha.split('-');
+                col.innerHTML = `
+                    <div class="day-header">
+                        <div class="day-name">${dia.nombre}</div>
+                        <div class="day-date">${partesFecha[2]} Ago</div>
+                    </div>
+                `;
+
+                const tasksContainer = document.createElement('div');
+                tasksContainer.className = 'day-tasks';
+
+                // Filtramos las fases programadas para esta fecha
+                const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha);
+
+                if (fasesDia.length === 0) {
+                    tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin fases</div>`;
+                }
+
+                fasesDia.forEach(f => {
+                    const card = document.createElement('div');
+                    card.className = `task-card ${f.id === faseSeleccionadaId ? 'selected' : ''}`;
+                    card.onclick = () => seleccionarFase(f.id);
+
+                    let horaInicioTxt = f.hora_inicio_programada ? f.hora_inicio_programada.substring(0,5) : '00:00';
+                    let horaFinTxt = f.hora_fin_programada ? f.hora_fin_programada.substring(0,5) : '00:00';
+
+                    let assigneesHTML = '';
+                    const opsDetalles = f.operadores_asignados || [];
+                    const headcountReq = f.personal_requerido || 1;
+
+                    if (opsDetalles.length > 0) {
+                        assigneesHTML = `<div class="task-resources-preview">`;
+                        opsDetalles.forEach(a => {
+                            assigneesHTML += `<span class="tag-micro op" title="${a.operador_nombre}">👤 ${a.operador_nombre.split(' ')[0]}</span>`;
+                        });
+                        assigneesHTML += `</div>`;
+                    } else {
+                        assigneesHTML = `
+                            <div class="task-assignee-box">
+                                <span class="badge-unassigned">⚠️ Sin Asignar</span>
+                            </div>
+                        `;
+                    }
+
+                    let recursosHTML = '';
+                    if ((f.equipos_detalles && f.equipos_detalles.length) || (f.materiales_detalles && f.materiales_detalles.length)) {
+                        recursosHTML = '<div class="task-resources-preview">';
+                        (f.equipos_detalles || []).forEach(eq => {
+                            recursosHTML += `<span class="tag-micro eq" title="${eq.nombre}">⚙️ ${eq.id}</span>`;
+                        });
+                        (f.materiales_detalles || []).forEach(mat => {
+                            recursosHTML += `<span class="tag-micro mat" title="${mat.nombre}">🧪 ${mat.id}</span>`;
+                        });
+                        recursosHTML += '</div>';
+                    }
+
+                    card.innerHTML = `
+                        <div class="task-time">⏰ ${horaInicioTxt} - ${horaFinTxt}</div>
+                        <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
+                        <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between;">
+                            <span>Lote: ${f.lote_codigo}</span>
+                            <span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span>
+                        </div>
+                        ${recursosHTML}
+                        ${assigneesHTML}
+                    `;
+
+                    tasksContainer.appendChild(card);
+                });
+
+                col.appendChild(tasksContainer);
+                grid.appendChild(col);
+            });
+        }
+
+        function seleccionarFase(faseId) {
+            faseSeleccionadaId = faseId;
+            renderGrillaSemanal();
+            renderPanelDetalle(faseId);
+        }
+
+        function renderPanelDetalle(faseId) {
+            const panel = document.getElementById('panelDisponibilidad');
+            const fase = fasesGlobales.find(f => f.id === faseId);
+            if (!fase) return;
+
+            const equiposAsociadosIds = fase.equipos_asignados || [];
+            const equiposChips = equiposAsociadosIds.map(eqId => {
+                const eq = equiposGlobales.find(e => e.id === eqId);
+                return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} <span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span></span>`;
+            }).join('');
+
+            const equiposDisponiblesOpts = equiposGlobales
+                .filter(eq => !equiposAsociadosIds.includes(eq.id))
+                .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`)
+                .join('');
+
+            const materialesAsociadosIds = fase.materiales_asignados || [];
+            const materialesChips = materialesAsociadosIds.map(matId => {
+                const mat = materialesGlobales.find(m => m.id === matId);
+                return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} <span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'material', '${matId}', 'remover')">✕</span></span>`;
+            }).join('');
+
+            const materialesDisponiblesOpts = materialesGlobales
+                .filter(mat => !materialesAsociadosIds.includes(mat.id))
+                .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`)
+                .join('');
+
+            const operadoresAsignados = fase.operadores_asignados || [];
+            const operadoresAsignadosIds = operadoresAsignados.map(a => a.operador);
+            const headcountReq = fase.personal_requerido || 1;
+
+            const operadoresChips = operadoresAsignados.map(a => {
+                return `<span class="resource-chip op">👤 ${a.operador_nombre} (${a.rol_nombre}) <span class="btn-remove-tag" onclick="removerAsignacionOperador(${a.id})">✕</span></span>`;
+            }).join('');
+
+            let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
+            let horaFinTxt = fase.hora_fin_programada ? fase.hora_fin_programada.substring(0,5) : '00:00';
+
+            let html = `
+                <div class="info-card">
+                    <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
+                    <div>Lote: <strong>${fase.lote_codigo}</strong></div>
+                    <div>📅 Fecha: <strong>${fase.fecha_programada}</strong></div>
+                    <div>⏰ Horario: <strong>${horaInicioTxt} - ${horaFinTxt} hrs</strong></div>
+                    <div>👥 Personal Asignado / Requerido: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
+
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">OPERADORES ASIGNADOS (GxP):</div>
+                        <div class="resource-tags-container">
+                            ${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Ningún operador asignado</span>'}
+                        </div>
+                    </div>
+
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">EQUIPOS ASIGNADOS:</div>
+                        <div class="resource-tags-container">
+                            ${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
+                        </div>
+                        <select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')">
+                            <option value="" disabled selected>+ Agregar Equipo...</option>
+                            ${equiposDisponiblesOpts}
+                        </select>
+                    </div>
+
+                    <div class="resource-section" style="margin-top: 0.5rem;">
+                        <div class="resource-title">MATERIALES Y INSUMOS:</div>
+                        <div class="resource-tags-container">
+                            ${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
+                        </div>
+                        <select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'material', this.value, 'agregar')">
+                            <option value="" disabled selected>+ Agregar Material...</option>
+                            ${materialesDisponiblesOpts}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">
+                    Operadores Disponibles en Turno (${fase.fecha_programada}):
+                </div>
+            `;
+
+            // Validación estricta por horario y turno en el Roster
+            const operadoresDisponibles = operadoresGlobales.filter(op => {
+                if (operadoresAsignadosIds.includes(op.id)) return false;
+
+                const turnosOp = op.turnos || [];
+                const turnoDia = turnosOp.find(t => t.fecha === fase.fecha_programada);
+
+                if (!turnoDia || !turnoDia.codigo_turno || turnoDia.codigo_turno === 'OFF') {
+                    return false;
+                }
+
+                return true;
+            });
+
+            if (operadoresDisponibles.length === 0) {
+                html += `<div class="empty-state">⚠️ No hay operadores con turno activo en el Roster para esta fecha.</div>`;
+            }
+
+            operadoresDisponibles.forEach(op => {
+                const turnoDia = op.turnos.find(t => t.fecha === fase.fecha_programada);
+                html += `
+                    <div class="op-availability-card available">
+                        <div class="op-header">
+                            ${op.foto ? `<img src="${op.foto}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;">` : `<div style="width:28px; height:28px; border-radius:50%; background:#334155;"></div>`}
+                            <div>
+                                <div class="op-name">${op.nombre}</div>
+                                <div class="op-status-text">Turno: <strong>${turnoDia.codigo_turno}</strong></div>
+                            </div>
+                        </div>
+                        <button class="btn-assign" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
+                    </div>
+                `;
+            });
+
+            panel.innerHTML = html;
+        }
+
+        async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
+            if (!recursoId) return;
+            const fase = fasesGlobales.find(f => f.id === faseId);
+            if (!fase) return;
+
+            let nuevosEquipos = [...(fase.equipos_asignados || [])];
+            let nuevosMateriales = [...(fase.materiales_asignados || [])];
+
+            if (tipo === 'equipo') {
+                if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
+                if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
+            } else if (tipo === 'material') {
+                if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
+                if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
+            }
+
+            try {
+                const response = await fetch(`/api/fases-lote/${faseId}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        equipos_asignados: nuevosEquipos,
+                        materiales_asignados: nuevosMateriales
+                    })
+                });
+
+                if (!response.ok) throw new Error('Error al actualizar recursos de la fase');
+                await cargarDatosPlanificacion();
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        async function asignarOperadorFase(faseId, operadorId, rolId) {
+            try {
+                const response = await fetch('/api/asignaciones-operador/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        fase_lote: faseId,
+                        operador: operadorId,
+                        rol_ejercido: rolId,
+                        horas_invertidas: 0.0
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(JSON.stringify(errData));
+                }
+                await cargarDatosPlanificacion();
+            } catch (error) {
+                alert("Error al asignar operador: " + error.message);
+            }
+        }
+
+        async function removerAsignacionOperador(asignacionId) {
+            try {
+                const response = await fetch(`/api/asignaciones-operador/${asignacionId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                });
+
+                if (!response.ok) throw new Error('Error al remover la asignación');
+                await cargarDatosPlanificacion();
+            } catch (error) {
+                alert("Error: " + error.message);
+            }
+        }
+
+        cargarDatosPlanificacion();
+    </script>
+</body>
+</html>

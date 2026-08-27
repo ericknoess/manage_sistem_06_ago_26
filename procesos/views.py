@@ -1,12 +1,12 @@
 # procesos/views.py
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+ 
 from .models import (
     ProcesoMaestro, OperacionProceso,
     LoteProduccion, FaseLote, AsignacionFaseOperador
@@ -75,6 +75,7 @@ class OperacionProcesoViewSet(viewsets.ModelViewSet):
 class LoteProduccionViewSet(viewsets.ModelViewSet):
     """
     API endpoint para la gestión de Lotes Reales (eBR).
+    Incluye algoritmo Forward Scheduling para programación de tareas MES.
     """
     queryset = LoteProduccion.objects.prefetch_related('fases__operadores_asignados').all().order_by('-created_at')
     serializer_class = LoteProduccionSerializer
@@ -86,10 +87,34 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lote = serializer.save()
 
         operaciones_maestras = lote.proceso_maestro.operaciones.all()
-        fases_a_crear = [
-            FaseLote(lote=lote, operacion_maestra=op, estado='PENDIENTE')
-            for op in operaciones_maestras
-        ]
+        
+        # --- FORWARD SCHEDULING ---
+        calculadora = CPMCalculatorService(operaciones_maestras)
+        resultado_cpm = calculadora.calcular_cpm()
+        cpm_dict = {item['id']: item for item in resultado_cpm['operaciones_cpm']}
+        
+        inicio_lote = lote.fecha_inicio_planeada
+        
+        fases_a_crear = []
+        for op in operaciones_maestras:
+            cpm_info = cpm_dict.get(op.id)
+            if cpm_info:
+                dt_inicio = inicio_lote + timedelta(hours=cpm_info['es'])
+                dt_fin = inicio_lote + timedelta(hours=cpm_info['ef'])
+                
+                fases_a_crear.append(
+                    FaseLote(
+                        lote=lote, 
+                        operacion_maestra=op, 
+                        estado='PENDIENTE',
+                        fecha_programada=dt_inicio.date(),
+                        hora_inicio_programada=dt_inicio.time(),
+                        hora_fin_programada=dt_fin.time()
+                    )
+                )
+            else:
+                fases_a_crear.append(FaseLote(lote=lote, operacion_maestra=op, estado='PENDIENTE'))
+
         FaseLote.objects.bulk_create(fases_a_crear)
 
         headers = self.get_success_headers(serializer.data)
@@ -109,7 +134,6 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
     def cambiar_estado(self, request, pk=None):
         fase = self.get_object()
         
-        # REGLA GxP 3: Bloqueo de Inmutabilidad de Lote (Data Lock)
         if fase.lote.estado == 'COMPLETADO':
             return Response({
                 "error": "Violación GxP (Data Lock): El Lote de Producción ya está cerrado y liberado. Sus registros son estrictamente inmutables."
@@ -121,7 +145,6 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         if nuevo_estado not in estados_validos:
             return Response({"error": "Estado GxP no válido."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # REGLA GxP 1: Prevención de Tareas Fantasma
         if nuevo_estado == 'COMPLETADA' and not fase.operadores_asignados.exists():
             return Response({
                 "error": "Violación GxP: No se puede completar una fase operativa sin haber asignado al menos a un operador responsable."
@@ -137,7 +160,6 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         fase.estado = nuevo_estado
         fase.save()
 
-        # Automatización del Lote (Padre)
         lote = fase.lote
         todas_fases = lote.fases.all()
         
@@ -158,33 +180,53 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
 class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
     """
     API endpoint para auditar y registrar a los operadores en tareas específicas GxP.
+    Incluye validación estricta contra solapamiento de horarios (Time Overlap Prevention).
     """
     queryset = AsignacionFaseOperador.objects.select_related('operador', 'rol_ejercido').all()
     serializer_class = AsignacionFaseOperadorSerializer
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        """
-        Sobreescritura para inyectar validación de estado de la fase y del lote antes de asignar.
-        """
         fase_id = request.data.get('fase_lote')
+        operador_id = request.data.get('operador')
         
         try:
-            fase = FaseLote.objects.get(id=fase_id)
+            fase_actual = FaseLote.objects.get(id=fase_id)
         except FaseLote.DoesNotExist:
             return Response({"error": "La fase especificada no existe."}, status=status.HTTP_404_NOT_FOUND)
 
         # REGLA GxP 3: Bloqueo de Inmutabilidad de Lote (Data Lock)
-        if fase.lote.estado == 'COMPLETADO':
+        if fase_actual.lote.estado == 'COMPLETADO':
             return Response({
-                "error": "Violación GxP (Data Lock): No se puede asignar personal a un Lote de Producción que ya fue cerrado y liberado."
+                "error": "Violación GxP (Data Lock): No se puede asignar personal a un Lote de Producción cerrado y liberado."
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # REGLA GxP 2: Prevención de Asignaciones Póstumas a fases individuales
-        if fase.estado in ['COMPLETADA', 'OMITIDA']:
+        # REGLA GxP 2: Prevención de Asignaciones Póstumas
+        if fase_actual.estado in ['COMPLETADA', 'OMITIDA']:
             return Response({
-                "error": f"Violación GxP: No se puede modificar el registro de personal de una fase que ya se encuentra {fase.estado}."
+                "error": f"Violación GxP: No se puede modificar el personal de una fase que ya se encuentra {fase_actual.estado}."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Flujo normal de creación provisto por DRF si pasa las validaciones
+        # --- VALIDACIÓN DE CRUCE DE HORARIOS (TIME OVERLAP PREVENTION) ---
+        if fase_actual.fecha_programada and fase_actual.hora_inicio_programada and fase_actual.hora_fin_programada:
+            asignaciones_existentes = AsignacionFaseOperador.objects.filter(
+                operador_id=operador_id,
+                fase_lote__fecha_programada=fase_actual.fecha_programada
+            ).exclude(fase_lote=fase_actual).select_related('fase_lote')
+
+            ini_nueva = fase_actual.hora_inicio_programada
+            fin_nueva = fase_actual.hora_fin_programada
+
+            for asig in asignaciones_existentes:
+                fase_existente = asig.fase_lote
+                ini_ex = fase_existente.hora_inicio_programada
+                fin_ex = fase_existente.hora_fin_programada
+
+                if ini_ex and fin_ex:
+                    # Condición matemática estricta de solapamiento de intervalos
+                    if ini_nueva < fin_ex and fin_nueva > ini_ex:
+                        return Response({
+                            "error": f"⚠️ Conflicto de turnos GxP: El operador ya está asignado a la tarea [{fase_existente.operacion_maestra.identificador_paso}] {fase_existente.operacion_maestra.nombre} en el horario de {ini_ex.strftime('%H:%M')} a {fin_ex.strftime('%H:%M')}."
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
         return super().create(request, *args, **kwargs)
