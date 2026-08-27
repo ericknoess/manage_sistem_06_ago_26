@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from .models import (
     TipoTurno, 
     Cuadrilla, 
-    RolOperador,  # <-- Importación del modelo de Roles
+    RolOperador,  
     Operador, 
     SecuenciaRol, 
     TurnoDia, 
@@ -24,7 +24,7 @@ from .models import (
 from .serializers import (
     TipoTurnoSerializer,
     CuadrillaSerializer,
-    RolOperadorSerializer,  # <-- Importación del Serializer de Roles
+    RolOperadorSerializer,  
     MoverColaboradoresSerializer,
     OperadorSerializer,
     SecuenciaRolSerializer,
@@ -147,6 +147,25 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
     queryset = TurnoDia.objects.all()
     serializer_class = TurnoDiaSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        """
+        Soporta filtrado estándar y consulta por rango de fechas (start_date y end_date) 
+        para abastecer vistas de consulta bi-semanales.
+        """
+        queryset = TurnoDia.objects.select_related('operador', 'tipo_turno', 'incidencia').all().order_by('fecha', 'operador__nombre')
+        
+        start_date = self.request.query_params.get('start_date', None)
+        end_date = self.request.query_params.get('end_date', None)
+
+        if start_date and end_date:
+            try:
+                f_inicio = datetime.strptime(start_date, '%Y-%m-%d').date()
+                f_fin = datetime.strptime(end_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(fecha__range=[f_inicio, f_fin])
+            except ValueError:
+                pass
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """Permite crear o actualizar (Upsert) un turno individual asociado al catálogo maestro TipoTurno con manejo de errores seguro."""

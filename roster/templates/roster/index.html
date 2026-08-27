@@ -7,34 +7,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Módulo Control en Proceso - Upstream GxP</title>
     
-    <!-- Tailwind CSS (Solo para desarrollo) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- GSAP para animaciones fluidas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     
     <style>
         .no-select { user-select: none; }
-        /* Mejora sutil del scrollbar para la tabla Enterprise */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; border: 1px solid #0f172a; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* Garantizar que la tabla se expanda correctamente */
+        table { table-layout: fixed; width: 100%; min-width: max-content; }
+        .day-col { min-width: 38px; width: 40px; } 
     </style>
 </head>
-<body class="bg-slate-900 text-slate-200 min-h-screen font-sans no-select overflow-x-hidden flex flex-col">
+<!-- CORRECCIÓN UX/UI: Cambiamos min-h-screen por h-screen para forzar límites estrictos en el viewport -->
+<body class="bg-slate-900 text-slate-200 h-screen font-sans no-select overflow-hidden flex flex-col">
 
     <!-- HEADER INDUSTRIAL -->
-    <header class="bg-slate-950 border-b border-cyan-900/50 p-4 sticky top-0 z-50 shadow-lg shrink-0">
-        <div class="flex flex-wrap justify-between items-center max-w-screen-2xl mx-auto gap-4">
+    <header class="bg-slate-950 border-b border-cyan-900/50 p-4 shrink-0 z-[100] shadow-lg">
+        <div class="flex flex-wrap justify-between items-center w-full px-2 md:px-4 gap-4">
             <div>
                 <h1 class="text-xl font-black text-cyan-500 tracking-wider">BIOPROCESOS UPSTREAM</h1>
                 <p class="text-xs text-slate-400 font-mono">Plataforma Enterprise de Planificación y Control de Turnos (GxP Ready)</p>
             </div>
             
-            <!-- CONTROLES DE FECHA Y GESTIÓN -->
             <div class="flex items-center gap-4 flex-wrap">
-                <!-- Botones de Gestión de Personal y Carga Masiva -->
                 <div class="flex gap-2">
                     <button id="btnOpenCuadrillaModal" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>+ Cuadrilla</span>
@@ -48,12 +47,14 @@
                     <button id="btnOpenCargaMasivaModal" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>⚡ Carga Masiva</span>
                     </button>
+                    <a href="/roster/bisemanal/" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1" style="text-decoration: none;">
+                        <span>📅 Vista 14 Días</span>
+                    </a>
                     <a href="/procesos/" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1" style="text-decoration: none;">
                         <span>🧪 Ir a Procesos (CPM)</span>
                     </a>
                 </div>
 
-                <!-- Navegador de Meses -->
                 <div class="flex bg-slate-800 rounded border border-slate-700 p-1">
                     <button id="prevMonth" class="px-3 py-1 hover:bg-slate-700 text-slate-300 rounded transition-colors text-sm font-bold">◄</button>
                     <div id="currentDateDisplay" class="px-4 py-1 text-cyan-400 font-bold min-w-[140px] text-center border-l border-r border-slate-700 text-sm flex items-center justify-center">Cargando...</div>
@@ -64,41 +65,27 @@
     </header>
 
     <!-- CONTENEDOR PRINCIPAL DE LA MATRIZ -->
-    <main class="p-4 max-w-screen-2xl mx-auto w-full flex-1 flex flex-col">
-        <div class="bg-slate-800/50 rounded-xl border border-slate-700 shadow-2xl overflow-hidden relative flex-1 flex flex-col">
+    <!-- CORRECCIÓN UX/UI: Agregado h-full y min-h-0 para que el flexbox no se rompa -->
+    <main class="p-2 md:p-4 w-full flex-1 flex flex-col min-h-0 h-full overflow-hidden">
+        <div class="bg-slate-800/50 rounded-xl border border-slate-700 shadow-2xl flex-1 flex flex-col overflow-hidden min-h-0 h-full">
             
-            <!-- CONTENEDOR CON SCROLL (Altura limitada y desbordamiento automático) -->
-            <div class="overflow-auto max-h-[80vh] w-full relative custom-scrollbar">
+            <!-- CONTENEDOR CON SCROLL AISLADO -->
+            <div class="overflow-auto flex-1 h-full w-full custom-scrollbar relative">
                 <table class="w-full border-collapse text-left">
-                    <!-- ENCABEZADO STICKY -->
-                    <thead class="bg-slate-950 border-b-2 border-cyan-800 sticky top-0 z-30 shadow-md">
-                        <tr>
-                            <!-- ESQUINA STICKY (Intersecta X y Y - Z-Index 40) -->
-                            <th class="p-3 sticky left-0 top-0 bg-slate-950 z-40 border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest w-48 shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
-                                Operador / Cuadrilla
-                            </th>
-                            <script>
-                                for(let i=1; i<=31; i++) {
-                                    // FONDO SÓLIDO (bg-slate-950) para evitar transparencias al subir las filas
-                                    document.write(`<th class="p-2 border-r border-slate-800 text-center text-[10px] text-slate-500 font-mono w-8 min-w-[32px] bg-slate-950">${i}</th>`);
-                                }
-                            </script>
+                    <thead class="bg-slate-950 border-b-2 border-cyan-800 shadow-md">
+                        <tr id="rosterDaysHeader">
+                            <!-- Inyectado dinámicamente desde roster.js -->
                         </tr>
                     </thead>
                     <tbody id="tbodyRoster" class="bg-slate-900/50">
-                        <tr>
-                            <td colspan="32" class="p-12 text-center text-slate-500 font-mono animate-pulse">
-                                Cargando matriz operacional desde el servidor...
-                            </td>
-                        </tr>
+                        <tr><td colspan="32" class="p-12 text-center text-slate-500 font-mono animate-pulse">Cargando matriz...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
         
-        <!-- LEYENDA GxP DINÁMICA -->
         <div id="leyendaGxpContainer" class="mt-4 flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 justify-center shrink-0">
-            <span class="text-slate-500 italic">Cargando catálogo de turnos...</span>
+            <span class="text-slate-500 italic">Cargando catálogo...</span>
         </div>
     </main>
 
@@ -123,7 +110,7 @@
         </div>
     </div>
 
-    <!-- MODAL: NUEVO OPERADOR (Actualizado con Catálogo de Roles Dinámico) -->
+    <!-- MODAL: NUEVO OPERADOR -->
     <div id="modalOperador" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div id="modalOperadorContent" class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h3 class="text-lg font-bold text-emerald-400 mb-4">Registrar Nuevo Operador GxP</h3>

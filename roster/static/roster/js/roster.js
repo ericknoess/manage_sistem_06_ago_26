@@ -133,8 +133,48 @@ document.addEventListener('DOMContentLoaded', () => {
         contenedorLeyenda.innerHTML = html;
     }
 
+    // NUEVO: Generación Dinámica de Cabeceras (Sticky y con Nombres de Día)
+    function renderRosterHeaders() {
+        const headerRow = document.getElementById('rosterDaysHeader');
+        if (!headerRow) return;
+
+        // Celda estática para el operador (Fija a la izquierda y arriba)
+        headerRow.innerHTML = `
+            <th class="p-3 sticky left-0 top-0 bg-slate-950 z-[60] border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest min-w-[280px] w-[280px] shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
+                Operador / Cuadrilla
+            </th>
+        `;
+
+        const diasEnMes = new Date(currentYear, currentMonth, 0).getDate();
+        const diasNombresCortos = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"];
+
+        for (let dia = 1; dia <= 31; dia++) {
+            if (dia <= diasEnMes) {
+                const d = new Date(currentYear, currentMonth - 1, dia);
+                const nombreDia = diasNombresCortos[d.getDay()];
+                // Resaltamos visualmente Sábados y Domingos
+                const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                const colorTexto = isWeekend ? 'text-amber-500' : 'text-cyan-500';
+
+                headerRow.innerHTML += `
+                    <th class="p-1 border-r border-slate-800 text-center day-col bg-slate-950 sticky top-0 z-40 shadow-sm">
+                        <div class="text-[10px] font-bold ${colorTexto} leading-none mb-0.5">${nombreDia}</div>
+                        <div class="text-[11px] font-mono font-bold text-slate-200">${dia}</div>
+                    </th>
+                `;
+            } else {
+                // Columnas vacías para meses de 28, 29 o 30 días
+                headerRow.innerHTML += `
+                    <th class="p-1 border-r border-slate-800/30 text-center font-mono day-col bg-slate-950/40 sticky top-0 z-40">-</th>
+                `;
+            }
+        }
+    }
+
     async function loadRosterData() {
         try {
+            renderRosterHeaders(); // Generamos las cabeceras antes de traer los datos
+            
             tbodyRoster.innerHTML = `<tr><td colspan="32" class="p-12 text-center text-cyan-400 font-mono animate-pulse">Sincronizando matriz operacional (${mesesNombres[currentMonth - 1]} ${currentYear})...</td></tr>`;
             
             await cargarTiposTurno();
@@ -213,7 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${op.foto ? `<img src="${op.foto}" class="w-7 h-7 rounded-full object-cover border border-slate-600">` : `<div class="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">${op.nombre.substring(0,2).toUpperCase()}</div>`}
                             <div class="overflow-hidden">
                                 <p class="text-xs font-bold text-slate-200 truncate" title="${op.nombre}">${op.nombre}</p>
-                                <!-- CORRECCIÓN: Se consume op.rol_nombre para evitar 'undefined' -->
                                 <p class="text-[10px] font-mono text-cyan-400">${op.codigo_empleado || 'S/C'} | <span class="text-slate-400">${op.rol_nombre || 'Sin Rol'}</span></p>
                             </div>
                         </div>
@@ -990,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (err) {
                     operadorFeedback.textContent = err.message;
                     operadorFeedback.className = 'mt-2 p-2 rounded text-xs text-center bg-red-900/50 text-red-300 border border-red-700';
-                    operadorFeedback.classList.add('hidden'); // Corregido para remover o mostrar correctamente
+                    operadorFeedback.classList.add('hidden');
                 }
             });
         }

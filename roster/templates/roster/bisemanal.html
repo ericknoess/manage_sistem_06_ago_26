@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta Bi-semanal por Cuadrillas - Roster GxP</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --group-bg: #111827;
+        }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            gap: 0.75rem;
+        }
+
+        .header-bar {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn:hover { background-color: var(--border-color); }
+        .btn-primary { background-color: var(--accent); color: var(--bg-dark); border: none; }
+
+        .table-container {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            flex: 1;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.72rem;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 5px 6px;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: var(--bg-dark);
+            color: var(--muted);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            text-align: center;
+            font-size: 0.7rem;
+        }
+
+        .operator-col {
+            position: sticky;
+            left: 0;
+            background-color: var(--panel-bg);
+            z-index: 5;
+            font-weight: 500;
+            font-size: 0.7rem;
+            min-width: 180px;
+        }
+
+        th.operator-col { z-index: 15; background-color: var(--bg-dark); }
+
+        .cuadrilla-header-row td {
+            background-color: var(--group-bg);
+            color: var(--accent);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 6px 8px;
+            font-size: 0.68rem;
+        }
+
+        .operator-name {
+            font-weight: bold;
+            color: var(--text);
+            display: block;
+            padding: 2px 0;
+        }
+
+        /* Estilos para la leyenda de turnos */
+        .leyenda-container {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .leyenda-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            background-color: var(--panel-bg);
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .leyenda-color-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-bar">
+        <div class="title">
+            <span>📊 Consulta Bi-semanal por Cuadrillas (14 Días)</span>
+        </div>
+        <div class="nav-controls">
+            <button class="btn" onclick="cambiarBloque(-14)">◀ 2 Semanas Anteriores</button>
+            <button class="btn" onclick="irSemanaActual()">Esta Semana (Lunes)</button>
+            <button class="btn" onclick="cambiarBloque(14)">2 Semanas Siguientes ▶</button>
+            <a href="/roster/" class="btn btn-primary">Volver al Roster Operativo</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table id="biWeeklyTable">
+            <thead>
+                <tr id="tableHeaders">
+                    <th class="operator-col">Colaborador / Cuadrilla</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="15" style="text-align:center; color: var(--muted); padding: 2rem;">Cargando matriz bi-semanal de turnos...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- CONTENEDOR PARA LA LEYENDA DE TURNOS -->
+    <div id="leyendaGxpContainer" class="leyenda-container">
+        <span style="font-style: italic;">Cargando catálogo de turnos...</span>
+    </div>
+
+    <script>
+        const diasSemanaNombres = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+        function obtenerLunesActual(pivotDate = new Date()) {
+            let d = new Date(pivotDate);
+            let day = d.getDay();
+            let diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+
+        let fechaLunesPivot = obtenerLunesActual(new Date());
+
+        function formatearFechaLocal(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function obtenerRango14DiasDesdeLunes(lunesDate) {
+            let start = new Date(lunesDate);
+            let days = [];
+            for (let i = 0; i < 14; i++) {
+                let d = new Date(start);
+                d.setDate(start.getDate() + i);
+                days.push({
+                    fechaStr: formatearFechaLocal(d),
+                    nombreDia: diasSemanaNombres[d.getDay()],
+                    diaMes: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+                });
+            }
+            return {
+                start: days[0].fechaStr,
+                end: days[days.length - 1].fechaStr,
+                days: days
+            };
+        }
+
+        async function fetchAllPages(url) {
+            let results = [];
+            let currentUrl = url;
+            
+            while (currentUrl) {
+                const response = await fetch(currentUrl, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                const data = await response.json();
+                
+                if (data && data.results && Array.isArray(data.results)) {
+                    results = results.concat(data.results);
+                    currentUrl = data.next;
+                } else if (Array.isArray(data)) {
+                    results = results.concat(data);
+                    break; 
+                } else {
+                    break;
+                }
+            }
+            return results;
+        }
+
+        // Función para renderizar la leyenda dinámica
+        function renderizarLeyenda(tiposTurno) {
+            const contenedor = document.getElementById('leyendaGxpContainer');
+            if (!tiposTurno || tiposTurno.length === 0) {
+                contenedor.innerHTML = '<span style="font-style: italic;">No hay tipos de turno activos configurados.</span>';
+                return;
+            }
+
+            let html = '';
+            tiposTurno.filter(t => t.activo && t.codigo).forEach(t => {
+                html += `
+                    <div class="leyenda-item">
+                        <div class="leyenda-color-box" style="background-color: ${t.color_fondo}; border: 1px solid ${t.color_texto};"></div>
+                        <span style="color: var(--text); font-weight: bold;">${t.codigo}:</span>
+                        <span>${t.nombre}</span>
+                    </div>
+                `;
+            });
+            contenedor.innerHTML = html;
+        }
+
+        async function cargarVistaBisemanal() {
+            const rango = obtenerRango14DiasDesdeLunes(fechaLunesPivot);
+            
+            try {
+                const [cuadrillas, tiposTurno] = await Promise.all([
+                    fetchAllPages('/api/cuadrillas/'),
+                    fetchAllPages('/api/tipos-turno/')
+                ]);
+
+                // 1. Pintamos la leyenda dinámica
+                renderizarLeyenda(tiposTurno);
+
+                // 2. Pintamos la tabla de turnos
+                renderizarTabla(rango.days, cuadrillas);
+            } catch (error) {
+                console.error("Error al cargar la matriz:", error);
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="15" style="text-align:center; color: #ef4444; padding: 2rem;">Error al cargar datos: ${error.message}</td></tr>`;
+            }
+        }
+
+        function renderizarTabla(daysObjArray, cuadrillas) {
+            const headerRow = document.getElementById('tableHeaders');
+            const tbody = document.getElementById('tableBody');
+
+            let headerHTML = `<th class="operator-col" style="min-width: 180px;">Colaborador</th>`;
+            daysObjArray.forEach(d => {
+                headerHTML += `<th style="text-align: center;"><div style="font-size: 0.65rem; color: var(--accent);">${d.nombreDia}</div><div>${d.diaMes}</div></th>`;
+            });
+            headerRow.innerHTML = headerHTML;
+
+            if (!cuadrillas || cuadrillas.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${daysObjArray.length + 1}" style="text-align:center; color: var(--muted); padding: 2rem;">No hay cuadrillas registradas.</td></tr>`;
+                return;
+            }
+
+            let bodyHTML = '';
+            cuadrillas.forEach(cuadrilla => {
+                bodyHTML += `<tr class="cuadrilla-header-row">`;
+                bodyHTML += `<td colspan="${daysObjArray.length + 1}">📁 Cuadrilla: ${cuadrilla.nombre || cuadrilla.identificador}</td>`;
+                bodyHTML += `</tr>`;
+
+                const operadores = cuadrilla.operadores || [];
+                if (operadores.length === 0) {
+                    bodyHTML += `<tr><td colspan="${daysObjArray.length + 1}" style="color: var(--muted); padding-left: 20px;">Sin operadores asignados a esta cuadrilla.</td></tr>`;
+                } else {
+                    operadores.forEach(op => {
+                        bodyHTML += `<tr class="hover:bg-slate-800/30 transition-colors">`;
+                        bodyHTML += `<td class="operator-col" style="padding-left: 15px;">`;
+                        bodyHTML += `<span class="operator-name">👤 ${op.nombre}</span>`;
+                        bodyHTML += `</td>`;
+
+                        daysObjArray.forEach(d => {
+                            const turnoObj = op.turnos ? op.turnos.find(t => t.fecha === d.fechaStr) : null;
+                            const codigoTurno = turnoObj ? (turnoObj.codigo_turno || turnoObj.codigo) : '';
+                            
+                            if (turnoObj && codigoTurno) {
+                                let bg = turnoObj.color_fondo || '#3b82f6';
+                                let fg = turnoObj.color_texto || '#ffffff';
+                                
+                                // APLICAMOS EL ESTILO DIRECTAMENTE A LA CELDA <td>
+                                bodyHTML += `<td style="text-align:center; cursor: default; background-color: ${bg}; color: ${fg}; font-weight: bold; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);">
+                                                ${codigoTurno}
+                                             </td>`;
+                            } else {
+                                bodyHTML += `<td style="text-align:center; color: #475569; font-weight: bold; background-color: transparent;">-</td>`;
+                            }
+                        });
+
+                        bodyHTML += `</tr>`;
+                    });
+                }
+            });
+
+            tbody.innerHTML = bodyHTML;
+        }
+
+        function cambiarBloque(dias) {
+            fechaLunesPivot.setDate(fechaLunesPivot.getDate() + dias);
+            cargarVistaBisemanal();
+        }
+
+        function irSemanaActual() {
+            fechaLunesPivot = obtenerLunesActual(new Date());
+            cargarVistaBisemanal();
+        }
+
+        cargarVistaBisemanal();
+    </script>
+</body>
+</html>
