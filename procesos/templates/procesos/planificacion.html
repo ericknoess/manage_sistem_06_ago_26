@@ -30,6 +30,11 @@
             gap: 0.75rem;
         }
 
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
         .supervisor-toolbar {
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
@@ -50,8 +55,14 @@
             gap: 0.75rem;
         }
 
-        .btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; }
+        .btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; transition: all 0.2s; }
         .btn-primary:hover { opacity: 0.9; }
+
+        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+        .btn-secondary:hover { background-color: #475569; }
+
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 4px; border-radius: 4px; transition: background-color 0.2s; }
+        .btn-icon:hover { background-color: rgba(255,255,255,0.1); }
 
         .dashboard-container {
             display: grid;
@@ -82,6 +93,36 @@
             align-items: center;
         }
 
+        .weekly-nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-nav {
+            background-color: var(--border-color);
+            color: var(--text);
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-nav:hover {
+            background-color: var(--accent);
+            color: #0f172a;
+            font-weight: bold;
+        }
+        
+        .current-week-label {
+            font-size: 0.75rem;
+            color: var(--text);
+            font-weight: bold;
+            min-width: 140px;
+            text-align: center;
+        }
+
         .weekly-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
@@ -109,6 +150,8 @@
 
         .day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
         .day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
+        .day-header.today { background-color: rgba(56, 189, 248, 0.1); border-bottom: 2px solid var(--accent); }
+        .day-header.today .day-date { color: var(--accent); }
 
         .day-tasks {
             padding: 0.4rem;
@@ -134,7 +177,7 @@
         .task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
         .task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
 
-        .task-time { font-size: 0.65rem; font-weight: bold; color: var(--accent); }
+        .task-time { font-size: 0.65rem; font-weight: bold; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
         .task-title { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
 
         .task-resources-preview {
@@ -168,6 +211,7 @@
 
         .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
         .badge-headcount { font-size: 0.62rem; color: #94a3b8; }
+        .badge-delay { font-size: 0.6rem; color: var(--danger); border: 1px solid var(--danger); background: rgba(239, 68, 68, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
 
         .availability-panel {
             padding: 0.75rem;
@@ -266,6 +310,18 @@
         .btn-assign:hover { opacity: 0.9; }
 
         .empty-state { text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 2rem; }
+
+        /* MODALES */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.8rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .modal-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+        .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+        .form-control { background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; }
+        .form-control:focus { border-color: var(--accent); }
+        textarea.form-control { resize: vertical; }
     </style>
 </head>
 <body>
@@ -284,10 +340,16 @@
         <div class="panel-box">
             <div class="panel-title">
                 <span>🗓️ Fases de Lotes Programadas (CPM Forward Scheduling)</span>
-                <span style="font-size: 0.7rem; color: #94a3b8;">Sincronizado con FaseLote</span>
+                
+                <div class="weekly-nav-controls">
+                    <button class="btn-nav" onclick="cambiarSemana(-1)">⬅️ Ant</button>
+                    <button class="btn-nav" onclick="irHoy()" title="Volver a la semana actual">Hoy</button>
+                    <span class="current-week-label" id="labelSemanaActual">Cargando...</span>
+                    <button class="btn-nav" onclick="cambiarSemana(1)">Sig ➡️</button>
+                </div>
             </div>
             <div class="weekly-grid" id="gridSemanal">
-                <!-- Se inyecta dinámicamente -->
+                <!-- Se inyecta dinámicamente el calendario -->
             </div>
         </div>
 
@@ -303,22 +365,113 @@
         </div>
     </div>
 
+    <!-- MODAL DE REPROGRAMACIÓN (RESCHEDULING) -->
+    <div class="modal-overlay" id="modalReprogramar" style="display: none;">
+        <div class="modal-content" style="width: 450px;">
+            <div class="modal-header">
+                <h3>⏳ Reprogramar Tarea (Ajuste GxP)</h3>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                Altera el forecast actual del plan de producción. Esta acción medirá el retraso respecto a la línea base y quedará registrada en la auditoría.
+            </div>
+            
+            <input type="hidden" id="reprogramarFaseId">
+            
+            <div style="display: flex; gap: 0.8rem; margin-top: 0.5rem;">
+                <div class="form-group" style="flex: 2;">
+                    <label>Nueva Fecha de Inicio</label>
+                    <input type="date" id="inputReprogramarFecha" class="form-control" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Nueva Hora</label>
+                    <input type="time" id="inputReprogramarHora" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Motivo Estandarizado (GxP)</label>
+                <select id="selectMotivoReprogramacion" class="form-control" required>
+                    <option value="">-- Seleccionar Motivo --</option>
+                    <option value="MANTENIMIENTO">⚙️ Mantenimiento de Equipo</option>
+                    <option value="INSUMOS">📦 Falta / Retraso de Insumos</option>
+                    <option value="PERSONAL">👥 Ausentismo / Falta de Personal</option>
+                    <option value="CALIDAD">🔬 Desviación de Calidad previa</option>
+                    <option value="PRODUCCION">⏳ Retraso acumulado en producción</option>
+                    <option value="OTRO">📝 Otro (Especificar en notas)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Notas / Justificación del Ajuste</label>
+                <textarea id="inputNotasReprogramacion" class="form-control" rows="3" placeholder="Detalle la causa raíz de la desviación del schedule..."></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalReprogramar()">Cancelar</button>
+                <button class="btn-primary" onclick="ejecutarReprogramacionAPI()">Confirmar Cambio</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        const diasSemana = [
-            { nombre: "Mié", fecha: "2026-08-19" },
-            { nombre: "Jue", fecha: "2026-08-20" },
-            { nombre: "Vie", fecha: "2026-08-21" },
-            { nombre: "Sáb", fecha: "2026-08-22" },
-            { nombre: "Dom", fecha: "2026-08-23" },
-            { nombre: "Lun", fecha: "2026-08-24" },
-            { nombre: "Mar", fecha: "2026-08-25" }
-        ];
+        // --- 1. GESTOR DE ESTADO TEMPORAL ---
+        let currentDateBase = new Date();
+        let diasSemana = [];
+        const nombresDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+        const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
         let fasesGlobales = [];
         let operadoresGlobales = [];
         let equiposGlobales = [];
         let materialesGlobales = [];
         let faseSeleccionadaId = null;
+
+        // --- 2. LÓGICA DE CÁLCULO DE FECHAS ---
+        function obtenerLunes(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+
+        function generarDiasSemana() {
+            diasSemana = [];
+            let currentDay = new Date(currentDateBase);
+            currentDay.setHours(0,0,0,0);
+            
+            for (let i = 0; i < 7; i++) {
+                const year = currentDay.getFullYear();
+                const month = String(currentDay.getMonth() + 1).padStart(2, '0');
+                const day = String(currentDay.getDate()).padStart(2, '0');
+                
+                diasSemana.push({
+                    nombre: nombresDias[i],
+                    fecha: `${year}-${month}-${day}`,
+                    diaMes: currentDay.getDate(),
+                    mesNombre: nombresMeses[currentDay.getMonth()]
+                });
+                currentDay.setDate(currentDay.getDate() + 1);
+            }
+            actualizarEtiquetaSemana();
+        }
+
+        function actualizarEtiquetaSemana() {
+            const primerDia = diasSemana[0];
+            const ultimoDia = diasSemana[6];
+            document.getElementById('labelSemanaActual').innerText = `${primerDia.diaMes} ${primerDia.mesNombre} - ${ultimoDia.diaMes} ${ultimoDia.mesNombre} ${primerDia.fecha.split('-')[0]}`;
+        }
+
+        function cambiarSemana(direccion) {
+            currentDateBase.setDate(currentDateBase.getDate() + (direccion * 7));
+            generarDiasSemana();
+            cargarDatosPlanificacion();
+        }
+
+        function irHoy() {
+            currentDateBase = obtenerLunes(new Date());
+            generarDiasSemana();
+            cargarDatosPlanificacion();
+        }
 
         function getCookie(name) {
             let cookieValue = null;
@@ -335,10 +488,19 @@
             return cookieValue;
         }
 
+        function getTodayString() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        // --- 3. CARGA Y RENDERIZADO DE DATOS ---
         async function cargarDatosPlanificacion() {
             try {
                 const [resFases, resOp, resEq, resMat] = await Promise.all([
-                    fetch('/api/fases-lote/'),
+                    fetch('/api/fases-lote/'), 
                     fetch('/api/operadores/?activo=true'),
                     fetch('/api/equipos/'),
                     fetch('/api/materiales/')
@@ -352,8 +514,11 @@
                 materialesGlobales = await resMat.json();
                 
                 renderGrillaSemanal();
+                
                 if (faseSeleccionadaId) {
                     renderPanelDetalle(faseSeleccionadaId);
+                } else {
+                    document.getElementById('panelDisponibilidad').innerHTML = `<div class="empty-state">👈 Selecciona una fase del calendario para asignar equipos, materiales y personal calificado.</div>`;
                 }
             } catch (error) {
                 console.error("Error:", error);
@@ -363,27 +528,30 @@
         function renderGrillaSemanal() {
             const grid = document.getElementById('gridSemanal');
             grid.innerHTML = '';
+            
+            const fechaHoy = getTodayString();
 
             diasSemana.forEach(dia => {
                 const col = document.createElement('div');
                 col.className = 'day-column';
 
-                const partesFecha = dia.fecha.split('-');
+                const isToday = dia.fecha === fechaHoy;
+                const headerClass = isToday ? 'day-header today' : 'day-header';
+
                 col.innerHTML = `
-                    <div class="day-header">
+                    <div class="${headerClass}">
                         <div class="day-name">${dia.nombre}</div>
-                        <div class="day-date">${partesFecha[2]} Ago</div>
+                        <div class="day-date">${dia.diaMes} ${dia.mesNombre}</div>
                     </div>
                 `;
 
                 const tasksContainer = document.createElement('div');
                 tasksContainer.className = 'day-tasks';
 
-                // Filtramos las fases programadas para esta fecha
                 const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha);
 
                 if (fasesDia.length === 0) {
-                    tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin fases</div>`;
+                    tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin programación</div>`;
                 }
 
                 fasesDia.forEach(f => {
@@ -393,6 +561,20 @@
 
                     let horaInicioTxt = f.hora_inicio_programada ? f.hora_inicio_programada.substring(0,5) : '00:00';
                     let horaFinTxt = f.hora_fin_programada ? f.hora_fin_programada.substring(0,5) : '00:00';
+
+                    // CÁLCULO VISUAL DE RETRASO VS BASELINE
+                    let delayHtml = '';
+                    if (f.fecha_base_cpm && f.fecha_programada && f.hora_inicio_base_cpm && f.hora_inicio_programada) {
+                        const baseDate = new Date(`${f.fecha_base_cpm}T${f.hora_inicio_base_cpm}`);
+                        const progDate = new Date(`${f.fecha_programada}T${f.hora_inicio_programada}`);
+                        const diffHours = (progDate - baseDate) / (1000 * 60 * 60);
+                        
+                        if (diffHours > 0) {
+                            delayHtml = `<span class="badge-delay">+${diffHours.toFixed(1)}h Retraso</span>`;
+                        } else if (diffHours < 0) {
+                            delayHtml = `<span class="badge-delay" style="color:var(--info); border-color:var(--info); background:rgba(56,189,248,0.1);">${diffHours.toFixed(1)}h Ant.</span>`;
+                        }
+                    }
 
                     let assigneesHTML = '';
                     const opsDetalles = f.operadores_asignados || [];
@@ -425,7 +607,10 @@
                     }
 
                     card.innerHTML = `
-                        <div class="task-time">⏰ ${horaInicioTxt} - ${horaFinTxt}</div>
+                        <div class="task-time">
+                            <span>⏰ ${horaInicioTxt} - ${horaFinTxt}</span>
+                            ${delayHtml}
+                        </div>
                         <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
                         <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between;">
                             <span>Lote: ${f.lote_codigo}</span>
@@ -487,12 +672,15 @@
             let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
             let horaFinTxt = fase.hora_fin_programada ? fase.hora_fin_programada.substring(0,5) : '00:00';
 
+            // HTML del panel, inyectando el botón de Reprogramar
             let html = `
                 <div class="info-card">
                     <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
                     <div>Lote: <strong>${fase.lote_codigo}</strong></div>
-                    <div>📅 Fecha: <strong>${fase.fecha_programada}</strong></div>
-                    <div>⏰ Horario: <strong>${horaInicioTxt} - ${horaFinTxt} hrs</strong></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>📅 Programación: <strong>${fase.fecha_programada} | ${horaInicioTxt} hrs</strong></span>
+                        <button class="btn-icon" title="Reprogramar y Ajustar Horario" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>
+                    </div>
                     <div>👥 Personal Asignado / Requerido: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
 
                     <div class="resource-section" style="margin-top: 0.5rem;">
@@ -530,17 +718,11 @@
                 </div>
             `;
 
-            // Validación estricta por horario y turno en el Roster
             const operadoresDisponibles = operadoresGlobales.filter(op => {
                 if (operadoresAsignadosIds.includes(op.id)) return false;
-
                 const turnosOp = op.turnos || [];
                 const turnoDia = turnosOp.find(t => t.fecha === fase.fecha_programada);
-
-                if (!turnoDia || !turnoDia.codigo_turno || turnoDia.codigo_turno === 'OFF') {
-                    return false;
-                }
-
+                if (!turnoDia || !turnoDia.codigo_turno || turnoDia.codigo_turno === 'OFF') return false;
                 return true;
             });
 
@@ -567,6 +749,60 @@
             panel.innerHTML = html;
         }
 
+        // --- 4. LÓGICA DE REPROGRAMACIÓN Y MODAL ---
+        function abrirModalReprogramar(faseId, fechaActual, horaActual) {
+            document.getElementById('reprogramarFaseId').value = faseId;
+            document.getElementById('inputReprogramarFecha').value = fechaActual;
+            document.getElementById('inputReprogramarHora').value = horaActual;
+            document.getElementById('selectMotivoReprogramacion').value = '';
+            document.getElementById('inputNotasReprogramacion').value = '';
+            document.getElementById('modalReprogramar').style.display = 'flex';
+        }
+
+        function cerrarModalReprogramar() {
+            document.getElementById('modalReprogramar').style.display = 'none';
+        }
+
+        async function ejecutarReprogramacionAPI() {
+            const faseId = document.getElementById('reprogramarFaseId').value;
+            const nuevaFecha = document.getElementById('inputReprogramarFecha').value;
+            const nuevaHora = document.getElementById('inputReprogramarHora').value;
+            const motivo = document.getElementById('selectMotivoReprogramacion').value;
+            const notas = document.getElementById('inputNotasReprogramacion').value;
+
+            if (!nuevaFecha || !nuevaHora || !motivo) {
+                return alert("Por favor, seleccione una fecha, hora y el motivo estandarizado GxP.");
+            }
+
+            try {
+                const response = await fetch(`/api/fases-lote/${faseId}/reprogramar/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({
+                        fecha_programada: nuevaFecha,
+                        hora_inicio_programada: nuevaHora,
+                        motivo_reprogramacion: motivo,
+                        notas_reprogramacion: notas
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || "Error al reprogramar.");
+                }
+
+                cerrarModalReprogramar();
+                await cargarDatosPlanificacion(); 
+
+                // Si al reprogramar la tarea se movió a otra semana, sería buena idea hacer que la vista siga a la tarea:
+                // Pero por ahora solo refrescamos la semana actual
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+
+        // Funciones de Recursos
         async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
             if (!recursoId) return;
             const fase = fasesGlobales.find(f => f.id === faseId);
@@ -645,7 +881,11 @@
             }
         }
 
+        // --- INICIALIZACIÓN ---
+        currentDateBase = obtenerLunes(new Date()); 
+        generarDiasSemana(); 
         cargarDatosPlanificacion();
+
     </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
 from .views import (
     ProcesoMaestroViewSet,
+    EtapaProcesoViewSet,     # <-- NUEVO: Importamos el ViewSet de Etapas
     OperacionProcesoViewSet,
     LoteProduccionViewSet,
     FaseLoteViewSet,
@@ -14,8 +15,9 @@ from .views import (
 # Instanciamos el enrutador por defecto de DRF
 router = DefaultRouter()
 
-# 1. Rutas de Datos Maestros (Plantillas CPM)
+# 1. Rutas de Datos Maestros (Plantillas CPM y Estructura ISA-88)
 router.register(r'procesos-maestros', ProcesoMaestroViewSet, basename='proceso-maestro')
+router.register(r'etapas-proceso', EtapaProcesoViewSet, basename='etapa-proceso')  # <-- NUEVO: Endpoint para jerarquía de Etapas
 router.register(r'operaciones-proceso', OperacionProcesoViewSet, basename='operacion-proceso')
 
 # 2. Rutas Transaccionales (Ejecución de Lotes / eBR)
@@ -27,7 +29,7 @@ urlpatterns = [
     # Ruta visual para el Tablero de Piso de Planta (Ejecución eBR)
     path('ejecucion/', TemplateView.as_view(template_name='procesos/ejecucion.html'), name='ejecucion-lotes'),
     
-    # NUEVA RUTA: Ruta visual para el Tablero de Planificación y Asignación Semanal (MES)
+    # Ruta visual para el Tablero de Planificación y Asignación Semanal (MES)
     path('planificacion/', TemplateView.as_view(template_name='procesos/planificacion.html'), name='planificacion-semanal'),
     
     # Ruta visual para el diseño de procesos

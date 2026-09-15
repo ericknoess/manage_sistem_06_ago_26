@@ -22,9 +22,34 @@ class ProcesoMaestro(models.Model):
         return f"[Proceso] {self.nombre}"
 
 
+class EtapaProceso(models.Model):
+    """
+    [NUEVO] Agrupador lógico (Nivel 2 - ISA-88) que permite organizar las 
+    Operaciones/Actividades en bloques visuales y funcionales (Ej: Upstream, Downstream, Inóculo).
+    """
+    proceso = models.ForeignKey(
+        ProcesoMaestro, 
+        on_delete=models.CASCADE, 
+        related_name='etapas',
+        help_text="Proceso maestro al que pertenece esta etapa"
+    )
+    nombre = models.CharField(max_length=200, help_text="Nombre de la Etapa (Ej: Fase 1 - Expansión Celular)")
+    orden = models.PositiveIntegerField(default=0, help_text="Orden de secuencia lógica para visualización")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Etapa de Proceso"
+        verbose_name_plural = "Etapas de Procesos"
+        ordering = ['proceso', 'orden']
+
+    def __str__(self):
+        return f"{self.proceso.nombre} | Etapa: {self.nombre}"
+
+
 class OperacionProceso(models.Model):
     """
-    Define cada operación o fase (CPM) que compone una ruta de proceso maestro,
+    Define cada operación o actividad granular (CPM) que compone una ruta de proceso maestro,
     incluyendo su duración, tipo, dependencias avanzadas con desfase y requerimientos GxP.
     """
     TIPO_OPERACION_CHOICES = [
@@ -44,17 +69,25 @@ class OperacionProceso(models.Model):
         related_name='operaciones',
         help_text="Proceso maestro al que pertenece esta operación"
     )
+    
+    etapa = models.ForeignKey(
+        EtapaProceso,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='operaciones',
+        help_text="Etapa lógica a la que pertenece esta actividad (Opcional)"
+    )
+
     identificador_paso = models.CharField(max_length=20, help_text="Identificador único del paso (Ej: T1, T2)")
     nombre = models.CharField(max_length=200, help_text="Nombre de la operación o fase")
     tipo_operacion = models.CharField(max_length=20, choices=TIPO_OPERACION_CHOICES, default='ACTIVA')
     duracion_horas = models.FloatField(help_text="Duración estimada en horas")
     
-    # Parámetros para operaciones de incubación / pasivas (Generador de Muestreos)
     frecuencia_muestreo_horas = models.PositiveIntegerField(default=0, help_text="Frecuencia de muestreo cíclico en horas (0 si no aplica)")
     duracion_muestreo_horas = models.FloatField(default=0.0, help_text="Duración en horas de cada evento de muestreo")
     ops_muestreo = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos para cada muestreo")
     
-    # Dependencia CPM Avanzada con Desfase
     predecesora = models.ForeignKey(
         'self', 
         on_delete=models.SET_NULL, 
@@ -66,8 +99,7 @@ class OperacionProceso(models.Model):
     tipo_dependencia = models.CharField(max_length=10, choices=TIPO_DEPENDENCIA_CHOICES, default='FS', help_text="Regla lógica de dependencia")
     desfase_horas = models.FloatField(default=0, help_text="Holgura o anticipación en horas respecto a la predecesora (Ej: -24 para 1 día antes)")
 
-    # Requerimientos Técnicos y de Recursos (GxP)
-    personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos (Se migrará a requerimientos específicos por rol)")
+    personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos")
     tipo_equipo_requerido = models.CharField(
         max_length=100, 
         default='N/A', 
@@ -158,6 +190,7 @@ class FaseLote(models.Model):
     """
     Instancia individual de una OperacionProceso correspondiente a un Lote específico.
     Actúa como Tarea Planificada (MES) y como Registro Inmutable (eBR).
+    Puede representar la tarea padre original, o un muestreo dinámico derivado.
     """
     ESTADO_FASE_CHOICES = [
         ('PENDIENTE', 'Pendiente'),
@@ -166,18 +199,38 @@ class FaseLote(models.Model):
         ('OMITIDA', 'Omitida / Cancelada'),
     ]
 
+    MOTIVO_REPROGRAMACION_CHOICES = [
+        ('MANTENIMIENTO', '⚙️ Mantenimiento de Equipo'),
+        ('INSUMOS', '📦 Falta / Retraso de Insumos'),
+        ('PERSONAL', '👥 Ausentismo / Falta de Personal'),
+        ('CALIDAD', '🔬 Desviación de Calidad previa'),
+        ('PRODUCCION', '⏳ Retraso acumulado en producción'),
+        ('OTRO', '📝 Otro (Especificar en notas)'),
+    ]
+
     lote = models.ForeignKey(LoteProduccion, on_delete=models.CASCADE, related_name='fases')
     operacion_maestra = models.ForeignKey(OperacionProceso, on_delete=models.RESTRICT, related_name='fases_ejecutadas')
     estado = models.CharField(max_length=20, choices=ESTADO_FASE_CHOICES, default='PENDIENTE')
     
-    # --------------------------------------------------------------------------
-    # NUEVOS CAMPOS: Planificación y Programación Semanal (MES)
-    # Estos campos se calcularán dinámicamente con el Algoritmo CPM al instanciar el lote
-    # --------------------------------------------------------------------------
-    fecha_programada = models.DateField(null=True, blank=True, help_text="Fecha calculada por el algoritmo para su ejecución")
-    hora_inicio_programada = models.TimeField(null=True, blank=True, help_text="Hora calculada de inicio")
-    hora_fin_programada = models.TimeField(null=True, blank=True, help_text="Hora calculada de finalización")
+    # --- SOPORTE DE MUESTREOS CÍCLICOS ---
+    es_subtarea_muestreo = models.BooleanField(default=False, help_text="Indica si esta fase es un evento de muestreo derivado de una incubación")
+    indice_muestreo = models.PositiveIntegerField(default=0, help_text="Secuencia del muestreo (Ej: 1, 2, 3...)")
+    nombre_tarea_dinamica = models.CharField(max_length=200, null=True, blank=True, help_text="Sobreescribe el nombre original (Ej: Toma de Muestra #1 - Inoculación)")
     
+    # --- [NUEVO] LÍNEA BASE (BASELINE) - INMUTABLE DESDE LA CREACIÓN DEL LOTE ---
+    fecha_base_cpm = models.DateField(null=True, blank=True, help_text="Fecha original dictada por el algoritmo CPM (Inmutable)")
+    hora_inicio_base_cpm = models.TimeField(null=True, blank=True, help_text="Hora original de inicio CPM (Inmutable)")
+    hora_fin_base_cpm = models.TimeField(null=True, blank=True, help_text="Hora original de fin CPM (Inmutable)")
+
+    # --- PLANIFICACIÓN ACTUAL (FORECAST) - MODIFICABLE POR EL SUPERVISOR ---
+    fecha_programada = models.DateField(null=True, blank=True, help_text="Fecha actual programada (Forecast)")
+    hora_inicio_programada = models.TimeField(null=True, blank=True, help_text="Hora actual de inicio (Forecast)")
+    hora_fin_programada = models.TimeField(null=True, blank=True, help_text="Hora actual de finalización (Forecast)")
+    
+    # --- [NUEVO] AUDITORÍA DE REPROGRAMACIÓN (METRICS & KPIs) ---
+    motivo_reprogramacion = models.CharField(max_length=50, choices=MOTIVO_REPROGRAMACION_CHOICES, null=True, blank=True, help_text="Razón estandarizada del cambio de fecha")
+    notas_reprogramacion = models.TextField(null=True, blank=True, help_text="Justificación detallada del retraso o reprogramación")
+
     equipos_asignados = models.ManyToManyField(
         Equipo, 
         blank=True, 
@@ -190,7 +243,6 @@ class FaseLote(models.Model):
         related_name='fases_asignadas',
         help_text="Materiales o lotes de insumos asignados a esta fase"
     )
-    # --------------------------------------------------------------------------
 
     # Campos de Ejecución Real GxP (eBR)
     fecha_inicio_real = models.DateTimeField(null=True, blank=True, help_text="Timestamp real de inicio de la tarea")
@@ -199,17 +251,16 @@ class FaseLote(models.Model):
     class Meta:
         verbose_name = "Fase de Lote"
         verbose_name_plural = "Fases de Lote"
-        unique_together = ('lote', 'operacion_maestra')
-        ordering = ['operacion_maestra__identificador_paso']
+        ordering = ['operacion_maestra__identificador_paso', 'indice_muestreo']
 
     def __str__(self):
-        return f"Lote: {self.lote.identificador_lote} | Fase: {self.operacion_maestra.nombre} ({self.estado})"
+        nombre_mostrar = self.nombre_tarea_dinamica if self.es_subtarea_muestreo else self.operacion_maestra.nombre
+        return f"Lote: {self.lote.identificador_lote} | Fase: {nombre_mostrar} ({self.estado})"
 
 
 class AsignacionFaseOperador(models.Model):
     """
-    Registro GxP inmutable que vincula a un operador real del Roster con una fase de un lote,
-    especificando qué competencia/rol ejerció durante dicha tarea.
+    Registro GxP inmutable que vincula a un operador real del Roster con una fase de un lote.
     """
     fase_lote = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='operadores_asignados')
     operador = models.ForeignKey(Operador, on_delete=models.RESTRICT, related_name='fases_lote_ejecutadas')

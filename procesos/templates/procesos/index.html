@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bioprocesos - CPM, Holguras, Rutas y Competencias GxP</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
     <style>
         :root {
             --bg-dark: #0f172a;
@@ -34,7 +38,6 @@
             gap: 0.75rem;
         }
 
-        /* Mejora sutil del scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-dark); border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
@@ -51,20 +54,8 @@
             flex-shrink: 0;
         }
 
-        .header-title h2 {
-            margin: 0;
-            font-size: 1.1rem;
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .header-title p {
-            margin: 0.2rem 0 0 0;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
+        .header-title h2 { margin: 0; font-size: 1.1rem; color: var(--accent); display: flex; align-items: center; gap: 0.5rem; }
+        .header-title p { margin: 0.2rem 0 0 0; font-size: 0.75rem; color: var(--text-muted); }
 
         .main-layout {
             display: grid;
@@ -72,7 +63,7 @@
             gap: 0.75rem;
             flex: 1;
             overflow: hidden;
-            min-height: 0; /* Previene el desbordamiento infinito del Grid */
+            min-height: 0;
         }
 
         .panel-box {
@@ -82,7 +73,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            min-height: 0; /* Permite que el Flexbox interno colapse correctamente */
+            min-height: 0;
         }
 
         .panel-header {
@@ -119,11 +110,7 @@
         }
 
         .process-item:hover { border-color: var(--accent); }
-        .process-item.active {
-            border-color: var(--accent);
-            background-color: rgba(56, 189, 248, 0.08);
-            border-left: 4px solid var(--accent);
-        }
+        .process-item.active { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--accent); }
 
         .process-info h4 { margin: 0; font-size: 0.82rem; color: var(--text); }
         .process-info span { font-size: 0.7rem; color: var(--text-muted); }
@@ -134,268 +121,72 @@
             flex-direction: column;
             gap: 1rem;
             flex: 1;
-            min-height: 0; /* Previene el desbordamiento del formulario */
+            min-height: 0;
         }
 
-        .cpm-summary {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.75rem;
-            flex-shrink: 0; /* Mantiene la tarjeta visible */
-        }
-
-        .summary-card {
-            background-color: var(--bg-dark);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.65rem 0.85rem;
-        }
-
+        .cpm-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; flex-shrink: 0; }
+        .summary-card { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.85rem; }
         .summary-card label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold; }
         .summary-card .val { font-size: 1.05rem; font-weight: bold; margin-top: 2px; }
 
-        .form-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
-            background-color: var(--bg-dark);
-            padding: 0.85rem;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-            align-items: end;
-            flex-shrink: 0; /* Mantiene el formulario visible */
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-            flex: 1;
-            min-width: 75px;
-        }
-
-        .fg-wide { min-width: 120px; }
-        .fg-btn { min-width: 100px; }
-
-        .form-group label {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+        .form-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
+        .form-group label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         input[type="text"], select, input[type="number"], input[type="date"] {
-            background-color: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text);
-            padding: 0.4rem 0.4rem;
-            border-radius: 6px;
-            font-size: 0.74rem;
-            outline: none;
-            width: 100%;
+            background-color: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.4rem; border-radius: 6px; font-size: 0.74rem; outline: none; width: 100%;
         }
+        input[readonly], select[disabled] { opacity: 0.5; cursor: not-allowed; background-color: rgba(0,0,0,0.2); }
+        select[multiple] { height: 32px; padding: 0.1rem; }
+        input[type="text"]:focus:not([readonly]), select:focus:not([disabled]), input[type="number"]:focus:not([readonly]), input[type="date"]:focus { border-color: var(--accent); }
 
-        input[readonly], select[disabled] {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background-color: rgba(0,0,0,0.2);
-        }
-
-        select[multiple] {
-            height: 30px;
-            padding: 0.1rem;
-        }
-
-        input[type="text"]:focus:not([readonly]), select:focus:not([disabled]), input[type="number"]:focus:not([readonly]), input[type="date"]:focus {
-            border-color: var(--accent);
-        }
-
-        .btn-primary {
-            background-color: var(--accent);
-            color: #0f172a;
-            border: none;
-            padding: 0.45rem 0.75rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s;
-        }
-
+        .btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
         .btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); color: white; }
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
         
-        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+        .btn-secondary:hover { background-color: var(--panel-bg); border-color: var(--text-muted); }
         .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
 
-        /* Contenedor de la tabla ahora aísla el scroll */
-        .tasks-table-container {
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            overflow-y: auto; /* Aislado el scroll vertical aquí */
-            flex: 1; /* Ocupa el espacio restante de la pantalla */
-            min-height: 0;
-            background-color: var(--bg-dark);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: separate; /* Cambiado para soportar Sticky Headers limpios */
-            border-spacing: 0;
-            font-size: 0.74rem;
-            text-align: left;
-        }
-
-        /* Sticky Headers de la tabla */
-        thead th {
-            position: sticky;
-            top: 0;
-            background-color: var(--panel-bg);
-            color: var(--accent);
-            z-index: 10;
-            box-shadow: inset 0 -1px 0 var(--border-color); /* Borde seguro para sticky */
-            padding: 0.6rem 0.6rem;
-            vertical-align: middle;
-        }
-
-        tbody td {
-            padding: 0.5rem 0.6rem;
-            vertical-align: middle;
-            border-bottom: 1px solid var(--border-color);
-        }
-
+        .tasks-table-container { border: 1px solid var(--border-color); border-radius: 6px; overflow-y: auto; flex: 1; min-height: 0; background-color: var(--bg-dark); }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.74rem; text-align: left; }
+        thead th { position: sticky; top: 0; background-color: var(--panel-bg); color: var(--accent); z-index: 10; box-shadow: inset 0 -1px 0 var(--border-color); padding: 0.6rem 0.6rem; vertical-align: middle; }
+        tbody td { padding: 0.5rem 0.6rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
         tbody tr:last-child td { border-bottom: none; }
         tbody tr.incubation-row { background-color: rgba(139, 92, 246, 0.03); }
 
-        .badge-cpm {
-            padding: 2px 5px;
-            border-radius: 4px;
-            font-size: 0.62rem;
-            font-weight: bold;
-            display: inline-block;
-        }
+        .etapa-header-row td { background-color: rgba(15, 23, 42, 0.8); color: var(--accent); font-weight: bold; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; border-top: 2px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
+
+        .badge-cpm { padding: 2px 5px; border-radius: 4px; font-size: 0.62rem; font-weight: bold; display: inline-block; }
         .badge-incubation { background-color: rgba(139, 92, 246, 0.2); color: var(--incubation); border: 1px solid var(--incubation); }
         .badge-active { background-color: rgba(34, 197, 94, 0.15); color: var(--success); }
 
-        .tag-resource {
-            background-color: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--border-color);
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-size: 0.65rem;
-            display: inline-block;
-            margin: 1px;
-        }
+        .tag-resource { background-color: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-color); padding: 1px 4px; border-radius: 3px; font-size: 0.65rem; display: inline-block; margin: 1px; }
 
         .gantt-preview-cell { width: 140px; }
-        .gantt-track {
-            background-color: var(--panel-bg);
-            height: 18px;
-            border-radius: 4px;
-            position: relative;
-            border: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-        }
-        .gantt-bar {
-            height: 100%;
-            position: absolute;
-            border-radius: 3px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        .gantt-track { background-color: var(--panel-bg); height: 18px; border-radius: 4px; position: relative; border: 1px solid var(--border-color); display: flex; align-items: center; }
+        .gantt-bar { height: 100%; position: absolute; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
         .gantt-bar.regular { background-color: var(--accent); }
         .gantt-bar.critical { background-color: var(--critical); }
 
-        .btn-icon {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 0.85rem;
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; border-radius: 4px; }
         .btn-icon:hover { background-color: var(--border-color); }
         .btn-icon.delete:hover { background-color: rgba(239, 68, 68, 0.2); }
         .btn-icon.edit:hover { background-color: rgba(56, 189, 248, 0.2); }
         .btn-icon.validate:hover { background-color: rgba(34, 197, 94, 0.2); }
 
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(4px);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            width: 520px;
-            padding: 1.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.5rem;
-        }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; width: 520px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.8rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
         .modal-header h3 { margin: 0; font-size: 1rem; color: var(--accent); }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
         
-        .role-row-builder {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            margin-bottom: 0.4rem;
-        }
-
-        /* ESTILOS PARA VALIDACIÓN GXP */
-        .validation-results {
-            margin-top: 0.5rem;
-            border-top: 1px solid var(--border-color);
-            padding-top: 1rem;
-            display: none;
-            animation: fadeIn 0.3s ease;
-        }
+        .role-row-builder { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+        
+        .validation-results { margin-top: 0.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem; display: none; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .validation-row {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border-color);
-            font-size: 0.75rem;
-            align-items: center;
-        }
+        .validation-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.75rem; align-items: center; }
         .validation-row:last-child { border-bottom: none; }
-        .status-badge {
-            padding: 3px 6px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.65rem;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-        }
+        .status-badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 0.65rem; display: inline-flex; justify-content: center; align-items: center; }
         .status-ok { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); }
         .status-fail { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
     </style>
@@ -405,7 +196,7 @@
     <div class="page-header">
         <div class="header-title">
             <h2>🧫 Planificador CPM, Holguras y Habilidades GxP</h2>
-            <p>Control de dependencias, muestreos dinámicos y asignación por competencias (Skill-based).</p>
+            <p>Estructura ISA-88, control de dependencias, muestreos dinámicos y asignación (Skill-based).</p>
         </div>
         <a href="/roster/" class="btn-primary" style="text-decoration:none; display:inline-flex; align-items:center;">👥 Ir al Roster de Personal</a>
     </div>
@@ -423,7 +214,7 @@
 
         <div class="panel-box">
             <div class="panel-header" id="tituloProcesoActivo">
-                <span>⚡ Mapeo Operacional: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
+                <span>⚡ Mapeo Operacional ISA-88: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
             </div>
 
             <div class="task-editor-body" id="editorTareas" style="display: none;">
@@ -446,85 +237,11 @@
                     </div>
                 </div>
 
-                <div class="form-grid">
-                    <div class="form-group" style="min-width: 50px;">
-                        <label title="ID Paso">ID</label>
-                        <input type="text" id="inputPasoId" placeholder="T1">
-                    </div>
-                    <div class="form-group fg-wide">
-                        <label>Nombre Fase</label>
-                        <input type="text" id="inputTareaNombre" placeholder="ej. Inoculación">
-                    </div>
-                    <div class="form-group fg-wide">
-                        <label>Tipo Operación</label>
-                        <select id="selectTipoTarea" onchange="toggleIncubacionFields(false)">
-                            <option value="ACTIVA">⚙️ Activa</option>
-                            <option value="INCUBACION">🧫 Incubación</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 60px;">
-                        <label title="Duración Total (h)">Dur(h)</label>
-                        <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5">
-                    </div>
-                    <div class="form-group" style="min-width: 60px;">
-                        <label title="Frecuencia Muestreo (h)">Frec(h)</label>
-                        <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly>
-                    </div>
-                    <div class="form-group" style="min-width: 60px;">
-                        <label title="Duración Muestreo (h)">D.M(h)</label>
-                        <input type="number" id="inputDuracionMuestreo" value="0" min="0" step="0.1" readonly>
-                    </div>
-                    <div class="form-group" style="min-width: 50px;">
-                        <label title="Operadores Muestreo">Op.M</label>
-                        <input type="number" id="inputOpsMuestreo" value="0" min="0" step="1" readonly>
-                    </div>
-                    <div class="form-group fg-wide">
-                        <label>Predecesora</label>
-                        <select id="selectPredecesora">
-                            <option value="">- Ninguna -</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 60px;">
-                        <label>Regla</label>
-                        <select id="selectTipoDep">
-                            <option value="FS">FS</option>
-                            <option value="SS">SS</option>
-                            <option value="OFFSET">Desfase</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 60px;">
-                        <label title="Desfase (h)">Desf(h)</label>
-                        <input type="number" id="inputDesfase" value="0" step="0.5">
-                    </div>
-                    <div class="form-group fg-wide">
-                        <label>Equipo Req.</label>
-                        <select id="selectTipoEquipoReq">
-                            <option value="N/A">N/A</option>
-                            <option value="Biorreactor">Biorreactor</option>
-                            <option value="Autoclave">Autoclave</option>
-                            <option value="Centrífuga">Centrífuga</option>
-                        </select>
-                    </div>
-                    <div class="form-group fg-wide">
-                        <label>Materiales</label>
-                        <select id="selectMaterialesReq" multiple>
-                            <!-- Inyectado desde API -->
-                        </select>
-                    </div>
-                    
-                    <!-- CONSTRUCTOR DE ROLES MULTIPLES -->
-                    <div class="form-group" style="flex: 2; min-width: 240px;" id="containerRolesCreacion">
-                        <label class="flex justify-between items-center">
-                            <span>Requerimiento de Roles / Competencias</span>
-                            <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-accent hover:underline" onclick="agregarFilaRolBuilder('crear')">➕ Añadir Rol</button>
-                        </label>
-                        <div id="rolesBuilderCrear" class="bg-slate-900 border border-slate-700 rounded p-2 space-y-2 mt-1" style="background: rgba(15,23,42,0.5); padding: 5px; border-radius: 4px;">
-                            <!-- Filas dinámicas de roles -->
-                        </div>
-                    </div>
-
-                    <div class="form-group fg-btn">
-                        <button class="btn-primary" style="width:100%; height:38px;" onclick="crearOperacionAPI()">➕ Añadir Fase</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; margin-bottom: 0.2rem;">
+                    <h3 style="margin: 0; font-size: 0.9rem; color: var(--text); font-weight: bold;">Estructura de Fases y Actividades</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn-secondary btn-sm" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa (Carpeta)</button>
+                        <button class="btn-primary btn-sm" onclick="abrirModalNuevaOperacion()">⚙️ + Añadir Actividad</button>
                     </div>
                 </div>
 
@@ -532,8 +249,8 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width: 40px;">ID</th>
-                                <th>Operación / Fase</th>
+                                <th style="width: 40px;">#</th>
+                                <th>Operación / Actividad</th>
                                 <th style="width: 55px;">Duración</th>
                                 <th>Holgura (ES/LS)</th>
                                 <th>Requerimientos (Skills & Equipo)</th>
@@ -556,6 +273,8 @@
         </div>
     </div>
 
+    <!-- ==================== MODALES ==================== -->
+
     <!-- MODAL NUEVO PROCESO -->
     <div class="modal-overlay" id="modalNuevoProceso" style="display: none;">
         <div class="modal-content" style="width: 360px;">
@@ -573,20 +292,157 @@
         </div>
     </div>
 
+    <!-- MODAL: CREAR ETAPA ISA-88 -->
+    <div class="modal-overlay" id="modalNuevaEtapa" style="display: none;">
+        <div class="modal-content" style="width: 380px;">
+            <div class="modal-header">
+                <h3>📁 Registrar Nueva Etapa</h3>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                Agrupa las actividades para mejorar la lectura del proceso. (Ej. "Fase 1: Inóculo", "Downstream").
+            </div>
+            <div class="form-group" style="width: 100%;">
+                <label>Nombre de la Etapa</label>
+                <input type="text" id="nuevaEtapaNombre" placeholder="ej. Preparación de Biorreactor">
+            </div>
+            <div class="form-group" style="width: 100%;">
+                <label>Orden Visual (Cronológico)</label>
+                <input type="number" id="nuevaEtapaOrden" value="10" step="10">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalNuevaEtapa()">Cancelar</button>
+                <button class="btn-primary" onclick="crearEtapaAPI()">Guardar Etapa</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVO MODAL: CREAR OPERACIÓN / ACTIVIDAD -->
+    <div class="modal-overlay" id="modalNuevaOperacion" style="display: none;">
+        <div class="modal-content" style="width: 600px;">
+            <div class="modal-header">
+                <h3>⚙️ Añadir Nueva Actividad (CPM)</h3>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 0.8rem;">
+                <!-- Fila 1 -->
+                <div class="form-group" style="grid-column: span 3;">
+                    <label>Carpeta / Etapa (ISA-88)</label>
+                    <select id="selectEtapaTarea">
+                        <option value="">-- Actividad Suelta (Sin Etapa) --</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>ID Paso</label>
+                    <input type="text" id="inputPasoId" placeholder="T1">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Nombre Actividad</label>
+                    <input type="text" id="inputTareaNombre" placeholder="ej. Inoculación">
+                </div>
+
+                <!-- Fila 2 -->
+                <div class="form-group">
+                    <label>Tipo Operación</label>
+                    <select id="selectTipoTarea" onchange="toggleIncubacionFields(false)">
+                        <option value="ACTIVA">⚙️ Activa</option>
+                        <option value="INCUBACION">🧫 Incubación</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Duración (h)</label>
+                    <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Equipo Req.</label>
+                    <select id="selectTipoEquipoReq">
+                        <option value="N/A">N/A</option>
+                        <option value="Biorreactor">Biorreactor</option>
+                        <option value="Autoclave">Autoclave</option>
+                        <option value="Centrífuga">Centrífuga</option>
+                    </select>
+                </div>
+
+                <!-- Fila Incubación -->
+                <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
+                    <label>Frec. Muestreo (h)</label>
+                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Dur. Muestreo (h)</label>
+                    <input type="number" id="inputDuracionMuestreo" value="0" min="0" step="0.1" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Ops Muestreo</label>
+                    <input type="number" id="inputOpsMuestreo" value="0" min="0" step="1" readonly>
+                </div>
+                
+                <!-- Fila Dependencias -->
+                <div class="form-group">
+                    <label>Regla Dep.</label>
+                    <select id="selectTipoDep">
+                        <option value="FS">Fin-Inicio (FS)</option>
+                        <option value="SS">Inicio-Inicio (SS)</option>
+                        <option value="OFFSET">Desfase Fijo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Desfase (h)</label>
+                    <input type="number" id="inputDesfase" value="0" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Predecesora</label>
+                    <select id="selectPredecesora">
+                        <option value="">- Ninguna -</option>
+                    </select>
+                </div>
+
+                <!-- Fila Materiales & Roles -->
+                <div class="form-group" style="grid-column: span 3;">
+                    <label>Materiales Necesarios</label>
+                    <select id="selectMaterialesReq" multiple style="height: 50px;">
+                        <!-- Inyectado desde API -->
+                    </select>
+                </div>
+
+                <div class="form-group" style="grid-column: span 3;">
+                    <label class="flex justify-between items-center border-b border-slate-700 pb-1 mb-1">
+                        <span>Requerimientos de Roles / Competencias</span>
+                        <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-accent hover:underline" onclick="agregarFilaRolBuilder('crear')">➕ Añadir Rol</button>
+                    </label>
+                    <div id="rolesBuilderCrear" style="padding: 5px;"></div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <button class="btn-secondary" onclick="cerrarModalNuevaOperacion()">Cancelar</button>
+                <button class="btn-primary" onclick="crearOperacionAPI()">Guardar Actividad</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL EDITAR OPERACIÓN -->
     <div class="modal-overlay" id="modalEditarOperacion" style="display: none;">
-        <div class="modal-content" style="width: 550px;">
+        <div class="modal-content" style="width: 600px;">
             <div class="modal-header">
-                <h3>✏️ Editar Operación / Fase & Competencias</h3>
+                <h3>✏️ Editar Actividad & Competencias</h3>
             </div>
             <input type="hidden" id="editOpId">
             <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 0.8rem;">
+                
+                <div class="form-group" style="grid-column: span 3;">
+                    <label>Etapa (Carpeta Agrupadora)</label>
+                    <select id="editOpEtapa">
+                        <option value="">-- Sin Etapa --</option>
+                    </select>
+                </div>
+
                 <div class="form-group">
                     <label>ID Paso</label>
                     <input type="text" id="editOpPasoId">
                 </div>
                 <div class="form-group" style="grid-column: span 2;">
-                    <label>Nombre Operación</label>
+                    <label>Nombre Actividad</label>
                     <input type="text" id="editOpNombre">
                 </div>
                 
@@ -637,18 +493,15 @@
                     <input type="number" id="editOpDesfase" step="0.5">
                 </div>
 
-                <!-- CONSTRUCTOR DE ROLES EN MODAL EDITAR -->
                 <div class="form-group" style="grid-column: span 3;">
-                    <label class="flex justify-between items-center">
+                    <label class="flex justify-between items-center border-b border-slate-700 pb-1 mb-1">
                         <span>Requerimiento de Roles / Competencias (Skill-based)</span>
                         <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-cyan-400 hover:underline" onclick="agregarFilaRolBuilder('editar')">➕ Añadir Rol</button>
                     </label>
-                    <div id="rolesBuilderEditar" style="background: rgba(15,23,42,0.5); padding: 5px; border-radius: 4px; margin-top: 5px;">
-                        <!-- Filas dinámicas -->
-                    </div>
+                    <div id="rolesBuilderEditar" style="padding: 5px;"></div>
                 </div>
             </div>
-            <div class="modal-actions">
+            <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
                 <button class="btn-secondary" onclick="cerrarModalEditarOperacion()">Cancelar</button>
                 <button class="btn-primary" onclick="guardarEdicionOperacionAPI()">Guardar Cambios</button>
             </div>
@@ -679,10 +532,7 @@
                 <button class="btn-secondary" onclick="cerrarModalValidacion()">Cerrar</button>
                 <button class="btn-primary" onclick="ejecutarValidacionGxpAPI()" id="btnEjecutarValidacion">Ejecutar Simulación</button>
             </div>
-
-            <!-- Contenedor dinámico de resultados -->
-            <div id="validationResults" class="validation-results">
-            </div>
+            <div id="validationResults" class="validation-results"></div>
         </div>
     </div>
 
@@ -733,6 +583,75 @@
             });
         }
 
+        function abrirModalNuevaOperacion() {
+            if (!procesoSeleccionado) return alert("Debe seleccionar un proceso maestro primero.");
+            document.getElementById('inputPasoId').value = '';
+            document.getElementById('inputTareaNombre').value = '';
+            document.getElementById('inputTareaDuracion').value = '';
+            document.getElementById('inputFrecMuestreo').value = '0';
+            document.getElementById('inputDuracionMuestreo').value = '0';
+            document.getElementById('inputOpsMuestreo').value = '0';
+            document.getElementById('inputDesfase').value = '0';
+            document.getElementById('rolesBuilderCrear').innerHTML = '';
+            agregarFilaRolBuilder('crear');
+            
+            toggleIncubacionFields(false);
+            document.getElementById('modalNuevaOperacion').style.display = 'flex';
+        }
+
+        function cerrarModalNuevaOperacion() {
+            document.getElementById('modalNuevaOperacion').style.display = 'none';
+        }
+
+        function actualizarSelectEtapas(proc) {
+            const selects = [document.getElementById('selectEtapaTarea'), document.getElementById('editOpEtapa')];
+            selects.forEach(select => {
+                if(!select) return;
+                select.innerHTML = '<option value="">-- Actividad Suelta (Sin Etapa) --</option>';
+                if (proc && proc.etapas) {
+                    let sortedEtapas = [...proc.etapas].sort((a,b) => a.orden - b.orden);
+                    sortedEtapas.forEach(e => {
+                        select.innerHTML += `<option value="${e.id}">${e.orden} - ${e.nombre}</option>`;
+                    });
+                }
+            });
+        }
+
+        function abrirModalNuevaEtapa() {
+            if (!procesoSeleccionado) return alert("Debe seleccionar un proceso maestro primero.");
+            document.getElementById('nuevaEtapaNombre').value = '';
+            document.getElementById('nuevaEtapaOrden').value = (procesoSeleccionado.etapas.length + 1) * 10;
+            document.getElementById('modalNuevaEtapa').style.display = 'flex';
+        }
+
+        function cerrarModalNuevaEtapa() {
+            document.getElementById('modalNuevaEtapa').style.display = 'none';
+        }
+
+        async function crearEtapaAPI() {
+            const nombre = document.getElementById('nuevaEtapaNombre').value.trim();
+            const orden = parseInt(document.getElementById('nuevaEtapaOrden').value, 10);
+            
+            if (!nombre || isNaN(orden)) return alert("Completa el nombre y el orden de la etapa.");
+
+            const res = await fetch('/api/etapas-proceso/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({
+                    proceso: procesoSeleccionado.id,
+                    nombre: nombre,
+                    orden: orden
+                })
+            });
+
+            if (res.ok) {
+                cerrarModalNuevaEtapa();
+                cargarCatalogosGlobales();
+            } else {
+                alert("Error al registrar la etapa en la base de datos.");
+            }
+        }
+
         function agregarFilaRolBuilder(modo, rolId = '', cantidad = 1) {
             const containerId = modo === 'crear' ? 'rolesBuilderCrear' : 'rolesBuilderEditar';
             const container = document.getElementById(containerId);
@@ -740,7 +659,7 @@
             const row = document.createElement('div');
             row.className = 'role-row-builder';
 
-            let selectHtml = `<select class="select-rol-item" style="flex: 2;">`;
+            let selectHtml = `<select class="select-rol-item" style="flex: 2; height: 26px; font-size: 0.7rem; padding: 2px;">`;
             selectHtml += `<option value="">-- Seleccionar Rol / Competencia --</option>`;
             rolesGlobales.forEach(r => {
                 const selected = (r.id == rolId) ? 'selected' : '';
@@ -750,8 +669,8 @@
 
             row.innerHTML = `
                 ${selectHtml}
-                <input type="number" class="input-rol-cantidad" value="${cantidad}" min="1" step="1" style="width: 70px;" placeholder="Cant">
-                <button type="button" class="btn-icon delete" title="Eliminar fila" onclick="this.parentElement.remove()">🗑️</button>
+                <input type="number" class="input-rol-cantidad" value="${cantidad}" min="1" step="1" style="width: 50px; height: 26px; font-size: 0.7rem; padding: 2px;" placeholder="Cant">
+                <button type="button" class="btn-icon delete" title="Eliminar fila" style="height: 26px; line-height: 1;" onclick="this.parentElement.remove()">🗑️</button>
             `;
             container.appendChild(row);
         }
@@ -812,7 +731,7 @@
                 infoDiv.onclick = () => seleccionarProceso(p.id);
                 infoDiv.innerHTML = `
                     <h4>${p.nombre}</h4>
-                    <span>${p.operaciones.length} etapas registradas</span>
+                    <span>${p.operaciones.length} actividades registradas</span>
                 `;
 
                 const delBtn = document.createElement('button');
@@ -840,6 +759,7 @@
             document.getElementById('emptyState').style.display = 'none';
 
             actualizarSelectPredecesoras(procesoSeleccionado);
+            actualizarSelectEtapas(procesoSeleccionado);
 
             try {
                 const resCpm = await fetch(`/api/procesos-maestros/${id}/cpm-analisis/`);
@@ -847,11 +767,11 @@
                     const cpmData = await resCpm.json();
                     renderizarCPMConHolguras(cpmData);
                 } else {
-                    calcularYRenderizarCPM(procesoSeleccionado);
+                    renderizarCPMConHolguras({ tiempo_total_proceso: 0, operaciones_cpm: [] });
                 }
             } catch (e) {
                 console.error("Error obteniendo análisis CPM:", e);
-                calcularYRenderizarCPM(procesoSeleccionado);
+                renderizarCPMConHolguras({ tiempo_total_proceso: 0, operaciones_cpm: [] });
             }
         }
 
@@ -875,9 +795,7 @@
                 } else {
                     let sumaOpsFase = 0;
                     if (opOrig.requerimientos_rol_detalles && opOrig.requerimientos_rol_detalles.length > 0) {
-                        opOrig.requerimientos_rol_detalles.forEach(req => {
-                            sumaOpsFase += req.cantidad;
-                        });
+                        opOrig.requerimientos_rol_detalles.forEach(req => sumaOpsFase += req.cantidad);
                     } else {
                         sumaOpsFase = t.personal_requerido || 1;
                     }
@@ -894,66 +812,107 @@
             const tbody = document.getElementById('tablaCPMBody');
             tbody.innerHTML = '';
 
-            tareas.forEach((t, index) => {
-                let opOriginal = procesoSeleccionado.operaciones.find(op => op.id === t.id) || {};
-                let frecMuestreo = opOriginal.frecuencia_muestreo_horas || 0;
-                let durMuestreo = opOriginal.duracion_muestreo_horas || 0;
-                let opsMuestreo = opOriginal.ops_muestreo || 0;
+            let etapas = procesoSeleccionado.etapas || [];
+            etapas.sort((a, b) => a.orden - b.orden);
 
-                const tr = document.createElement('tr');
-                if (t.tipo_operacion === 'INCUBACION') tr.className = 'incubation-row';
-                if (t.es_critica) tr.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
+            let agrupador = { 'orphan': [] };
+            etapas.forEach(e => agrupador[e.id] = []);
 
-                const leftPct = (Math.max(0, t.es) / (tiempoTotal || 1)) * 100;
-                const widthPct = (t.duracion_horas / (tiempoTotal || 1)) * 100;
+            tareas.forEach((t, globalIndex) => {
+                let opOrig = procesoSeleccionado.operaciones.find(op => op.id === t.id) || {};
+                let etapaId = opOrig.etapa || 'orphan';
+                
+                if (!agrupador[etapaId]) agrupador[etapaId] = [];
+                
+                agrupador[etapaId].push({
+                    t: t,
+                    opOrig: opOrig,
+                    globalIndex: globalIndex + 1
+                });
+            });
 
-                let holguraBadge = t.es_critica 
-                    ? `<span class="tag-resource" style="border-color:var(--critical); color:var(--critical);">🚨 Crítica (0h)</span>` 
-                    : `<span class="tag-resource" style="border-color:var(--success); color:var(--success);">✅ Holgura: ${t.holgura}h</span>`;
+            const pintarFilasActividad = (listaActividades) => {
+                listaActividades.forEach(item => {
+                    let t = item.t;
+                    let opOriginal = item.opOrig;
+                    let frecMuestreo = opOriginal.frecuencia_muestreo_horas || 0;
+                    let durMuestreo = opOriginal.duracion_muestreo_horas || 0;
+                    let opsMuestreo = opOriginal.ops_muestreo || 0;
 
-                let subTxtFrecuencia = (t.tipo_operacion === 'INCUBACION' && frecMuestreo > 0) 
-                    ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h, ${opsMuestreo}Op)</span>` 
-                    : '';
+                    const tr = document.createElement('tr');
+                    if (t.tipo_operacion === 'INCUBACION') tr.className = 'incubation-row';
+                    if (t.es_critica) tr.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
 
-                let badgesRolesHtml = '';
-                if (opOriginal.requerimientos_rol_detalles && opOriginal.requerimientos_rol_detalles.length > 0) {
-                    opOriginal.requerimientos_rol_detalles.forEach(req => {
-                        badgesRolesHtml += `<span class="tag-resource" style="color:var(--accent);">👤 ${req.cantidad}x ${req.rol_nombre}</span> `;
-                    });
+                    const leftPct = (Math.max(0, t.es) / (tiempoTotal || 1)) * 100;
+                    const widthPct = (t.duracion_horas / (tiempoTotal || 1)) * 100;
+
+                    let holguraBadge = t.es_critica 
+                        ? `<span class="tag-resource" style="border-color:var(--critical); color:var(--critical);">🚨 Crítica (0h)</span>` 
+                        : `<span class="tag-resource" style="border-color:var(--success); color:var(--success);">✅ Holgura: ${t.holgura}h</span>`;
+
+                    let subTxtFrecuencia = (t.tipo_operacion === 'INCUBACION' && frecMuestreo > 0) 
+                        ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h, ${opsMuestreo}Op)</span>` 
+                        : '';
+
+                    let badgesRolesHtml = '';
+                    if (opOriginal.requerimientos_rol_detalles && opOriginal.requerimientos_rol_detalles.length > 0) {
+                        opOriginal.requerimientos_rol_detalles.forEach(req => {
+                            badgesRolesHtml += `<span class="tag-resource" style="color:var(--accent);">👤 ${req.cantidad}x ${req.rol_nombre}</span> `;
+                        });
+                    } else {
+                        badgesRolesHtml = `<span class="tag-resource">👥 Ops: ${t.personal_requerido}</span>`;
+                    }
+
+                    const safeName = t.nombre.replace(/'/g, "\\'");
+
+                    tr.innerHTML = `
+                        <td><strong>#${item.globalIndex}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
+                        <td><strong>${t.nombre}</strong></td>
+                        <td>⏱️ ${t.duracion_horas}h ${subTxtFrecuencia}</td>
+                        <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
+                        <td>
+                            ${badgesRolesHtml}
+                            <span class="tag-resource">🏗️ ${t.tipo_equipo_requerido}</span>
+                        </td>
+                        <td>${t.es}h ➔ ${t.ef}h</td>
+                        <td>
+                            <span class="badge-cpm ${t.tipo_operacion === 'INCUBACION' ? 'badge-incubation' : 'badge-active'}">
+                                ${t.tipo_operacion === 'INCUBACION' ? '🧫 PASIVA' : '⚙️ ACTIVA'}
+                            </span>
+                        </td>
+                        <td class="gantt-preview-cell">
+                            <div class="gantt-track">
+                                <div class="gantt-bar ${t.es_critica ? 'critical' : 'regular'}" 
+                                     style="left: ${leftPct}%; width: ${widthPct}%; ${t.es_critica ? 'background-color: var(--critical);' : ''}"></div>
+                            </div>
+                        </td>
+                        <td style="text-align: center; white-space: nowrap;">
+                            <button class="btn-icon validate" title="Auditoría GxP de Personal" onclick="abrirModalValidacion(${t.id}, '${safeName}')">🔍</button>
+                            <button class="btn-icon edit" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id})">✏️</button>
+                            <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${safeName}')">🗑️</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            };
+
+            if (agrupador['orphan'].length > 0) {
+                pintarFilasActividad(agrupador['orphan']);
+            }
+
+            etapas.forEach(etapa => {
+                const trEtapa = document.createElement('tr');
+                trEtapa.className = 'etapa-header-row';
+                trEtapa.innerHTML = `<td colspan="9">📁 ETAPA: ${etapa.nombre}</td>`;
+                tbody.appendChild(trEtapa);
+
+                if (agrupador[etapa.id].length > 0) {
+                    pintarFilasActividad(agrupador[etapa.id]);
                 } else {
-                    badgesRolesHtml = `<span class="tag-resource">👥 Ops: ${t.personal_requerido}</span>`;
+                    const trEmpty = document.createElement('tr');
+                    trEmpty.innerHTML = `<td colspan="9" style="text-align:center; color: var(--text-muted); font-style: italic; padding: 1rem;">No hay actividades registradas en esta etapa. Haga clic en "+ Añadir Actividad".</td>`;
+                    tbody.appendChild(trEmpty);
                 }
-
-                const safeName = t.nombre.replace(/'/g, "\\'");
-
-                tr.innerHTML = `
-                    <td><strong>#${index + 1}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
-                    <td><strong>${t.nombre}</strong></td>
-                    <td>⏱️ ${t.duracion_horas}h ${subTxtFrecuencia}</td>
-                    <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
-                    <td>
-                        ${badgesRolesHtml}
-                        <span class="tag-resource">🏗️ ${t.tipo_equipo_requerido}</span>
-                    </td>
-                    <td>${t.es}h ➔ ${t.ef}h</td>
-                    <td>
-                        <span class="badge-cpm ${t.tipo_operacion === 'INCUBACION' ? 'badge-incubation' : 'badge-active'}">
-                            ${t.tipo_operacion === 'INCUBACION' ? '🧫 PASIVA' : '⚙️ ACTIVA'}
-                        </span>
-                    </td>
-                    <td class="gantt-preview-cell">
-                        <div class="gantt-track">
-                            <div class="gantt-bar ${t.es_critica ? 'critical' : 'regular'}" 
-                                 style="left: ${leftPct}%; width: ${widthPct}%; ${t.es_critica ? 'background-color: var(--critical);' : ''}"></div>
-                        </div>
-                    </td>
-                    <td style="text-align: center; white-space: nowrap;">
-                        <button class="btn-icon validate" title="Auditoría / Validación de Personal GxP" onclick="abrirModalValidacion(${t.id}, '${safeName}')">🔍</button>
-                        <button class="btn-icon edit" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id})">✏️</button>
-                        <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${safeName}')">🗑️</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
             });
         }
 
@@ -1009,6 +968,7 @@
 
         async function crearOperacionAPI() {
             if (!procesoSeleccionado) return;
+            const etapa = document.getElementById('selectEtapaTarea').value || null; 
             const identificador_paso = document.getElementById('inputPasoId').value.trim();
             const nombre = document.getElementById('inputTareaNombre').value.trim();
             const tipo_operacion = document.getElementById('selectTipoTarea').value;
@@ -1033,6 +993,7 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                 body: JSON.stringify({
                     proceso: procesoSeleccionado.id,
+                    etapa: etapa, 
                     identificador_paso,
                     nombre,
                     tipo_operacion,
@@ -1051,15 +1012,7 @@
             });
 
             if (res.ok) {
-                document.getElementById('inputPasoId').value = '';
-                document.getElementById('inputTareaNombre').value = '';
-                document.getElementById('inputTareaDuracion').value = '';
-                document.getElementById('inputFrecMuestreo').value = '0';
-                document.getElementById('inputDuracionMuestreo').value = '0';
-                document.getElementById('inputOpsMuestreo').value = '0';
-                document.getElementById('inputDesfase').value = '0';
-                document.getElementById('rolesBuilderCrear').innerHTML = '';
-                agregarFilaRolBuilder('crear');
+                cerrarModalNuevaOperacion();
                 cargarCatalogosGlobales();
             } else {
                 alert("Error al registrar operación (revisa dependencias circulares o roles).");
@@ -1071,6 +1024,7 @@
             if (!op) return;
 
             document.getElementById('editOpId').value = op.id;
+            document.getElementById('editOpEtapa').value = op.etapa || ''; 
             document.getElementById('editOpPasoId').value = op.identificador_paso;
             document.getElementById('editOpNombre').value = op.nombre;
             document.getElementById('editOpTipo').value = op.tipo_operacion;
@@ -1104,6 +1058,7 @@
 
         async function guardarEdicionOperacionAPI() {
             const id = document.getElementById('editOpId').value;
+            const etapa = document.getElementById('editOpEtapa').value || null; 
             const identificador_paso = document.getElementById('editOpPasoId').value.trim();
             const nombre = document.getElementById('editOpNombre').value.trim();
             const tipo_operacion = document.getElementById('editOpTipo').value;
@@ -1125,6 +1080,7 @@
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                 body: JSON.stringify({
+                    etapa: etapa, 
                     identificador_paso,
                     nombre,
                     tipo_operacion,
@@ -1163,7 +1119,7 @@
             }
         }
 
-        // --- LÓGICA DE VALIDACIÓN GXP (SKILL-MATCHING) CORREGIDA ---
+        // --- LÓGICA DE VALIDACIÓN GXP ---
         function abrirModalValidacion(id, nombre) {
             document.getElementById('valOpId').value = id;
             document.getElementById('valOpNombre').innerText = nombre;
@@ -1200,22 +1156,16 @@
             try {
                 const response = await fetch(`/api/operaciones-proceso/${opId}/validar-disponibilidad/`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'X-CSRFToken': getCookie('csrftoken') 
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                     body: JSON.stringify({ fecha: fecha })
                 });
 
                 const data = await response.json();
                 
-                if (!response.ok) {
-                    throw new Error(data.error || "Error al validar competencias en el servidor.");
-                }
+                if (!response.ok) throw new Error(data.error || "Error al validar competencias en el servidor.");
 
                 resContainer.style.display = 'block';
                 
-                // CORRECCIÓN: Validación robusta para casos sin arreglos 'detalles'
                 if (!data.detalles || data.detalles.length === 0) {
                     resContainer.innerHTML = `<div style="text-align:center; padding: 1rem; color: var(--success); font-weight:bold;">${data.mensaje || 'Fase sin requerimientos específicos de roles. 100% Cubierto.'}</div>`;
                     return;
@@ -1275,7 +1225,6 @@
             return cookieValue;
         }
 
-        // Inicialización
         cargarCatalogosGlobales();
     </script>
 </body>

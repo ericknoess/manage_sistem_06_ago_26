@@ -3,10 +3,9 @@
 from rest_framework import serializers
 from django.db import transaction
 from .models import (
-    ProcesoMaestro, OperacionProceso, RequerimientoPersonalFase,
+    ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
     LoteProduccion, FaseLote, AsignacionFaseOperador
 )
-# IMPORTACIÓN ACTUALIZADA: Traemos los serializadores de catálogos del módulo de actividades
 from actividades.serializers import MaterialInsumoSerializer, EquipoSerializer
 from roster.models import RolOperador
 
@@ -14,6 +13,15 @@ from roster.models import RolOperador
 # ==============================================================================
 # 1. SERIALIZADORES MAESTROS (PLANTILLAS Y DISEÑO)
 # ==============================================================================
+
+class EtapaProcesoSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el nuevo nivel jerárquico ISA-88 (Etapas).
+    """
+    class Meta:
+        model = EtapaProceso
+        fields = ['id', 'proceso', 'nombre', 'orden', 'created_at', 'updated_at']
+
 
 class RequerimientoPersonalFaseSerializer(serializers.ModelSerializer):
     rol_nombre = serializers.CharField(source='rol.nombre', read_only=True)
@@ -31,13 +39,14 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
     class Meta:
         model = OperacionProceso
         fields = [
-            'id', 'proceso', 'identificador_paso', 'nombre', 'tipo_operacion',
+            'id', 'proceso', 'etapa', 'identificador_paso', 'nombre', 'tipo_operacion',
             'duracion_horas', 'frecuencia_muestreo_horas', 'duracion_muestreo_horas',
             'ops_muestreo', 'predecesora', 'tipo_dependencia', 'desfase_horas',
             'personal_requerido', 'tipo_equipo_requerido', 'materiales_requeridos',
             'materiales_requeridos_detalles', 'requerimientos_rol', 'requerimientos_rol_detalles'
         ]
         extra_kwargs = {
+            'etapa': {'required': False, 'allow_null': True},
             'materiales_requeridos': {'required': False},
             'predecesora': {'required': False, 'allow_null': True},
             'tipo_dependencia': {'required': False},
@@ -103,12 +112,15 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
 
 
 class ProcesoMaestroSerializer(serializers.ModelSerializer):
+    # DUAL EXPOSURE: Mantenemos 'operaciones' plano para el algoritmo matemático CPM, 
+    # y enviamos 'etapas' para que el frontend dibuje la estructura jerárquica.
+    etapas = EtapaProcesoSerializer(many=True, read_only=True)
     operaciones = OperacionProcesoSerializer(many=True, read_only=True)
 
     class Meta:
         model = ProcesoMaestro
         fields = [
-            'id', 'nombre', 'descripcion', 'activo', 'operaciones', 'created_at', 'updated_at'
+            'id', 'nombre', 'descripcion', 'activo', 'etapas', 'operaciones', 'created_at', 'updated_at'
         ]
 
 # ==============================================================================
@@ -135,6 +147,10 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
     duracion_estimada = serializers.FloatField(source='operacion_maestra.duracion_horas', read_only=True)
     
+    # --- NUEVOS CAMPOS: Inyección de la Jerarquía ISA-88 para el eBR ---
+    etapa_nombre = serializers.CharField(source='operacion_maestra.etapa.nombre', read_only=True, default='Actividades Sueltas (Sin Etapa)')
+    etapa_orden = serializers.IntegerField(source='operacion_maestra.etapa.orden', read_only=True, default=999999)
+    
     # Datos inyectados para facilitar el Tablero Semanal (MES)
     lote_codigo = serializers.CharField(source='lote.identificador_lote', read_only=True)
     personal_requerido = serializers.IntegerField(source='operacion_maestra.personal_requerido', read_only=True)
@@ -153,6 +169,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         model = FaseLote
         fields = [
             'id', 'lote', 'lote_codigo', 'operacion_maestra', 'operacion_nombre', 'operacion_id_paso',
+            'etapa_nombre', 'etapa_orden', # <-- Incorporados a la respuesta JSON
             'estado', 'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',
             'equipos_asignados', 'equipos_detalles', 'materiales_asignados', 'materiales_detalles',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
