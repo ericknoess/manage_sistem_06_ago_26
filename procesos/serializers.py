@@ -141,27 +141,25 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
 
 class FaseLoteSerializer(serializers.ModelSerializer):
     """
-    Serializer para la fase. Actúa como tarea en el calendario y como registro eBR.
+    Serializer para la fase. Actúa como tarea en el calendario, registro eBR y fuente del Gantt.
     """
-    operacion_nombre = serializers.CharField(source='operacion_maestra.nombre', read_only=True)
+    # [MODIFICADO] Usamos SerializerMethodField para que el backend evalúe dinámicamente si es un muestreo (EFT)
+    operacion_nombre = serializers.SerializerMethodField()
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
     duracion_estimada = serializers.FloatField(source='operacion_maestra.duracion_horas', read_only=True)
     
-    # --- NUEVOS CAMPOS: Inyección de la Jerarquía ISA-88 para el eBR ---
+    # Inyección de la Jerarquía ISA-88
     etapa_nombre = serializers.CharField(source='operacion_maestra.etapa.nombre', read_only=True, default='Actividades Sueltas (Sin Etapa)')
     etapa_orden = serializers.IntegerField(source='operacion_maestra.etapa.orden', read_only=True, default=999999)
     
-    # Datos inyectados para facilitar el Tablero Semanal (MES)
     lote_codigo = serializers.CharField(source='lote.identificador_lote', read_only=True)
     personal_requerido = serializers.IntegerField(source='operacion_maestra.personal_requerido', read_only=True)
     
     operadores_asignados = AsignacionFaseOperadorSerializer(many=True, read_only=True)
     
-    # Detalles de recursos para lectura
     equipos_detalles = EquipoSerializer(source='equipos_asignados', many=True, read_only=True)
     materiales_detalles = MaterialInsumoSerializer(source='materiales_asignados', many=True, read_only=True)
     
-    # KPIs calculados
     duracion_real_horas = serializers.SerializerMethodField()
     desviacion_horas = serializers.SerializerMethodField()
 
@@ -169,8 +167,17 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         model = FaseLote
         fields = [
             'id', 'lote', 'lote_codigo', 'operacion_maestra', 'operacion_nombre', 'operacion_id_paso',
-            'etapa_nombre', 'etapa_orden', # <-- Incorporados a la respuesta JSON
-            'estado', 'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',
+            'etapa_nombre', 'etapa_orden',
+            'estado', 
+            # --- Forecast actual (Programable) ---
+            'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',
+            # --- [NUEVO] Baseline inmutable expuestos para el Gantt ---
+            'fecha_base_cpm', 'hora_inicio_base_cpm', 'hora_fin_base_cpm',
+            # --- [NUEVO] Auditoría de reprogramación ---
+            'motivo_reprogramacion', 'notas_reprogramacion',
+            # --- [NUEVO] Soporte de muestreos cíclicos ---
+            'es_subtarea_muestreo', 'indice_muestreo',
+            # --- Recursos y Trazabilidad GxP ---
             'equipos_asignados', 'equipos_detalles', 'materiales_asignados', 'materiales_detalles',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados'
@@ -179,6 +186,12 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'equipos_asignados': {'required': False},
             'materiales_asignados': {'required': False},
         }
+
+    def get_operacion_nombre(self, obj):
+        # Retorna el nombre con la edad del cultivo si es un muestreo
+        if obj.es_subtarea_muestreo and obj.nombre_tarea_dinamica:
+            return obj.nombre_tarea_dinamica
+        return obj.operacion_maestra.nombre
 
     def get_duracion_real_horas(self, obj):
         if obj.fecha_inicio_real and obj.fecha_fin_real:
