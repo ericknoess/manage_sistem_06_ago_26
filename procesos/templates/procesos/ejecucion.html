@@ -54,7 +54,7 @@
 
         .main-layout {
             display: grid;
-            grid-template-columns: 320px 1fr;
+            grid-template-columns: 340px 1fr;
             gap: 0.75rem;
             flex: 1;
             overflow: hidden;
@@ -87,8 +87,9 @@
         .btn-action:hover { background-color: var(--accent-hover); }
 
         .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+        .btn-danger { background-color: var(--danger); color: white; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; }
 
-        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 4px; border-radius: 4px; transition: background-color 0.2s; }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 3px 6px; border-radius: 4px; transition: background-color 0.2s; }
         .btn-icon:hover { background-color: rgba(255,255,255,0.1); }
 
         .list-container { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; flex: 1; }
@@ -97,8 +98,6 @@
         .lote-item { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.65rem 0.75rem; cursor: pointer; transition: all 0.15s ease; display: flex; justify-content: space-between; align-items: center; }
         .lote-item:hover { border-color: var(--accent); }
         .lote-item.active { border-color: var(--accent); background-color: rgba(16, 185, 129, 0.08); border-left: 4px solid var(--accent); }
-        .lote-info h4 { margin: 0; font-size: 0.85rem; color: var(--text); }
-        .lote-info span { font-size: 0.7rem; color: var(--text-muted); }
 
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.8rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); }
@@ -108,10 +107,10 @@
 
         .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
         .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
-        input[type="text"], input[type="date"], input[type="datetime-local"], select { 
+        input[type="text"], input[type="date"], input[type="datetime-local"], select, textarea { 
             background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; 
         }
-        input:focus, select:focus { border-color: var(--accent); }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 
         .badge-status { padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; white-space: nowrap; }
         .status-planeado, .status-pendiente { background-color: rgba(56, 189, 248, 0.15); color: var(--info); border: 1px solid var(--info); }
@@ -123,7 +122,6 @@
         th, td { padding: 0.6rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
         tbody tr:hover { background-color: rgba(255,255,255,0.02); }
 
-        /* Estilo para las cabeceras de Etapa (ISA-88) en la tabla */
         .etapa-header-row td {
             background-color: rgba(15, 23, 42, 0.8);
             color: var(--info);
@@ -142,7 +140,6 @@
         .tag-delay { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
         .tag-ontime { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
         
-        /* Banner de Auditoría GxP */
         .gxp-lock-banner { background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--warning); padding: 0.75rem; margin: 1rem 1rem 0 1rem; border-radius: 6px; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
     </style>
 </head>
@@ -209,6 +206,30 @@
             <div class="modal-actions" style="margin-top: 1rem;">
                 <button class="btn-secondary" onclick="cerrarModalInstanciarLote()">Cancelar</button>
                 <button class="btn-action" onclick="crearLoteAPI()">Instanciar Lote</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ABORTAR LOTE (GXP COMPLIANCE) -->
+    <div class="modal-overlay" id="modalAbortarLote" style="display: none;">
+        <div class="modal-content" style="width: 420px;">
+            <div class="modal-header">
+                <h3 style="color: var(--danger);">🛑 Abortar Lote de Producción</h3>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                Esta acción detendrá permanentemente el lote y cancelará las fases pendientes. Por normativa GxP, debe registrar un motivo detallado (mínimo 10 caracteres).
+            </div>
+            
+            <input type="hidden" id="abortarLoteId">
+            
+            <div class="form-group" style="margin-top: 0.5rem;">
+                <label>Justificación / Causa Raíz del Aborto</label>
+                <textarea id="textareaMotivoAborto" rows="4" placeholder="Describa el motivo de la cancelación..."></textarea>
+            </div>
+            
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button class="btn-secondary" onclick="document.getElementById('modalAbortarLote').style.display='none'">Cancelar</button>
+                <button class="btn-danger" onclick="ejecutarAbortarAPI()">Confirmar Aborto GxP</button>
             </div>
         </div>
     </div>
@@ -288,7 +309,7 @@
             container.innerHTML = '';
             
             if (lotesGlobales.length === 0) {
-                container.innerHTML = `<div class="empty-state">No hay lotes registrados. Haz clic en 'Instanciar Lote'.</div>`;
+                container.innerHTML = `<div class="empty-state">No hay lotes activos. Haz clic en 'Instanciar Lote'.</div>`;
                 return;
             }
 
@@ -297,14 +318,38 @@
                 card.className = `lote-item ${loteSeleccionado && loteSeleccionado.id === lote.id ? 'active' : ''}`;
                 
                 let badgeClass = lote.estado === 'PLANEADO' ? 'status-planeado' : (lote.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
-
                 let progress = lote.progreso_porcentual !== undefined ? lote.progreso_porcentual : 0;
+
+                // --- BOTONES DE GESTIÓN SEGÚN ESTADO (GxP) ---
+                let actionButtonHtml = '';
+                if (lote.estado === 'PLANEADO') {
+                    actionButtonHtml = `
+                        <button class="btn-icon" style="color: var(--danger);" title="Eliminar Lote Planificado" onclick="eliminarLoteAPI(${lote.id}, event)">
+                            🗑️
+                        </button>
+                    `;
+                } else if (lote.estado === 'EN_PROGRESO' || lote.estado === 'DESVIACION') {
+                    actionButtonHtml = `
+                        <button class="btn-icon" style="color: var(--warning);" title="Abortar Lote" onclick="abrirModalAbortar(${lote.id}, event)">
+                            🛑
+                        </button>
+                    `;
+                } else if (lote.estado === 'COMPLETADO') {
+                    actionButtonHtml = `
+                        <button class="btn-icon" style="color: var(--success);" title="Archivar Lote" onclick="archivarLoteAPI(${lote.id}, event)">
+                            📦
+                        </button>
+                    `;
+                }
 
                 card.innerHTML = `
                     <div style="flex: 1;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                             <h4 style="margin: 0; font-size: 0.85rem; color: var(--text);">${lote.identificador_lote}</h4>
-                            <span class="badge-status ${badgeClass}">${lote.estado}</span>
+                            <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                <span class="badge-status ${badgeClass}">${lote.estado}</span>
+                                ${actionButtonHtml}
+                            </div>
                         </div>
                         <span style="font-size: 0.7rem; color: var(--text-muted);">${lote.proceso_nombre}</span>
                         <div class="progress-container">
@@ -314,7 +359,6 @@
                 `;
                 
                 card.onclick = () => seleccionarLote(lote.id);
-                
                 container.appendChild(card);
             });
         }
@@ -346,8 +390,6 @@
                 : '-';
                 
             let progress = loteSeleccionado.progreso_porcentual !== undefined ? loteSeleccionado.progreso_porcentual : 0;
-            
-            // LÓGICA DE BLOQUEO VISUAL
             let isLocked = loteSeleccionado.estado === 'COMPLETADO';
             
             let bannerLockHtml = isLocked ? `
@@ -401,43 +443,30 @@
                         <tbody>
             `;
 
-            // --- LÓGICA DE AGRUPACIÓN POR ETAPAS ISA-88 ---
             let fasesPorEtapa = {};
-            
             loteSeleccionado.fases.forEach(fase => {
                 let etapaNombre = fase.etapa_nombre || 'Actividades Sueltas (Sin Etapa)';
                 let etapaOrden = fase.etapa_orden || 999999;
                 
                 if (!fasesPorEtapa[etapaNombre]) {
-                    fasesPorEtapa[etapaNombre] = {
-                        orden: etapaOrden,
-                        fases: []
-                    };
+                    fasesPorEtapa[etapaNombre] = { orden: etapaOrden, fases: [] };
                 }
                 fasesPorEtapa[etapaNombre].fases.push(fase);
             });
 
-            // Convertir el diccionario a un arreglo y ordenarlo por etapa_orden
-            let etapasArray = Object.keys(fasesPorEtapa).map(key => {
-                return {
-                    nombre: key,
-                    orden: fasesPorEtapa[key].orden,
-                    fases: fasesPorEtapa[key].fases
-                };
-            });
-            
-            etapasArray.sort((a, b) => a.orden - b.orden);
+            let etapasArray = Object.keys(fasesPorEtapa).map(key => ({
+                nombre: key,
+                orden: fasesPorEtapa[key].orden,
+                fases: fasesPorEtapa[key].fases
+            })).sort((a, b) => a.orden - b.orden);
 
-            // RENDERIZADO DE LAS FILAS
             etapasArray.forEach(etapa => {
-                // Dibujar cabecera de la Etapa
                 html += `
                     <tr class="etapa-header-row">
                         <td colspan="8">📁 ETAPA: ${etapa.nombre}</td>
                     </tr>
                 `;
 
-                // Dibujar las fases de esta Etapa
                 etapa.fases.forEach(fase => {
                     let badgeClass = 'status-pendiente';
                     if(fase.estado === 'EN_PROGRESO') badgeClass = 'status-progreso';
@@ -489,12 +518,7 @@
                 });
             });
 
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-
+            html += `</tbody></table></div>`;
             container.innerHTML = html;
         }
 
@@ -509,11 +533,9 @@
         function abrirModalInstanciarLote() {
             document.getElementById('nuevoLoteId').value = '';
             document.getElementById('selectProcesoMaestro').value = '';
-            
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('nuevoLoteFecha').value = now.toISOString().slice(0, 16);
-            
             document.getElementById('modalInstanciarLote').style.display = 'flex';
         }
 
@@ -552,70 +574,123 @@
             } catch (err) { alert("Error de red."); }
         }
 
-        async function cambiarEstadoFase(faseId, estadoActual) {
-            let siguienteEstado = '';
-            if (estadoActual === 'PENDIENTE') {
-                siguienteEstado = 'EN_PROGRESO';
-            } else if (estadoActual === 'EN_PROGRESO') {
-                siguienteEstado = 'COMPLETADA';
-            } else {
-                alert("Esta fase ya se encuentra completada o fue omitida.");
+        // --- ACCIONES DE GESTIÓN GxP (ELIMINAR, ARCHIVAR, ABORTAR) ---
+        async function eliminarLoteAPI(loteId, event) {
+            event.stopPropagation();
+            if (!confirm("⚠️ ADVERTENCIA GxP: ¿Está seguro que desea eliminar este Lote de Producción planificado? Esta acción es irreversible.")) return;
+
+            try {
+                const res = await fetch(`/api/lotes/${loteId}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+
+                if (res.ok || res.status === 204) {
+                    limpiarSeleccionSiCorresponde(loteId);
+                    await cargarCatalogos();
+                } else {
+                    const data = await res.json();
+                    alert("No se pudo eliminar el lote: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        async function archivarLoteAPI(loteId, event) {
+            event.stopPropagation();
+            if (!confirm("📦 ¿Desea archivar este Lote completado? Desaparecerá del tablero activo de ejecución pero se mantendrá en el histórico GxP.")) return;
+
+            try {
+                const res = await fetch(`/api/lotes/${loteId}/archivar/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+
+                if (res.ok) {
+                    limpiarSeleccionSiCorresponde(loteId);
+                    await cargarCatalogos();
+                } else {
+                    const data = await res.json();
+                    alert("Error al archivar: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        function abrirModalAbortar(loteId, event) {
+            event.stopPropagation();
+            document.getElementById('abortarLoteId').value = loteId;
+            document.getElementById('textareaMotivoAborto').value = '';
+            document.getElementById('modalAbortarLote').style.display = 'flex';
+        }
+
+        async function ejecutarAbortarAPI() {
+            const loteId = document.getElementById('abortarLoteId').value;
+            const motivo = document.getElementById('textareaMotivoAborto').value.trim();
+
+            if (motivo.length < 10) {
+                alert("Violación GxP: El motivo del aborto debe contener al menos 10 caracteres explicativos.");
                 return;
             }
 
-            if (!confirm(`¿Confirma cambiar el estado de la fase a [${siguienteEstado}]? Se estampará la marca de tiempo oficial del servidor.`)) {
-                return;
+            try {
+                const res = await fetch(`/api/lotes/${loteId}/abortar/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ motivo_aborto: motivo })
+                });
+
+                if (res.ok) {
+                    document.getElementById('modalAbortarLote').style.display = 'none';
+                    limpiarSeleccionSiCorresponde(parseInt(loteId));
+                    await cargarCatalogos();
+                } else {
+                    const data = await res.json();
+                    alert("Error al abortar lote: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        function limpiarSeleccionSiCorresponde(loteId) {
+            if (loteSeleccionado && loteSeleccionado.id === loteId) {
+                loteSeleccionado = null;
+                document.getElementById('editorLote').innerHTML = '<div class="empty-state">👈 Selecciona un lote activo del panel izquierdo para ver sus fases y registrar firmas GxP.</div>';
+                document.getElementById('tituloLoteActivo').innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>';
             }
+        }
+
+        async function cambiarEstadoFase(faseId, estadoActual) {
+            let siguienteEstado = '';
+            if (estadoActual === 'PENDIENTE') siguienteEstado = 'EN_PROGRESO';
+            else if (estadoActual === 'EN_PROGRESO') siguienteEstado = 'COMPLETADA';
+            else return;
+
+            if (!confirm(`¿Confirma cambiar el estado de la fase a [${siguienteEstado}]?`)) return;
 
             try {
                 const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'X-CSRFToken': getCookie('csrftoken') 
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                     body: JSON.stringify({ estado: siguienteEstado })
                 });
 
-                if (res.ok) {
-                    await cargarCatalogos(); 
-                } else {
+                if (res.ok) await cargarCatalogos();
+                else {
                     const data = await res.json();
-                    alert("Error al actualizar estado GxP: " + (data.error || JSON.stringify(data)));
+                    alert("Error GxP: " + (data.error || JSON.stringify(data)));
                 }
-            } catch (err) {
-                console.error(err);
-                alert("Error de red al intentar actualizar el estado.");
-            }
+            } catch (err) { alert("Error de red."); }
         }
 
         async function abrirModalAsignacion(faseId) {
             document.getElementById('asignarFaseId').value = faseId;
-            
             try {
-                const [resOps, resRoles] = await Promise.all([
-                    fetch('/api/operadores/'), 
-                    fetch('/api/roles-operador/')
-                ]);
-                
+                const [resOps, resRoles] = await Promise.all([fetch('/api/operadores/'), fetch('/api/roles-operador/')]);
                 const ops = await resOps.json();
                 const roles = await resRoles.json();
                 
-                const selOp = document.getElementById('selectOperador');
-                const selRol = document.getElementById('selectRolAsignado');
-                
-                selOp.innerHTML = ops.map(o => {
-                    const turnoStr = o.turno ? ` (${o.turno})` : '';
-                    return `<option value="${o.id}">${o.nombre}${turnoStr}</option>`;
-                }).join('');
-                
-                selRol.innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('');
-                
+                document.getElementById('selectOperador').innerHTML = ops.map(o => `<option value="${o.id}">${o.nombre}</option>`).join('');
+                document.getElementById('selectRolAsignado').innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('');
                 document.getElementById('modalAsignarOperador').style.display = 'flex';
-            } catch (err) {
-                console.error("Error al cargar catálogos del Roster:", err);
-                alert("No se pudieron cargar los operadores o roles desde el servidor.");
-            }
+            } catch (err) { alert("Error al cargar catálogos."); }
         }
 
         async function ejecutarAsignacionAPI() {
@@ -623,37 +698,23 @@
             const operador = document.getElementById('selectOperador').value;
             const rol_ejercido = document.getElementById('selectRolAsignado').value;
 
-            if (!operador || !rol_ejercido) {
-                alert("Debe seleccionar un operador y un rol válido.");
-                return;
-            }
-
             try {
                 const res = await fetch('/api/asignaciones-operador/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ 
-                        fase_lote: parseInt(fase_lote), 
-                        operador: parseInt(operador), 
-                        rol_ejercido: parseInt(rol_ejercido), 
-                        horas_invertidas: 0.0 
-                    })
+                    body: JSON.stringify({ fase_lote: parseInt(fase_lote), operador: parseInt(operador), rol_ejercido: parseInt(rol_ejercido), horas_invertidas: 0.0 })
                 });
 
                 if (res.ok) {
                     document.getElementById('modalAsignarOperador').style.display = 'none';
-                    await cargarCatalogos(); 
+                    await cargarCatalogos();
                 } else {
                     const data = await res.json();
-                    alert("Error en validación GxP: " + JSON.stringify(data));
+                    alert("Error GxP: " + JSON.stringify(data));
                 }
-            } catch (err) { 
-                console.error(err);
-                alert("Error de red al registrar la asignación."); 
-            }
+            } catch (err) { alert("Error de red."); }
         }
 
-        // Inicializar
         cargarCatalogos();
     </script>
 </body>

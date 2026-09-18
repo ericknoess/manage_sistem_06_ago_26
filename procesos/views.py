@@ -2,13 +2,14 @@
 
 from datetime import datetime, timedelta
 from django.db import transaction
+from django.db.models import RestrictedError
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
  
 from .models import (
-    ProcesoMaestro, EtapaProceso, OperacionProceso,
+    ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
     LoteProduccion, FaseLote, AsignacionFaseOperador
 )
 from .serializers import (
@@ -43,21 +44,122 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
             **resultado_cpm
         })
 
+    @action(detail=True, methods=['post'], url_path='archivar')
+    def archivar(self, request, pk=None):
+        proceso = self.get_object()
+        proceso.activo = False
+        proceso.save()
+        return Response({
+            "mensaje": f"La plantilla '{proceso.nombre}' ha sido archivada. Se conservará para el historial de lotes, pero ya no se podrán instanciar nuevos."
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='desarchivar')
+    def desarchivar(self, request, pk=None):
+        proceso = self.get_object()
+        
+        if proceso.activo:
+            return Response({
+                "error": "La plantilla ya se encuentra activa."
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        proceso.activo = True
+        proceso.save()
+        
+        return Response({
+            "mensaje": f"La plantilla '{proceso.nombre}' ha sido restaurada exitosamente y está lista para uso."
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='clonar')
+    @transaction.atomic
+    def clonar(self, request, pk=None):
+        original = self.get_object()
+        nuevo_nombre = request.data.get('nuevo_nombre')
+        
+        if not nuevo_nombre:
+            return Response({"error": "Debe proporcionar un nombre para la nueva plantilla."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if ProcesoMaestro.objects.filter(nombre=nuevo_nombre).exists():
+            return Response({"error": f"Ya existe una receta maestra con el nombre '{nuevo_nombre}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Clonar el Proceso Maestro (Raíz)
+        nuevo_proceso = ProcesoMaestro.objects.create(
+            nombre=nuevo_nombre,
+            descripcion=original.descripcion,
+            activo=True
+        )
+
+        # 2. Clonar Etapas y mantener un diccionario para mapearlas
+        mapa_etapas = {}
+        for etapa in original.etapas.all():
+            nueva_etapa = EtapaProceso.objects.create(
+                proceso=nuevo_proceso,
+                nombre=etapa.nombre,
+                orden=etapa.orden
+            )
+            mapa_etapas[etapa.id] = nueva_etapa
+
+        # 3. Clonar Operaciones (Fase 1: Copiar todo excepto la predecesora)
+        mapa_ops = {}
+        for op in original.operaciones.all():
+            nueva_op = OperacionProceso.objects.create(
+                proceso=nuevo_proceso,
+                etapa=mapa_etapas.get(op.etapa_id) if op.etapa_id else None,
+                identificador_paso=op.identificador_paso,
+                nombre=op.nombre,
+                tipo_operacion=op.tipo_operacion,
+                duracion_horas=op.duracion_horas,
+                frecuencia_muestreo_horas=op.frecuencia_muestreo_horas,
+                duracion_muestreo_horas=op.duracion_muestreo_horas,
+                ops_muestreo=op.ops_muestreo,
+                tipo_dependencia=op.tipo_dependencia,
+                desfase_horas=op.desfase_horas,
+                personal_requerido=op.personal_requerido,
+                tipo_equipo_requerido=op.tipo_equipo_requerido
+            )
+            
+            nueva_op.materiales_requeridos.set(op.materiales_requeridos.all())
+            
+            for req in op.requerimientos_rol.all():
+                RequerimientoPersonalFase.objects.create(
+                    operacion=nueva_op,
+                    rol=req.rol,
+                    cantidad=req.cantidad
+                )
+                
+            mapa_ops[op.id] = nueva_op
+
+        # 4. Clonar Operaciones (Fase 2: Re-vincular la red de predecesoras a los nuevos IDs)
+        for op in original.operaciones.all():
+            if op.predecesora_id:
+                nueva_op_actual = mapa_ops[op.id]
+                nueva_op_predecesora = mapa_ops.get(op.predecesora_id)
+                
+                if nueva_op_predecesora:
+                    nueva_op_actual.predecesora = nueva_op_predecesora
+                    nueva_op_actual.save()
+
+        return Response({
+            "mensaje": f"Plantilla clonada exitosamente como '{nuevo_nombre}'.",
+            "nuevo_id": nuevo_proceso.id
+        }, status=status.HTTP_201_CREATED)
+
 
 class EtapaProcesoViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint para gestionar las Etapas lógicas (Agrupadores ISA-88) de un Proceso Maestro.
-    """
     queryset = EtapaProceso.objects.all().order_by('proceso', 'orden')
     serializer_class = EtapaProcesoSerializer
 
 
 class OperacionProcesoViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint para gestionar las fases individuales de los procesos maestros.
-    """
     queryset = OperacionProceso.objects.prefetch_related('materiales_requeridos').all().order_by('proceso', 'identificador_paso')
     serializer_class = OperacionProcesoSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except RestrictedError:
+            return Response({
+                "error": "Violación GxP (Integridad Referencial): No se puede eliminar esta operación porque ya se han fabricado Lotes que dependen de este registro. En su lugar, archive toda la plantilla."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], url_path='validar-disponibilidad')
     def validar_disponibilidad(self, request, pk=None):
@@ -81,11 +183,13 @@ class OperacionProcesoViewSet(viewsets.ModelViewSet):
 # ==============================================================================
 
 class LoteProduccionViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint para la gestión de Lotes Reales (eBR).
-    Incluye algoritmo Forward Scheduling para programación de tareas MES y generación de muestreos cíclicos.
-    """
-    queryset = LoteProduccion.objects.prefetch_related('fases__operadores_asignados').all().order_by('-created_at')
+    def get_queryset(self):
+        return LoteProduccion.objects.filter(
+            archivado=False
+        ).exclude(
+            estado='ABORTADO'
+        ).prefetch_related('fases__operadores_asignados').order_by('-created_at')
+
     serializer_class = LoteProduccionSerializer
 
     @transaction.atomic
@@ -96,7 +200,6 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
 
         operaciones_maestras = lote.proceso_maestro.operaciones.all()
         
-        # --- FORWARD SCHEDULING (Cálculo de Ruta Crítica base) ---
         calculadora = CPMCalculatorService(operaciones_maestras)
         resultado_cpm = calculadora.calcular_cpm()
         cpm_dict = {item['id']: item for item in resultado_cpm['operaciones_cpm']}
@@ -108,28 +211,23 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
             cpm_info = cpm_dict.get(op.id)
             
             if cpm_info:
-                # 1. Proyectar tiempos de la Tarea Principal (Padre)
                 dt_inicio = inicio_lote + timedelta(hours=cpm_info['es'])
                 dt_fin = inicio_lote + timedelta(hours=cpm_info['ef'])
                 
-                # Crear la Fase Principal guardando Linea Base y Forecast
                 fases_a_crear.append(
                     FaseLote(
                         lote=lote, 
                         operacion_maestra=op, 
                         estado='PENDIENTE',
-                        # --- BASELINE (INMUTABLE) ---
                         fecha_base_cpm=dt_inicio.date(),
                         hora_inicio_base_cpm=dt_inicio.time(),
                         hora_fin_base_cpm=dt_fin.time(),
-                        # --- FORECAST (PROGRAMABLE) ---
                         fecha_programada=dt_inicio.date(),
                         hora_inicio_programada=dt_inicio.time(),
                         hora_fin_programada=dt_fin.time()
                     )
                 )
                 
-                # 2. ALGORITMO DE GENERACIÓN DE MUESTREOS CÍCLICOS
                 if op.tipo_operacion == 'INCUBACION' and op.frecuencia_muestreo_horas > 0:
                     cantidad_muestreos = int(op.duracion_horas // op.frecuencia_muestreo_horas)
                     
@@ -151,11 +249,9 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
                                 es_subtarea_muestreo=True,
                                 indice_muestreo=i,
                                 nombre_tarea_dinamica=nombre_dinamico,
-                                # --- BASELINE (INMUTABLE) ---
                                 fecha_base_cpm=dt_muestreo_inicio.date(),
                                 hora_inicio_base_cpm=dt_muestreo_inicio.time(),
                                 hora_fin_base_cpm=dt_muestreo_fin.time(),
-                                # --- FORECAST (PROGRAMABLE) ---
                                 fecha_programada=dt_muestreo_inicio.date(),
                                 hora_inicio_programada=dt_muestreo_inicio.time(),
                                 hora_fin_programada=dt_muestreo_fin.time()
@@ -170,38 +266,76 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         response_serializer = self.get_serializer(lote)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def destroy(self, request, *args, **kwargs):
+        lote = self.get_object()
+        if lote.estado != 'PLANEADO':
+            return Response({
+                "error": f"Violación GxP (Data Integrity): No se puede eliminar el Lote '{lote.identificador_lote}' porque su estado actual es '{lote.estado}'."
+            }, status=status.HTTP_403_FORBIDDEN)
+        self.perform_destroy(lote)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], url_path='archivar')
+    def archivar(self, request, pk=None):
+        lote = self.get_object()
+        if lote.estado != 'COMPLETADO':
+            return Response({"error": "Solo se pueden archivar lotes COMPLETADOS."}, status=status.HTTP_400_BAD_REQUEST)
+        lote.archivado = True
+        lote.save()
+        return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido archivado."}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='abortar')
+    @transaction.atomic
+    def abortar(self, request, pk=None):
+        lote = self.get_object()
+        if lote.estado in ['COMPLETADO', 'ABORTADO']:
+            return Response({"error": f"No es posible abortar un lote en estado: {lote.estado}."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        motivo = request.data.get('motivo_aborto')
+        if not motivo or len(motivo.strip()) < 10:
+            return Response({"error": "Debe proporcionar un motivo detallado (mínimo 10 caracteres)."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        lote.estado = 'ABORTADO'
+        lote.motivo_aborto = motivo
+        lote.save()
+        
+        tiempo_actual = timezone.now()
+        fases_activas = lote.fases.exclude(estado__in=['COMPLETADA', 'OMITIDA'])
+        for fase in fases_activas:
+            if fase.estado == 'EN_PROGRESO':
+                fase.fecha_fin_real = tiempo_actual
+            fase.estado = 'OMITIDA'
+            fase.save()
+            
+        return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido abortado."}, status=status.HTTP_200_OK)
+
 
 class FaseLoteViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint para gestionar el progreso y tiempos reales de las fases instanciadas.
-    """
-    queryset = FaseLote.objects.select_related('operacion_maestra').all().order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
     serializer_class = FaseLoteSerializer
+
+    def get_queryset(self):
+        return FaseLote.objects.select_related('operacion_maestra', 'lote').filter(
+            lote__archivado=False
+        ).exclude(
+            lote__estado='ABORTADO'
+        ).order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
     @transaction.atomic
     def cambiar_estado(self, request, pk=None):
         fase = self.get_object()
-        
         if fase.lote.estado == 'COMPLETADO':
-            return Response({
-                "error": "Violación GxP (Data Lock): El Lote de Producción ya está cerrado y liberado. Sus registros son estrictamente inmutables."
-            }, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "El Lote de Producción ya está cerrado."}, status=status.HTTP_403_FORBIDDEN)
 
         nuevo_estado = request.data.get('estado')
-
-        estados_validos = dict(FaseLote.ESTADO_FASE_CHOICES).keys()
-        if nuevo_estado not in estados_validos:
+        if nuevo_estado not in dict(FaseLote.ESTADO_FASE_CHOICES).keys():
             return Response({"error": "Estado GxP no válido."}, status=status.HTTP_400_BAD_REQUEST)
 
         if nuevo_estado == 'COMPLETADA' and not fase.operadores_asignados.exists():
             if fase.operacion_maestra.tipo_operacion == 'ACTIVA' or fase.es_subtarea_muestreo:
-                return Response({
-                    "error": "Violación GxP: No se puede completar una tarea operativa o de muestreo sin haber asignado al menos a un operador responsable."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "No se puede completar sin asignar al menos un operador."}, status=status.HTTP_400_BAD_REQUEST)
 
         tiempo_actual = timezone.now()
-        
         if nuevo_estado == 'EN_PROGRESO' and fase.estado == 'PENDIENTE':
             fase.fecha_inicio_real = tiempo_actual
         elif nuevo_estado == 'COMPLETADA' and fase.estado == 'EN_PROGRESO':
@@ -225,16 +359,12 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(fase)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # --- [NUEVO] ENDPOINT PARA REPROGRAMACIÓN Y AUDITORÍA GXP ---
     @action(detail=True, methods=['post'], url_path='reprogramar')
     @transaction.atomic
     def reprogramar(self, request, pk=None):
         fase = self.get_object()
-        
         if fase.lote.estado == 'COMPLETADO':
-            return Response({
-                "error": "Violación GxP (Data Lock): El Lote está cerrado, no se admiten ajustes de agenda."
-            }, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "El Lote está cerrado, no se admiten ajustes."}, status=status.HTTP_403_FORBIDDEN)
 
         nueva_fecha_str = request.data.get('fecha_programada')
         nueva_hora_str = request.data.get('hora_inicio_programada')
@@ -242,14 +372,10 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         notas = request.data.get('notas_reprogramacion', '')
 
         if not all([nueva_fecha_str, nueva_hora_str, motivo]):
-            return Response({
-                "error": "Los campos 'fecha_programada', 'hora_inicio_programada' y 'motivo_reprogramacion' son obligatorios."
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Faltan campos obligatorios."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validación de formato GxP
-        motivos_validos = dict(FaseLote.MOTIVO_REPROGRAMACION_CHOICES).keys()
-        if motivo not in motivos_validos:
-            return Response({"error": "El motivo de reprogramación no es válido o no está estandarizado."}, status=status.HTTP_400_BAD_REQUEST)
+        if motivo not in dict(FaseLote.MOTIVO_REPROGRAMACION_CHOICES).keys():
+            return Response({"error": "Motivo no válido."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             nueva_fecha = datetime.strptime(nueva_fecha_str, '%Y-%m-%d').date()
@@ -257,15 +383,10 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({"error": "Formato de fecha u hora inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Recálculo matemático de la hora de finalización (Forecast)
         dt_inicio_forecast = datetime.combine(nueva_fecha, nueva_hora)
-        
-        # Tomar la duración correcta (si es muestreo o fase normal)
         duracion_operacion = fase.operacion_maestra.duracion_muestreo_horas if fase.es_subtarea_muestreo else fase.operacion_maestra.duracion_horas
-        
         dt_fin_forecast = dt_inicio_forecast + timedelta(hours=duracion_operacion)
 
-        # Guardado en el modelo
         fase.fecha_programada = dt_inicio_forecast.date()
         fase.hora_inicio_programada = dt_inicio_forecast.time()
         fase.hora_fin_programada = dt_fin_forecast.time()
@@ -277,10 +398,6 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
 
 
 class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
-    """
-    API endpoint para auditar y registrar a los operadores en tareas específicas GxP.
-    Incluye validación estricta contra solapamiento de horarios (Time Overlap Prevention).
-    """
     queryset = AsignacionFaseOperador.objects.select_related('operador', 'rol_ejercido').all()
     serializer_class = AsignacionFaseOperadorSerializer
 
@@ -292,19 +409,14 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
         try:
             fase_actual = FaseLote.objects.get(id=fase_id)
         except FaseLote.DoesNotExist:
-            return Response({"error": "La fase especificada no existe."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "La fase no existe."}, status=status.HTTP_404_NOT_FOUND)
 
         if fase_actual.lote.estado == 'COMPLETADO':
-            return Response({
-                "error": "Violación GxP (Data Lock): No se puede asignar personal a un Lote de Producción cerrado."
-            }, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "Lote cerrado."}, status=status.HTTP_403_FORBIDDEN)
 
         if fase_actual.estado in ['COMPLETADA', 'OMITIDA']:
-            return Response({
-                "error": f"Violación GxP: No se puede modificar el personal de una fase que ya se encuentra {fase_actual.estado}."
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Fase en estado {fase_actual.estado}."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validación de solapamiento
         if fase_actual.fecha_programada and fase_actual.hora_inicio_programada and fase_actual.hora_fin_programada:
             asignaciones_existentes = AsignacionFaseOperador.objects.filter(
                 operador_id=operador_id,
@@ -323,7 +435,7 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
                     if ini_nueva < fin_ex and fin_nueva > ini_ex:
                         nombre_tarea = fase_existente.nombre_tarea_dinamica if fase_existente.es_subtarea_muestreo else fase_existente.operacion_maestra.nombre
                         return Response({
-                            "error": f"⚠️ Conflicto de turnos GxP: El operador ya está asignado a la tarea [{fase_existente.operacion_maestra.identificador_paso}] {nombre_tarea} en el horario de {ini_ex.strftime('%H:%M')} a {fin_ex.strftime('%H:%M')}."
+                            "error": f"Conflicto de turnos GxP: El operador ya está asignado a [{fase_existente.operacion_maestra.identificador_paso}] {nombre_tarea} de {ini_ex.strftime('%H:%M')} a {fin_ex.strftime('%H:%M')}."
                         }, status=status.HTTP_400_BAD_REQUEST)
 
         return super().create(request, *args, **kwargs)

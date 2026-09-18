@@ -24,7 +24,7 @@ class ProcesoMaestro(models.Model):
 
 class EtapaProceso(models.Model):
     """
-    [NUEVO] Agrupador lógico (Nivel 2 - ISA-88) que permite organizar las 
+    Agrupador lógico (Nivel 2 - ISA-88) que permite organizar las 
     Operaciones/Actividades en bloques visuales y funcionales (Ej: Upstream, Downstream, Inóculo).
     """
     proceso = models.ForeignKey(
@@ -163,6 +163,7 @@ class LoteProduccion(models.Model):
         ('EN_PROGRESO', 'En Progreso'),
         ('COMPLETADO', 'Completado'),
         ('DESVIACION', 'Desviación / Detenido'),
+        ('ABORTADO', 'Abortado / Cancelado'), # [NUEVO] Estado para detenciones permanentes
     ]
 
     identificador_lote = models.CharField(max_length=100, unique=True, help_text="ID oficial del Lote (Ej: LOTE-EPO-2026X)")
@@ -173,6 +174,10 @@ class LoteProduccion(models.Model):
     )
     estado = models.CharField(max_length=20, choices=ESTADO_LOTE_CHOICES, default='PLANEADO')
     fecha_inicio_planeada = models.DateTimeField(help_text="Fecha y hora estimada o programada de inicio")
+    
+    # --- [NUEVOS CAMPOS] PARA SOFT DELETE Y AUDITORÍA DE CANCELACIÓN ---
+    archivado = models.BooleanField(default=False, help_text="Oculta el lote de los tableros activos (Soft Delete)")
+    motivo_aborto = models.TextField(null=True, blank=True, help_text="Justificación documentada GxP si el lote se aborta")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -217,7 +222,7 @@ class FaseLote(models.Model):
     indice_muestreo = models.PositiveIntegerField(default=0, help_text="Secuencia del muestreo (Ej: 1, 2, 3...)")
     nombre_tarea_dinamica = models.CharField(max_length=200, null=True, blank=True, help_text="Sobreescribe el nombre original (Ej: Toma de Muestra #1 - Inoculación)")
     
-    # --- [NUEVO] LÍNEA BASE (BASELINE) - INMUTABLE DESDE LA CREACIÓN DEL LOTE ---
+    # --- LÍNEA BASE (BASELINE) - INMUTABLE DESDE LA CREACIÓN DEL LOTE ---
     fecha_base_cpm = models.DateField(null=True, blank=True, help_text="Fecha original dictada por el algoritmo CPM (Inmutable)")
     hora_inicio_base_cpm = models.TimeField(null=True, blank=True, help_text="Hora original de inicio CPM (Inmutable)")
     hora_fin_base_cpm = models.TimeField(null=True, blank=True, help_text="Hora original de fin CPM (Inmutable)")
@@ -227,7 +232,7 @@ class FaseLote(models.Model):
     hora_inicio_programada = models.TimeField(null=True, blank=True, help_text="Hora actual de inicio (Forecast)")
     hora_fin_programada = models.TimeField(null=True, blank=True, help_text="Hora actual de finalización (Forecast)")
     
-    # --- [NUEVO] AUDITORÍA DE REPROGRAMACIÓN (METRICS & KPIs) ---
+    # --- AUDITORÍA DE REPROGRAMACIÓN (METRICS & KPIs) ---
     motivo_reprogramacion = models.CharField(max_length=50, choices=MOTIVO_REPROGRAMACION_CHOICES, null=True, blank=True, help_text="Razón estandarizada del cambio de fecha")
     notas_reprogramacion = models.TextField(null=True, blank=True, help_text="Justificación detallada del retraso o reprogramación")
 

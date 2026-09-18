@@ -168,9 +168,12 @@
         .gantt-bar.regular { background-color: var(--accent); }
         .gantt-bar.critical { background-color: var(--critical); }
 
-        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; border-radius: 4px; }
+        .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; border-radius: 4px; transition: background-color 0.2s; }
         .btn-icon:hover { background-color: var(--border-color); }
         .btn-icon.delete:hover { background-color: rgba(239, 68, 68, 0.2); }
+        .btn-icon.archive:hover { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .btn-icon.restore:hover { background-color: rgba(34, 197, 94, 0.2); color: var(--success); }
+        .btn-icon.clone:hover { background-color: rgba(56, 189, 248, 0.2); color: var(--info); }
         .btn-icon.edit:hover { background-color: rgba(56, 189, 248, 0.2); }
         .btn-icon.validate:hover { background-color: rgba(34, 197, 94, 0.2); }
 
@@ -205,7 +208,10 @@
         <div class="panel-box">
             <div class="panel-header">
                 <span>📁 Bioprocesos / Plantillas</span>
-                <button class="btn-primary btn-sm" onclick="abrirModalNuevoProceso()">➕ Nuevo</button>
+                <div style="display: flex; gap: 4px;">
+                    <button class="btn-secondary btn-sm" id="btnToggleArchivados" onclick="toggleVistaArchivados()" title="Ver plantillas archivadas">📦 Archivados</button>
+                    <button class="btn-primary btn-sm" onclick="abrirModalNuevoProceso()">➕ Nuevo</button>
+                </div>
             </div>
             <div class="process-list-container" id="listaProcesos">
                 <!-- Inyectado dinámicamente -->
@@ -215,6 +221,7 @@
         <div class="panel-box">
             <div class="panel-header" id="tituloProcesoActivo">
                 <span>⚡ Mapeo Operacional ISA-88: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
+                <button class="btn-secondary btn-sm" id="btnEditarNombreProc" style="display: none;" onclick="abrirModalEditarProceso()" title="Cambiar nombre de la receta">✏️ Renombrar</button>
             </div>
 
             <div class="task-editor-body" id="editorTareas" style="display: none;">
@@ -292,6 +299,44 @@
         </div>
     </div>
 
+    <!-- MODAL RENOMBRAR PROCESO -->
+    <div class="modal-overlay" id="modalEditarProceso" style="display: none;">
+        <div class="modal-content" style="width: 360px;">
+            <div class="modal-header">
+                <h3>✏️ Cambiar Nombre de Receta</h3>
+            </div>
+            <div class="form-group" style="width: 100%;">
+                <label>Nuevo Nombre del Proceso</label>
+                <input type="text" id="editProcesoNombreInput" placeholder="ej. Eritropoyetina v2.0">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalEditarProceso()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarNuevoNombreProcesoAPI()">Actualizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CLONAR PROCESO -->
+    <div class="modal-overlay" id="modalClonarProceso" style="display: none;">
+        <div class="modal-content" style="width: 380px;">
+            <div class="modal-header">
+                <h3>📑 Clonar Receta Maestra</h3>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                Se realizará una copia profunda (Deep Copy) de la receta original, incluyendo sus etapas, actividades y la red de dependencias críticas (CPM).
+            </div>
+            <input type="hidden" id="clonarProcId">
+            <div class="form-group" style="width: 100%;">
+                <label>Nombre de la Nueva Versión / Copia</label>
+                <input type="text" id="clonarProcNombreNuevo">
+            </div>
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button class="btn-secondary" onclick="cerrarModalClonarProceso()">Cancelar</button>
+                <button class="btn-primary" onclick="ejecutarClonarProcesoAPI()">Ejecutar Clonación</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CREAR ETAPA ISA-88 -->
     <div class="modal-overlay" id="modalNuevaEtapa" style="display: none;">
         <div class="modal-content" style="width: 380px;">
@@ -324,7 +369,6 @@
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 0.8rem;">
-                <!-- Fila 1 -->
                 <div class="form-group" style="grid-column: span 3;">
                     <label>Carpeta / Etapa (ISA-88)</label>
                     <select id="selectEtapaTarea">
@@ -341,7 +385,6 @@
                     <input type="text" id="inputTareaNombre" placeholder="ej. Inoculación">
                 </div>
 
-                <!-- Fila 2 -->
                 <div class="form-group">
                     <label>Tipo Operación</label>
                     <select id="selectTipoTarea" onchange="toggleIncubacionFields(false)">
@@ -363,7 +406,6 @@
                     </select>
                 </div>
 
-                <!-- Fila Incubación -->
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
                     <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly>
@@ -377,7 +419,6 @@
                     <input type="number" id="inputOpsMuestreo" value="0" min="0" step="1" readonly>
                 </div>
                 
-                <!-- Fila Dependencias -->
                 <div class="form-group">
                     <label>Regla Dep.</label>
                     <select id="selectTipoDep">
@@ -397,7 +438,6 @@
                     </select>
                 </div>
 
-                <!-- Fila Materiales & Roles -->
                 <div class="form-group" style="grid-column: span 3;">
                     <label>Materiales Necesarios</label>
                     <select id="selectMaterialesReq" multiple style="height: 50px;">
@@ -541,6 +581,7 @@
         let materialesGlobales = [];
         let rolesGlobales = []; 
         let procesoSeleccionado = null;
+        let mostrandoArchivados = false;
 
         async function cargarCatalogosGlobales() {
             try {
@@ -562,12 +603,14 @@
 
                 if (procesoSeleccionado) {
                     const actualizado = procesosGlobales.find(p => p.id === procesoSeleccionado.id);
-                    if (actualizado) {
+                    if (actualizado && actualizado.activo !== false && !mostrandoArchivados) {
                         seleccionarProceso(actualizado.id);
                     } else {
                         procesoSeleccionado = null;
                         document.getElementById('editorTareas').style.display = 'none';
                         document.getElementById('emptyState').style.display = 'block';
+                        document.getElementById('nombreProcesoSelec').innerText = 'Selecciona un proceso';
+                        document.getElementById('btnEditarNombreProc').style.display = 'none';
                     }
                 }
             } catch (err) {
@@ -718,33 +761,92 @@
             }
         }
 
+        function toggleVistaArchivados() {
+            mostrandoArchivados = !mostrandoArchivados;
+            const btn = document.getElementById('btnToggleArchivados');
+            if (mostrandoArchivados) {
+                btn.style.backgroundColor = 'var(--warning)';
+                btn.style.color = '#0f172a';
+                btn.innerText = '📂 Activos';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+                btn.innerText = '📦 Archivados';
+            }
+            procesoSeleccionado = null;
+            document.getElementById('editorTareas').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('nombreProcesoSelec').innerText = 'Selecciona un proceso';
+            document.getElementById('btnEditarNombreProc').style.display = 'none';
+            renderizarListaProcesos();
+        }
+
         function renderizarListaProcesos() {
             const container = document.getElementById('listaProcesos');
             container.innerHTML = '';
-            procesosGlobales.forEach(p => {
+            
+            const listaFiltrada = procesosGlobales.filter(p => mostrandoArchivados ? p.activo === false : p.activo !== false);
+
+            if (listaFiltrada.length === 0) {
+                container.innerHTML = `<div class="empty-state" style="padding:1.5rem; text-align:center; font-size:0.75rem; color:var(--text-muted);">No hay plantillas ${mostrandoArchivados ? 'archivadas' : 'activas'}.</div>`;
+                return;
+            }
+
+            listaFiltrada.forEach(p => {
                 const card = document.createElement('div');
                 card.className = `process-item ${procesoSeleccionado && procesoSeleccionado.id === p.id ? 'active' : ''}`;
                 
                 const infoDiv = document.createElement('div');
                 infoDiv.className = 'process-info';
                 infoDiv.style.flex = '1';
-                infoDiv.onclick = () => seleccionarProceso(p.id);
+                
+                if (!mostrandoArchivados) {
+                    infoDiv.onclick = () => seleccionarProceso(p.id);
+                }
+
                 infoDiv.innerHTML = `
                     <h4>${p.nombre}</h4>
                     <span>${p.operaciones.length} actividades registradas</span>
                 `;
 
-                const delBtn = document.createElement('button');
-                delBtn.className = 'btn-icon delete';
-                delBtn.title = 'Eliminar Proceso Maestro';
-                delBtn.innerHTML = '🗑️';
-                delBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    eliminarProcesoAPI(p.id, p.nombre);
-                };
+                const actionsDiv = document.createElement('div');
+                actionsDiv.style.display = 'flex';
+                actionsDiv.style.gap = '2px';
 
+                if (!mostrandoArchivados) {
+                    const cloneBtn = document.createElement('button');
+                    cloneBtn.className = 'btn-icon clone';
+                    cloneBtn.title = 'Clonar / Duplicar Receta Maestra';
+                    cloneBtn.innerHTML = '📑';
+                    cloneBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        abrirModalClonarProceso(p.id, p.nombre);
+                    };
+                    actionsDiv.appendChild(cloneBtn);
+
+                    const archiveBtn = document.createElement('button');
+                    archiveBtn.className = 'btn-icon archive';
+                    archiveBtn.title = 'Archivar / Retirar Plantilla Maestra';
+                    archiveBtn.innerHTML = '📦';
+                    archiveBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        archivarProcesoAPI(p.id, p.nombre);
+                    };
+                    actionsDiv.appendChild(archiveBtn);
+                } else {
+                    const restoreBtn = document.createElement('button');
+                    restoreBtn.className = 'btn-icon restore';
+                    restoreBtn.title = 'Restaurar Plantilla Maestra a Activa';
+                    restoreBtn.innerHTML = '🔄';
+                    restoreBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        desarchivarProcesoAPI(p.id, p.nombre);
+                    };
+                    actionsDiv.appendChild(restoreBtn);
+                }
+                
                 card.appendChild(infoDiv);
-                card.appendChild(delBtn);
+                card.appendChild(actionsDiv);
                 container.appendChild(card);
             });
         }
@@ -756,7 +858,9 @@
 
             document.getElementById('nombreProcesoSelec').innerText = procesoSeleccionado.nombre;
             document.getElementById('editorTareas').style.display = 'flex';
+            document.getElementById('emptyState').style.display = 'block';
             document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('btnEditarNombreProc').style.display = 'inline-block';
 
             actualizarSelectPredecesoras(procesoSeleccionado);
             actualizarSelectEtapas(procesoSeleccionado);
@@ -933,6 +1037,51 @@
             document.getElementById('modalNuevoProceso').style.display = 'none';
         }
 
+        // --- FUNCIONES DE RENOMBRAR RECETA ---
+        function abrirModalEditarProceso() {
+            if (!procesoSeleccionado) return;
+            document.getElementById('editProcesoNombreInput').value = procesoSeleccionado.nombre;
+            document.getElementById('modalEditarProceso').style.display = 'flex';
+        }
+
+        function cerrarModalEditarProceso() {
+            document.getElementById('modalEditarProceso').style.display = 'none';
+        }
+
+        async function guardarNuevoNombreProcesoAPI() {
+            if (!procesoSeleccionado) return;
+            const nuevoNombre = document.getElementById('editProcesoNombreInput').value.trim();
+
+            if (!nuevoNombre) {
+                alert("El nombre del proceso no puede estar vacío.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/procesos-maestros/${procesoSeleccionado.id}/`, {
+                    method: 'PATCH',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-CSRFToken': getCookie('csrftoken') 
+                    },
+                    body: JSON.stringify({ nombre: nuevoNombre })
+                });
+
+                if (res.ok) {
+                    const actualizado = await res.json();
+                    cerrarModalEditarProceso();
+                    procesoSeleccionado.nombre = actualizado.nombre;
+                    document.getElementById('nombreProcesoSelec').innerText = actualizado.nombre;
+                    await cargarCatalogosGlobales();
+                } else {
+                    const data = await res.json();
+                    alert("Error al actualizar el nombre:\n\n" + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) {
+                alert("Error de red al intentar actualizar el nombre.");
+            }
+        }
+
         async function crearProcesoMaestroAPI() {
             const nombre = document.getElementById('nuevoProcesoNombre').value.trim();
             if (!nombre) return alert("Ingresa un nombre.");
@@ -951,19 +1100,78 @@
             }
         }
 
-        async function eliminarProcesoAPI(id, nombre) {
-            if (!confirm(`¿Estás seguro de eliminar el proceso maestro "${nombre}" y todas sus etapas?`)) return;
+        async function archivarProcesoAPI(id, nombre) {
+            if (!confirm(`📦 ¿Estás seguro de archivar la plantilla "${nombre}"?\n\nSe conservará para mantener la integridad de los lotes históricos, pero desaparecerá de esta lista y no se podrán crear nuevos lotes con ella.`)) return;
 
-            const res = await fetch(`/api/procesos-maestros/${id}/`, {
-                method: 'DELETE',
-                headers: { 'X-CSRFToken': getCookie('csrftoken') }
-            });
+            try {
+                const res = await fetch(`/api/procesos-maestros/${id}/archivar/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
 
-            if (res.ok) {
-                cargarCatalogosGlobales();
-            } else {
-                alert("Error al eliminar el proceso maestro.");
+                if (res.ok) {
+                    cargarCatalogosGlobales();
+                } else {
+                    const data = await res.json();
+                    alert("Error al archivar la plantilla: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        async function desarchivarProcesoAPI(id, nombre) {
+            if (!confirm(`🔄 ¿Deseas restaurar la plantilla "${nombre}" a estado activo?`)) return;
+
+            try {
+                const res = await fetch(`/api/procesos-maestros/${id}/desarchivar/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+
+                if (res.ok) {
+                    cargarCatalogosGlobales();
+                } else {
+                    const data = await res.json();
+                    alert("Error al restaurar la plantilla: " + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        function abrirModalClonarProceso(id, nombre_actual) {
+            document.getElementById('clonarProcId').value = id;
+            document.getElementById('clonarProcNombreNuevo').value = nombre_actual + ' (Copia)';
+            document.getElementById('modalClonarProceso').style.display = 'flex';
+        }
+
+        function cerrarModalClonarProceso() {
+            document.getElementById('modalClonarProceso').style.display = 'none';
+        }
+
+        async function ejecutarClonarProcesoAPI() {
+            const id = document.getElementById('clonarProcId').value;
+            const nuevoNombre = document.getElementById('clonarProcNombreNuevo').value.trim();
+
+            if (!nuevoNombre) {
+                alert("Debe ingresar un nombre válido para la nueva plantilla.");
+                return;
             }
+
+            try {
+                const res = await fetch(`/api/procesos-maestros/${id}/clonar/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ nuevo_nombre: nuevoNombre })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    cerrarModalClonarProceso();
+                    procesoSeleccionado = { id: data.nuevo_id };
+                    await cargarCatalogosGlobales();
+                } else {
+                    const data = await res.json();
+                    alert("Error al clonar la plantilla:\n\n" + (data.error || JSON.stringify(data)));
+                }
+            } catch (err) { alert("Error de red."); }
         }
 
         async function crearOperacionAPI() {
@@ -1107,19 +1315,23 @@
         async function eliminarOperacionAPI(id, nombre) {
             if (!confirm(`¿Estás seguro de eliminar la operación "${nombre}"?`)) return;
 
-            const res = await fetch(`/api/operaciones-proceso/${id}/`, {
-                method: 'DELETE',
-                headers: { 'X-CSRFToken': getCookie('csrftoken') }
-            });
+            try {
+                const res = await fetch(`/api/operaciones-proceso/${id}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
 
-            if (res.ok) {
-                cargarCatalogosGlobales();
-            } else {
-                alert("Error al eliminar la operación.");
+                if (res.ok || res.status === 204) {
+                    cargarCatalogosGlobales();
+                } else {
+                    const data = await res.json();
+                    alert("⚠️ Acción Restringida:\n\n" + (data.error || "Error interno del servidor."));
+                }
+            } catch(err) {
+                alert("Error de red al intentar comunicarse con el servidor.");
             }
         }
 
-        // --- LÓGICA DE VALIDACIÓN GXP ---
         function abrirModalValidacion(id, nombre) {
             document.getElementById('valOpId').value = id;
             document.getElementById('valOpNombre').innerText = nombre;
