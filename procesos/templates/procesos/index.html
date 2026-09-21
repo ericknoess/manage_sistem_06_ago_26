@@ -146,6 +146,8 @@
         .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
         .btn-secondary:hover { background-color: var(--panel-bg); border-color: var(--text-muted); }
         .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+        .btn-toggle-zoom { padding: 0.2rem 0.55rem; font-size: 0.7rem; border-radius: 4px; background-color: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+        .btn-toggle-zoom.active { background-color: var(--accent); color: #0f172a; font-weight: bold; border-color: var(--accent); }
 
         .tasks-table-container { border: 1px solid var(--border-color); border-radius: 6px; overflow-y: auto; flex: 1; min-height: 0; background-color: var(--bg-dark); }
         table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.74rem; text-align: left; }
@@ -153,6 +155,10 @@
         tbody td { padding: 0.5rem 0.6rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
         tbody tr:last-child td { border-bottom: none; }
         tbody tr.incubation-row { background-color: rgba(139, 92, 246, 0.03); }
+        
+        tbody tr.fila-operacion { transition: background-color 0.2s; }
+        tbody tr.fila-operacion.dragging { opacity: 0.5; background-color: rgba(56, 189, 248, 0.1); }
+        tbody tr.fila-operacion.drag-over { border-top: 2px solid var(--accent); }
 
         .etapa-header-row td { background-color: rgba(15, 23, 42, 0.8); color: var(--accent); font-weight: bold; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; border-top: 2px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
 
@@ -192,6 +198,30 @@
         .status-badge { padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 0.65rem; display: inline-flex; justify-content: center; align-items: center; }
         .status-ok { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); }
         .status-fail { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+
+        /* ESTILOS DEL GANTT A PANTALLA COMPLETA CON SOPORTE DE ZOOM */
+        .gantt-fs-container { display: flex; flex: 1; overflow: hidden; border: 1px solid var(--border-color); border-radius: 6px; margin-top: 0.5rem; background-color: var(--bg-dark); }
+        .gantt-fs-sidebar { width: 280px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background-color: var(--panel-bg); flex-shrink: 0; z-index: 10; box-shadow: 2px 0 5px rgba(0,0,0,0.2); }
+        .gantt-fs-sidebar-header { height: 40px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; padding: 0 1rem; font-size: 0.75rem; font-weight: bold; color: var(--accent); background-color: var(--bg-dark); }
+        .gantt-fs-sidebar-body { overflow-y: hidden; flex: 1; }
+        .gantt-fs-row-label { height: 35px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; padding: 0 0.5rem; font-size: 0.7rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .gantt-fs-row-label.etapa { background-color: rgba(15, 23, 42, 0.8); color: var(--accent); font-weight: bold; justify-content: center; letter-spacing: 0.05em; text-transform: uppercase; }
+
+        .gantt-fs-timeline-wrapper { flex: 1; overflow: auto; display: flex; flex-direction: column; position: relative; }
+        .gantt-fs-timeline-header { height: 40px; border-bottom: 1px solid var(--border-color); display: flex; position: sticky; top: 0; background-color: var(--panel-bg); z-index: 5; }
+        .gantt-fs-timeline-body { position: relative; }
+        .gantt-fs-row-track { height: 35px; border-bottom: 1px solid var(--border-color); position: relative; width: 100%; }
+        .gantt-fs-row-track.etapa { background-color: rgba(15, 23, 42, 0.8); }
+        
+        .gantt-fs-bar { position: absolute; top: 6px; height: 22px; border-radius: 4px; display: flex; align-items: center; padding: 0 5px; font-size: 0.65rem; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.15s; cursor: pointer; }
+        .gantt-fs-bar:hover { transform: scaleY(1.1); z-index: 20; filter: brightness(1.2); }
+        .gantt-fs-bar.regular { background-color: var(--accent); border: 1px solid var(--accent-hover); }
+        .gantt-fs-bar.critical { background-color: var(--critical); border: 1px solid #be123c; }
+        .gantt-fs-bar.incubation { background-color: var(--incubation); border: 1px solid #6d28d9; }
+        
+        .gantt-fs-tick { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--border-color); display: flex; justify-content: flex-start; padding-left: 4px; align-items: center; font-size: 0.65rem; color: var(--text-muted); }
+        .gantt-fs-tick.day-marker { border-left: 2px solid rgba(56, 189, 248, 0.4); color: var(--accent); font-weight: bold; background-color: rgba(56, 189, 248, 0.03); }
+        .gantt-fs-tick.week-marker { border-left: 2px solid rgba(139, 92, 246, 0.6); color: var(--incubation); font-weight: bold; background-color: rgba(139, 92, 246, 0.05); }
     </style>
 </head>
 <body>
@@ -219,7 +249,7 @@
         </div>
 
         <div class="panel-box">
-            <div class="panel-header" id="tituloProcesoActivo">
+            <div class="panel-header" id="tituloProcesoActivo" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>⚡ Mapeo Operacional ISA-88: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
                 <button class="btn-secondary btn-sm" id="btnEditarNombreProc" style="display: none;" onclick="abrirModalEditarProceso()" title="Cambiar nombre de la receta">✏️ Renombrar</button>
             </div>
@@ -247,7 +277,8 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; margin-bottom: 0.2rem;">
                     <h3 style="margin: 0; font-size: 0.9rem; color: var(--text); font-weight: bold;">Estructura de Fases y Actividades</h3>
                     <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn-secondary btn-sm" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa (Carpeta)</button>
+                        <button class="btn-secondary btn-sm" style="font-weight: bold; border: 1px solid var(--accent); color: var(--accent);" onclick="abrirGanttPantallaCompleta()">📊 Ver Gantt Completo</button>
+                        <button class="btn-secondary btn-sm" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa</button>
                         <button class="btn-primary btn-sm" onclick="abrirModalNuevaOperacion()">⚙️ + Añadir Actividad</button>
                     </div>
                 </div>
@@ -281,6 +312,45 @@
     </div>
 
     <!-- ==================== MODALES ==================== -->
+
+    <!-- MODAL GANTT PANTALLA COMPLETA CON 4 NIVELES DE ZOOM (INCLUYE 6px/h) -->
+    <div class="modal-overlay" id="modalGanttFullScreen" style="display: none; z-index: 2000;">
+        <div class="modal-content" style="width: 96vw; height: 96vh; max-width: none; padding: 1rem; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <h3 style="font-size: 1.15rem;">📊 Diagrama de Gantt CPM: <span id="ganttTituloProceso" style="color: white;"></span></h3>
+                    <!-- BOTONERA DE ZOOM ACTUALIZADA -->
+                    <div style="display: flex; gap: 0.35rem; background-color: var(--bg-dark); padding: 3px; border-radius: 6px; border: 1px solid var(--border-color);">
+                        <button class="btn-toggle-zoom" id="btnZoomSemanas" onclick="cambiarNivelZoom('semanas')" title="Vista Ultra-Compacta para procesos de 14-21 días">📆 Semanal (6px/h)</button>
+                        <button class="btn-toggle-zoom" id="btnZoomDias" onclick="cambiarNivelZoom('dias')" title="Vista Macro agrupada por días">📅 Días (12px/h)</button>
+                        <button class="btn-toggle-zoom active" id="btnZoomNormal" onclick="cambiarNivelZoom('normal')" title="Vista estándar">⏱️ Normal (35px/h)</button>
+                        <button class="btn-toggle-zoom" id="btnZoomHoras" onclick="cambiarNivelZoom('horas')" title="Vista detallada hora a hora">🔍 Detalle (65px/h)</button>
+                    </div>
+                </div>
+                <button class="btn-secondary btn-sm" onclick="cerrarGanttPantallaCompleta()" style="font-size: 0.85rem; padding: 0.35rem 0.9rem;">❌ Cerrar</button>
+            </div>
+            
+            <div style="display:flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size:0.75rem; font-weight:bold;">
+                <div style="display: flex; gap: 1rem;">
+                    <span style="color:var(--accent);">🟦 Tarea Normal</span>
+                    <span style="color:var(--critical);">🟥 Ruta Crítica</span>
+                    <span style="color:var(--incubation);">🟪 Incubación / Bloqueo</span>
+                </div>
+                <span id="ganttEscalaActualTexto" style="color: var(--text-muted); font-size: 0.7rem;">Escala: 35 px/hora</span>
+            </div>
+
+            <div class="gantt-fs-container">
+                <div class="gantt-fs-sidebar">
+                    <div class="gantt-fs-sidebar-header">ACTIVIDADES (ISA-88)</div>
+                    <div class="gantt-fs-sidebar-body" id="ganttFSSidebar"></div>
+                </div>
+                <div class="gantt-fs-timeline-wrapper" id="ganttFSTimelineWrapper">
+                    <div class="gantt-fs-timeline-header" id="ganttFSTimelineHeader"></div>
+                    <div class="gantt-fs-timeline-body" id="ganttFSTimelineBody"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL NUEVO PROCESO -->
     <div class="modal-overlay" id="modalNuevoProceso" style="display: none;">
@@ -361,7 +431,7 @@
         </div>
     </div>
 
-    <!-- NUEVO MODAL: CREAR OPERACIÓN / ACTIVIDAD -->
+    <!-- MODAL: CREAR OPERACIÓN / ACTIVIDAD -->
     <div class="modal-overlay" id="modalNuevaOperacion" style="display: none;">
         <div class="modal-content" style="width: 600px;">
             <div class="modal-header">
@@ -468,7 +538,7 @@
                 <h3>✏️ Editar Actividad & Competencias</h3>
             </div>
             <input type="hidden" id="editOpId">
-            <div style="display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 0.8rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8rem;">
                 
                 <div class="form-group" style="grid-column: span 3;">
                     <label>Etapa (Carpeta Agrupadora)</label>
@@ -528,9 +598,15 @@
                         <option value="OFFSET">Desfase Fijo</option>
                     </select>
                 </div>
-                <div class="form-group" style="grid-column: span 2;">
+                <div class="form-group">
                     <label>Desfase (h)</label>
                     <input type="number" id="editOpDesfase" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label>Predecesora</label>
+                    <select id="editOpPredecesora">
+                        <option value="">- Ninguna -</option>
+                    </select>
                 </div>
 
                 <div class="form-group" style="grid-column: span 3;">
@@ -582,6 +658,16 @@
         let rolesGlobales = []; 
         let procesoSeleccionado = null;
         let mostrandoArchivados = false;
+        let ultimoDataCPM = null; 
+        
+        // GESTIÓN DEL NIVEL DE ZOOM (px por hora) - CONFIGURACIÓN CON 6px/h
+        let zoomActual = 'normal';
+        const ZOOM_CONFIG = {
+            'semanas': { pxPorHora: 6, texto: 'Escala: Vista Semanal (6 px/hora)', intervaloLabels: 48 },
+            'dias': { pxPorHora: 12, texto: 'Escala: Vista Días (12 px/hora)', intervaloLabels: 24 },
+            'normal': { pxPorHora: 35, texto: 'Escala: Vista Normal (35 px/hora)', intervaloLabels: 4 },
+            'horas': { pxPorHora: 65, texto: 'Escala: Vista Detalle (65 px/hora)', intervaloLabels: 1 }
+        };
 
         async function cargarCatalogosGlobales() {
             try {
@@ -635,6 +721,7 @@
             document.getElementById('inputDuracionMuestreo').value = '0';
             document.getElementById('inputOpsMuestreo').value = '0';
             document.getElementById('inputDesfase').value = '0';
+            document.getElementById('selectPredecesora').value = '';
             document.getElementById('rolesBuilderCrear').innerHTML = '';
             agregarFilaRolBuilder('crear');
             
@@ -654,7 +741,7 @@
                 if (proc && proc.etapas) {
                     let sortedEtapas = [...proc.etapas].sort((a,b) => a.orden - b.orden);
                     sortedEtapas.forEach(e => {
-                        select.innerHTML += `<option value="${e.id}">${e.orden} - ${e.nombre}</option>`;
+                        select.innerHTML += `<option value="${e.id}">${e.orden} -${e.nombre}</option>`;
                     });
                 }
             });
@@ -858,7 +945,6 @@
 
             document.getElementById('nombreProcesoSelec').innerText = procesoSeleccionado.nombre;
             document.getElementById('editorTareas').style.display = 'flex';
-            document.getElementById('emptyState').style.display = 'block';
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('btnEditarNombreProc').style.display = 'inline-block';
 
@@ -869,13 +955,87 @@
                 const resCpm = await fetch(`/api/procesos-maestros/${id}/cpm-analisis/`);
                 if (resCpm.ok) {
                     const cpmData = await resCpm.json();
+                    ultimoDataCPM = cpmData; 
                     renderizarCPMConHolguras(cpmData);
                 } else {
+                    ultimoDataCPM = null;
                     renderizarCPMConHolguras({ tiempo_total_proceso: 0, operaciones_cpm: [] });
                 }
             } catch (e) {
                 console.error("Error obteniendo análisis CPM:", e);
+                ultimoDataCPM = null;
                 renderizarCPMConHolguras({ tiempo_total_proceso: 0, operaciones_cpm: [] });
+            }
+        }
+
+        let filaArrastrada = null;
+
+        function handleDragStart(e) {
+            filaArrastrada = this;
+            e.dataTransfer.effectAllowed = 'move';
+            this.classList.add('dragging');
+            gsap.to(this, { opacity: 0.5, scale: 0.98, duration: 0.2 });
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const targetRow = e.target.closest('tr.fila-operacion');
+            if (targetRow && targetRow !== filaArrastrada) {
+                const rect = targetRow.getBoundingClientRect();
+                const middle = rect.top + rect.height / 2;
+                if (e.clientY < middle) {
+                    targetRow.parentNode.insertBefore(filaArrastrada, targetRow);
+                } else {
+                    targetRow.parentNode.insertBefore(filaArrastrada, targetRow.nextSibling);
+                }
+            }
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            if (filaArrastrada) {
+                sincronizarNuevoOrdenServidor();
+            }
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            gsap.to(this, { opacity: 1, scale: 1, duration: 0.2 });
+            filaArrastrada = null;
+        }
+
+        async function sincronizarNuevoOrdenServidor() {
+            const filas = document.querySelectorAll('#tablaCPMBody tr.fila-operacion');
+            let idsOrdenados = [];
+            filas.forEach(f => {
+                if(f.dataset.opId) {
+                    idsOrdenados.push(parseInt(f.dataset.opId, 10));
+                }
+            });
+
+            if(idsOrdenados.length === 0) return;
+
+            try {
+                const res = await fetch('/api/operaciones-proceso/bulk-reorder/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ operaciones_ordenadas: idsOrdenados })
+                });
+
+                if (res.ok) {
+                    await cargarCatalogosGlobales(); 
+                } else {
+                    const data = await res.json();
+                    alert("Error al sincronizar el reordenamiento: " + (data.error || JSON.stringify(data)));
+                    cargarCatalogosGlobales(); 
+                }
+            } catch (err) {
+                alert("Error de red al intentar reordenar las actividades.");
+                cargarCatalogosGlobales();
             }
         }
 
@@ -911,7 +1071,7 @@
             document.getElementById('totalTiempo').innerText = `${tiempoTotal}h`;
             document.getElementById('totalIncubacion').innerText = `${totalInc}h`;
             document.getElementById('totalHorasHombre').innerText = `${totalHorasHombre.toFixed(1)}h`;
-            document.getElementById('totalCriticas').innerText = `${totalCriticas} / ${tareas.length}`;
+            document.getElementById('totalCriticas').innerText = `${totalCriticas} /${tareas.length}`;
 
             const tbody = document.getElementById('tablaCPMBody');
             tbody.innerHTML = '';
@@ -944,7 +1104,17 @@
                     let opsMuestreo = opOriginal.ops_muestreo || 0;
 
                     const tr = document.createElement('tr');
-                    if (t.tipo_operacion === 'INCUBACION') tr.className = 'incubation-row';
+                    
+                    tr.className = 'fila-operacion';
+                    tr.setAttribute('draggable', 'true');
+                    tr.dataset.opId = t.id;
+
+                    tr.addEventListener('dragstart', handleDragStart);
+                    tr.addEventListener('dragover', handleDragOver);
+                    tr.addEventListener('drop', handleDrop);
+                    tr.addEventListener('dragend', handleDragEnd);
+
+                    if (t.tipo_operacion === 'INCUBACION') tr.className += ' incubation-row';
                     if (t.es_critica) tr.style.backgroundColor = 'rgba(244, 63, 94, 0.05)';
 
                     const leftPct = (Math.max(0, t.es) / (tiempoTotal || 1)) * 100;
@@ -955,13 +1125,13 @@
                         : `<span class="tag-resource" style="border-color:var(--success); color:var(--success);">✅ Holgura: ${t.holgura}h</span>`;
 
                     let subTxtFrecuencia = (t.tipo_operacion === 'INCUBACION' && frecMuestreo > 0) 
-                        ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h, ${opsMuestreo}Op)</span>` 
+                        ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h,${opsMuestreo}Op)</span>` 
                         : '';
 
                     let badgesRolesHtml = '';
                     if (opOriginal.requerimientos_rol_detalles && opOriginal.requerimientos_rol_detalles.length > 0) {
                         opOriginal.requerimientos_rol_detalles.forEach(req => {
-                            badgesRolesHtml += `<span class="tag-resource" style="color:var(--accent);">👤 ${req.cantidad}x ${req.rol_nombre}</span> `;
+                            badgesRolesHtml += `<span class="tag-resource" style="color:var(--accent);">👤 ${req.cantidad}x${req.rol_nombre}</span> `;
                         });
                     } else {
                         badgesRolesHtml = `<span class="tag-resource">👥 Ops: ${t.personal_requerido}</span>`;
@@ -970,9 +1140,9 @@
                     const safeName = t.nombre.replace(/'/g, "\\'");
 
                     tr.innerHTML = `
-                        <td><strong>#${item.globalIndex}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
+                        <td style="cursor: grab;" title="Arrastrar para reordenar">⠿ <strong>#${item.globalIndex}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
                         <td><strong>${t.nombre}</strong></td>
-                        <td>⏱️ ${t.duracion_horas}h ${subTxtFrecuencia}</td>
+                        <td>⏱️ ${t.duracion_horas}h${subTxtFrecuencia}</td>
                         <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
                         <td>
                             ${badgesRolesHtml}
@@ -987,7 +1157,7 @@
                         <td class="gantt-preview-cell">
                             <div class="gantt-track">
                                 <div class="gantt-bar ${t.es_critica ? 'critical' : 'regular'}" 
-                                     style="left: ${leftPct}%; width: ${widthPct}%; ${t.es_critica ? 'background-color: var(--critical);' : ''}"></div>
+                                     style="left: ${leftPct}%; width: ${widthPct}\%;${t.es_critica ? 'background-color: var(--critical);' : ''}"></div>
                             </div>
                         </td>
                         <td style="text-align: center; white-space: nowrap;">
@@ -1020,11 +1190,168 @@
             });
         }
 
+        // --- LÓGICA GANTT PANTALLA COMPLETA CON ZOOM REACTIVO (SOPORTE 6px/h) ---
+        function abrirGanttPantallaCompleta() {
+            if(!procesoSeleccionado || !ultimoDataCPM) return alert("Seleccione un proceso y espere el cálculo CPM.");
+            
+            document.getElementById('ganttTituloProceso').innerText = procesoSeleccionado.nombre;
+            renderizarGanttAvanzado(ultimoDataCPM);
+            
+            const modal = document.getElementById('modalGanttFullScreen');
+            modal.style.display = 'flex';
+            gsap.fromTo(modal.querySelector('.modal-content'), {scale: 0.94, opacity: 0}, {scale: 1, opacity: 1, duration: 0.25, ease: "power2.out"});
+        }
+
+        function cerrarGanttPantallaCompleta() {
+            document.getElementById('modalGanttFullScreen').style.display = 'none';
+        }
+
+        function cambiarNivelZoom(nuevoNivel) {
+            if(!ZOOM_CONFIG[nuevoNivel]) return;
+            zoomActual = nuevoNivel;
+
+            document.querySelectorAll('.btn-toggle-zoom').forEach(b => b.classList.remove('active'));
+            if(nuevoNivel === 'semanas') document.getElementById('btnZoomSemanas').classList.add('active');
+            if(nuevoNivel === 'dias') document.getElementById('btnZoomDias').classList.add('active');
+            if(nuevoNivel === 'normal') document.getElementById('btnZoomNormal').classList.add('active');
+            if(nuevoNivel === 'horas') document.getElementById('btnZoomHoras').classList.add('active');
+
+            document.getElementById('ganttEscalaActualTexto').innerText = ZOOM_CONFIG[nuevoNivel].texto;
+
+            if(ultimoDataCPM) {
+                renderizarGanttAvanzado(ultimoDataCPM);
+            }
+        }
+
+        function renderizarGanttAvanzado(cpmData) {
+            const sidebar = document.getElementById('ganttFSSidebar');
+            const timelineHeader = document.getElementById('ganttFSTimelineHeader');
+            const timelineBody = document.getElementById('ganttFSTimelineBody');
+            const wrapper = document.getElementById('ganttFSTimelineWrapper');
+
+            sidebar.innerHTML = '';
+            timelineHeader.innerHTML = '';
+            timelineBody.innerHTML = '';
+
+            const cfg = ZOOM_CONFIG[zoomActual];
+            const PIXELES_POR_HORA = cfg.pxPorHora;
+            const intervalo = cfg.intervaloLabels;
+
+            const tiempoTotal = Math.max(cpmData.tiempo_total_proceso || 1, 24); 
+            const anchoTotal = (tiempoTotal + 2) * PIXELES_POR_HORA;
+
+            timelineHeader.style.width = `${anchoTotal}px`;
+            timelineBody.style.width = `${anchoTotal}px`;
+            timelineBody.style.backgroundImage = `linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px)`;
+            timelineBody.style.backgroundSize = `${PIXELES_POR_HORA}px 100%`;
+
+            // Construir encabezado de marcas de tiempo
+            for(let h = 0; h <= tiempoTotal; h++) {
+                const esMultiplo = (h % intervalo === 0);
+                const esDia = (h > 0 && h % 24 === 0);
+                const esSemana = (h > 0 && h % 168 === 0);
+
+                if (esMultiplo || esDia || esSemana) {
+                    const tick = document.createElement('div');
+                    let claseMarker = '';
+                    if (esSemana) claseMarker = 'week-marker';
+                    else if (esDia) claseMarker = 'day-marker';
+
+                    tick.className = `gantt-fs-tick ${claseMarker}`;
+                    tick.style.left = `${h * PIXELES_POR_HORA}px`;
+                    tick.style.width = `${intervalo * PIXELES_POR_HORA}px`;
+                    
+                    if (esSemana && zoomActual === 'semanas') {
+                        const numSemana = h / 168;
+                        tick.innerHTML = `<strong>Sem ${numSemana}</strong> (${h}h)`;
+                    } else if (esDia && (zoomActual === 'dias' || zoomActual === 'semanas')) {
+                        const numDia = h / 24;
+                        tick.innerHTML = `<strong>D${numDia}</strong> (${h}h)`;
+                    } else {
+                        tick.innerText = `${h}h`;
+                    }
+                    timelineHeader.appendChild(tick);
+                }
+            }
+
+            // Agrupación de actividades
+            let tareas = cpmData.operaciones_cpm || [];
+            let etapas = procesoSeleccionado.etapas || [];
+            etapas.sort((a, b) => a.orden - b.orden);
+
+            let agrupador = { 'orphan': [] };
+            etapas.forEach(e => agrupador[e.id] = []);
+
+            tareas.forEach((t) => {
+                let opOrig = procesoSeleccionado.operaciones.find(op => op.id === t.id) || {};
+                let etapaId = opOrig.etapa || 'orphan';
+                if (!agrupador[etapaId]) agrupador[etapaId] = [];
+                agrupador[etapaId].push({ t: t, opOrig: opOrig });
+            });
+
+            const pintarBloqueGantt = (lista, esEtapa = false, nombreEtapa = "") => {
+                if (esEtapa) {
+                    const rowLabel = document.createElement('div');
+                    rowLabel.className = 'gantt-fs-row-label etapa';
+                    rowLabel.innerText = `📁 ${nombreEtapa}`;
+                    sidebar.appendChild(rowLabel);
+
+                    const rowTrack = document.createElement('div');
+                    rowTrack.className = 'gantt-fs-row-track etapa';
+                    timelineBody.appendChild(rowTrack);
+                }
+
+                lista.forEach(item => {
+                    const t = item.t;
+                    
+                    const rowLabel = document.createElement('div');
+                    rowLabel.className = 'gantt-fs-row-label';
+                    rowLabel.innerHTML = `<strong style="color:var(--accent); margin-right:5px;">[${t.identificador_paso}]</strong>${t.nombre}`;
+                    rowLabel.title = t.nombre;
+                    sidebar.appendChild(rowLabel);
+
+                    const rowTrack = document.createElement('div');
+                    rowTrack.className = 'gantt-fs-row-track';
+                    
+                    const bar = document.createElement('div');
+                    bar.className = `gantt-fs-bar ${t.es_critica ? 'critical' : (t.tipo_operacion === 'INCUBACION' ? 'incubation' : 'regular')}`;
+                    bar.style.left = `${t.es * PIXELES_POR_HORA}px`;
+                    bar.style.width = `${Math.max(t.duracion_horas * PIXELES_POR_HORA, 4)}px`; // Mínimo 4px para escala semanal
+                    
+                    // Ajustar texto dentro de la barra según el ancho resultante
+                    if (t.duracion_horas * PIXELES_POR_HORA > 50) {
+                        bar.innerText = `${t.identificador_paso} (${t.duracion_horas}h)`;
+                    } else if (t.duracion_horas * PIXELES_POR_HORA > 22) {
+                        bar.innerText = `${t.duracion_horas}h`;
+                    } else {
+                        bar.innerText = ``;
+                    }
+
+                    bar.title = `[${t.identificador_paso}] ${t.nombre}\nTipo: ${t.tipo_operacion}\nInicio (ES): ${t.es}h | Fin (EF): ${t.ef}h\nDuración: ${t.duracion_horas}h | Holgura: ${t.holgura}h`;
+                    
+                    rowTrack.appendChild(bar);
+                    timelineBody.appendChild(rowTrack);
+                });
+            };
+
+            if (agrupador['orphan'].length > 0) pintarBloqueGantt(agrupador['orphan']);
+            etapas.forEach(etapa => {
+                pintarBloqueGantt(agrupador[etapa.id], true, etapa.nombre);
+            });
+
+            wrapper.onscroll = () => {
+                sidebar.querySelector('.gantt-fs-sidebar-body').scrollTop = wrapper.scrollTop;
+            };
+        }
+
         function actualizarSelectPredecesoras(proc) {
-            const select = document.getElementById('selectPredecesora');
-            select.innerHTML = '<option value="">-- Ninguna --</option>';
-            proc.operaciones.forEach(op => {
-                select.innerHTML += `<option value="${op.id}">${op.identificador_paso}: ${op.nombre}</option>`;
+            const selects = [document.getElementById('selectPredecesora'), document.getElementById('editOpPredecesora')];
+            selects.forEach(select => {
+                if(!select) return;
+                select.innerHTML = '<option value="">-- Ninguna --</option>';
+                proc.operaciones.forEach(op => {
+                    select.innerHTML += `<option value="${op.id}">${op.identificador_paso}: ${op.nombre}</option>`;
+                });
             });
         }
 
@@ -1037,7 +1364,6 @@
             document.getElementById('modalNuevoProceso').style.display = 'none';
         }
 
-        // --- FUNCIONES DE RENOMBRAR RECETA ---
         function abrirModalEditarProceso() {
             if (!procesoSeleccionado) return;
             document.getElementById('editProcesoNombreInput').value = procesoSeleccionado.nombre;
@@ -1182,6 +1508,14 @@
             const tipo_operacion = document.getElementById('selectTipoTarea').value;
             const duracion_horas = parseFloat(document.getElementById('inputTareaDuracion').value);
             
+            if (identificador_paso) {
+                const existePaso = procesoSeleccionado.operaciones.find(op => op.identificador_paso.toLowerCase() === identificador_paso.toLowerCase());
+                if (existePaso) {
+                    alert(`⚠️ Validación GxP (Fail-Fast):\nEl ID de Paso "${identificador_paso}" ya existe en esta receta. Por favor, utiliza un identificador único para mantener la trazabilidad.`);
+                    return;
+                }
+            }
+
             const frecuencia_muestreo_horas = parseInt(document.getElementById('inputFrecMuestreo').value) || 0;
             const duracion_muestreo_horas = parseFloat(document.getElementById('inputDuracionMuestreo').value) || 0.0;
             const ops_muestreo = parseInt(document.getElementById('inputOpsMuestreo').value) || 0;
@@ -1223,7 +1557,13 @@
                 cerrarModalNuevaOperacion();
                 cargarCatalogosGlobales();
             } else {
-                alert("Error al registrar operación (revisa dependencias circulares o roles).");
+                const data = await res.json();
+                let msg = "Error al registrar la operación.";
+                if (data.non_field_errors) msg = data.non_field_errors.join("\n");
+                else if (data.identificador_paso) msg = "ID de Paso: " + data.identificador_paso.join("\n");
+                else msg = JSON.stringify(data);
+                
+                alert(`⚠️ Solicitud rechazada por el servidor:\n${msg}`);
             }
         }
 
@@ -1246,6 +1586,16 @@
             document.getElementById('editOpDesfase').value = op.desfase_horas || 0;
             document.getElementById('editOpEquipo').value = op.tipo_equipo_requerido || 'N/A';
 
+            const predSelect = document.getElementById('editOpPredecesora');
+            Array.from(predSelect.options).forEach(opt => {
+                if (opt.value == op.id) {
+                    opt.style.display = 'none'; 
+                } else {
+                    opt.style.display = 'block';
+                }
+            });
+            predSelect.value = op.predecesora || '';
+
             const container = document.getElementById('rolesBuilderEditar');
             container.innerHTML = '';
             if (op.requerimientos_rol_detalles && op.requerimientos_rol_detalles.length > 0) {
@@ -1266,8 +1616,17 @@
 
         async function guardarEdicionOperacionAPI() {
             const id = document.getElementById('editOpId').value;
-            const etapa = document.getElementById('editOpEtapa').value || null; 
             const identificador_paso = document.getElementById('editOpPasoId').value.trim();
+
+            if (identificador_paso) {
+                const existePaso = procesoSeleccionado.operaciones.find(op => op.identificador_paso.toLowerCase() === identificador_paso.toLowerCase() && op.id != id);
+                if (existePaso) {
+                    alert(`⚠️ Validación GxP (Fail-Fast):\nEl ID de Paso "${identificador_paso}" ya está siendo utilizado por otra actividad en esta receta. Por favor, utiliza un identificador único.`);
+                    return;
+                }
+            }
+
+            const etapa = document.getElementById('editOpEtapa').value || null; 
             const nombre = document.getElementById('editOpNombre').value.trim();
             const tipo_operacion = document.getElementById('editOpTipo').value;
             const duracion_horas = parseFloat(document.getElementById('editOpDuracion').value);
@@ -1278,8 +1637,8 @@
 
             const tipo_dependencia = document.getElementById('editOpTipoDep').value;
             const desfase_horas = parseFloat(document.getElementById('editOpDesfase').value) || 0;
+            const predecesora = document.getElementById('editOpPredecesora').value || null;
             const tipo_equipo_requerido = document.getElementById('editOpEquipo').value;
-            
             const requerimientos_rol = obtenerRolesDesdeBuilder('editar');
 
             if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
@@ -1296,6 +1655,7 @@
                     frecuencia_muestreo_horas,
                     duracion_muestreo_horas,
                     ops_muestreo,
+                    predecesora, 
                     tipo_dependencia,
                     desfase_horas,
                     tipo_equipo_requerido,
@@ -1308,7 +1668,13 @@
                 cerrarModalEditarOperacion();
                 cargarCatalogosGlobales();
             } else {
-                alert("Error al actualizar la operación.");
+                const data = await res.json();
+                let msg = "Error al actualizar la operación.";
+                if (data.non_field_errors) msg = data.non_field_errors.join("\n");
+                else if (data.identificador_paso) msg = "ID de Paso: " + data.identificador_paso.join("\n");
+                else msg = JSON.stringify(data);
+                
+                alert(`⚠️ Solicitud rechazada por el servidor:\n${msg}`);
             }
         }
 

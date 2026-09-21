@@ -106,6 +106,7 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
                 etapa=mapa_etapas.get(op.etapa_id) if op.etapa_id else None,
                 identificador_paso=op.identificador_paso,
                 nombre=op.nombre,
+                orden=op.orden,
                 tipo_operacion=op.tipo_operacion,
                 duracion_horas=op.duracion_horas,
                 frecuencia_muestreo_horas=op.frecuencia_muestreo_horas,
@@ -150,7 +151,7 @@ class EtapaProcesoViewSet(viewsets.ModelViewSet):
 
 
 class OperacionProcesoViewSet(viewsets.ModelViewSet):
-    queryset = OperacionProceso.objects.prefetch_related('materiales_requeridos').all().order_by('proceso', 'identificador_paso')
+    queryset = OperacionProceso.objects.prefetch_related('materiales_requeridos').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
 
     def destroy(self, request, *args, **kwargs):
@@ -176,6 +177,34 @@ class OperacionProcesoViewSet(viewsets.ModelViewSet):
 
         resultado = validar_disponibilidad_personal_fase(operacion.id, fecha_evaluacion)
         return Response(resultado, status=status.HTTP_200_OK)
+
+    # --- [NUEVO] ENDPOINT PARA REORDENAMIENTO MASIVO (DRAG & DROP) ---
+    @action(detail=False, methods=['post'], url_path='bulk-reorder')
+    @transaction.atomic
+    def bulk_reorder(self, request):
+        ids_ordenados = request.data.get('operaciones_ordenadas', [])
+        
+        if not isinstance(ids_ordenados, list) or not ids_ordenados:
+            return Response(
+                {"error": "Se requiere una lista válida 'operaciones_ordenadas' con los IDs de las actividades."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        for index, op_id in enumerate(ids_ordenados):
+            try:
+                operacion = OperacionProceso.objects.get(id=op_id)
+                operacion.orden = index + 1
+                operacion.save(update_fields=['orden'])
+            except OperacionProceso.DoesNotExist:
+                return Response(
+                    {"error": f"La operación con ID {op_id} no existe."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        return Response(
+            {"mensaje": "Secuencia de operaciones actualizada correctamente."},
+            status=status.HTTP_200_OK
+        )
 
 
 # ==============================================================================
