@@ -24,7 +24,9 @@ class CPMCalculatorService:
 
         tiempos = {}
         
+        # =====================================================================
         # 1. FORWARD PASS (Paso hacia adelante: cálculo de ES y EF)
+        # =====================================================================
         for op in self.operaciones:
             es = 0.0
             ef = 0.0
@@ -36,11 +38,11 @@ class CPMCalculatorService:
                 pred_info = tiempos[pred_id]
                 tipo_dep = op.tipo_dependencia or 'FS'
                 
-                if tipo_dep == 'SS':  # Start-to-Start
+                if tipo_dep == 'SS':  # Start-to-Start (Inicio a Inicio)
                     es = pred_info['es'] + desfase
-                elif tipo_dep == 'OFFSET':  # Desfase fijo / Calendario absoluto
+                elif tipo_dep == 'OFFSET':  # Desfase fijo general
                     es = pred_info['es'] + desfase
-                else:  # Por defecto Finish-to-Start (FS)
+                else:  # FS (Finish-to-Start) - Dependencia Lineal
                     es = pred_info['ef'] + desfase
             
             ef = es + duracion
@@ -53,30 +55,49 @@ class CPMCalculatorService:
 
         tiempo_total_proyecto = max([info['ef'] for info in tiempos.values()], default=0.0)
 
+        # =====================================================================
         # 2. BACKWARD PASS (Paso hacia atrás: cálculo de LS y LF)
+        # =====================================================================
+        # Inicializamos todas las tareas asumiendo el tiempo total del proyecto
         for op in self.operaciones:
             tiempos[op.id]['lf'] = tiempo_total_proyecto
             tiempos[op.id]['ls'] = tiempo_total_proyecto - tiempos[op.id]['duracion']
 
+        # Iteramos en reversa para propagar las restricciones matemáticas de las sucesoras
         for op in reversed(self.operaciones):
             current_info = tiempos[op.id]
             sucesora_ops = [o for o in self.operaciones if o.predecesora_id == op.id]
             
             if sucesora_ops:
-                min_ls_sucesora = float('inf')
+                # Límites preliminares basados en el final del proyecto
+                min_lf_requerido = current_info['lf']
+                min_ls_requerido = current_info['ls']
+                
                 for suc in sucesora_ops:
                     suc_info = tiempos[suc.id]
                     tipo_dep = suc.tipo_dependencia or 'FS'
-                    if tipo_dep == 'SS':
-                        val = suc_info['ls'] - suc.desfase_horas
-                    else:
-                        val = suc_info['ls'] - suc.desfase_horas
-                    if val < min_ls_sucesora:
-                        min_ls_sucesora = val
-                current_info['lf'] = min(current_info['lf'], min_ls_sucesora)
-                current_info['ls'] = current_info['lf'] - current_info['duracion']
+                    desfase = suc.desfase_horas or 0.0
+                    
+                    if tipo_dep == 'SS' or tipo_dep == 'OFFSET':
+                        # Para Start-to-Start: La sucesora restringe la hora máxima de INICIO de la predecesora
+                        limite_ls = suc_info['ls'] - desfase
+                        if limite_ls < min_ls_requerido:
+                            min_ls_requerido = limite_ls
+                    else: 
+                        # Para Finish-to-Start: La sucesora restringe la hora máxima de FIN de la predecesora
+                        limite_lf = suc_info['ls'] - desfase
+                        if limite_lf < min_lf_requerido:
+                            min_lf_requerido = limite_lf
+                
+                # Consolidación Matemática (La restricción más estricta gana)
+                nuevo_lf = min(min_lf_requerido, min_ls_requerido + current_info['duracion'])
+                
+                current_info['lf'] = nuevo_lf
+                current_info['ls'] = nuevo_lf - current_info['duracion']
 
-        # 3. CÁLCULO DE HOLGURA Y RUTA CRÍTICA
+        # =====================================================================
+        # 3. CÁLCULO DE HOLGURA (SLACK) Y DEFINICIÓN DE RUTA CRÍTICA
+        # =====================================================================
         resultado_detalles = []
         for op in self.operaciones:
             info = tiempos[op.id]
@@ -85,7 +106,10 @@ class CPMCalculatorService:
             ls = info['ls']
             lf = info['lf']
             
+            # Cálculo de la holgura total
             holgura = round(ls - es, 2)
+            
+            # Es Crítica si la holgura es 0. Tolerancia de redondeo (0.01) por cálculo en floats.
             es_critica = abs(holgura) <= 0.01
 
             resultado_detalles.append({
@@ -115,11 +139,6 @@ def validar_disponibilidad_personal_fase(operacion_id: int, fecha_evaluacion: da
     Motor de Validación por Competencias (Skill-Matching Engine):
     Compara los requerimientos de personal por rol de una operación CPM 
     frente a la disponibilidad real de operadores en el Roster para una fecha dada.
-    
-    Reglas GxP:
-    - Se ignoran operadores inactivos.
-    - Se ignoran turnos de descanso (es_descanso=True).
-    - Se evalúa si la cantidad de personal disponible por rol cubre la demanda exacta.
     """
     try:
         operacion = OperacionProceso.objects.prefetch_related('requerimientos_rol__rol').get(id=operacion_id)

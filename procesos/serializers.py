@@ -112,8 +112,6 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
 
 
 class ProcesoMaestroSerializer(serializers.ModelSerializer):
-    # DUAL EXPOSURE: Mantenemos 'operaciones' plano para el algoritmo matemático CPM, 
-    # y enviamos 'etapas' para que el frontend dibuje la estructura jerárquica.
     etapas = EtapaProcesoSerializer(many=True, read_only=True)
     operaciones = OperacionProcesoSerializer(many=True, read_only=True)
 
@@ -140,15 +138,13 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
 
 
 class FaseLoteSerializer(serializers.ModelSerializer):
-    """
-    Serializer para la fase. Actúa como tarea en el calendario, registro eBR y fuente del Gantt.
-    """
-    # [MODIFICADO] Usamos SerializerMethodField para que el backend evalúe dinámicamente si es un muestreo (EFT)
     operacion_nombre = serializers.SerializerMethodField()
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
     duracion_estimada = serializers.FloatField(source='operacion_maestra.duracion_horas', read_only=True)
     
-    # Inyección de la Jerarquía ISA-88
+    # [NUEVO] Inyectamos el tipo_operacion ('ACTIVA' o 'INCUBACION') para ocultar labores pasivas en los tableros
+    tipo_operacion = serializers.CharField(source='operacion_maestra.tipo_operacion', read_only=True)
+    
     etapa_nombre = serializers.CharField(source='operacion_maestra.etapa.nombre', read_only=True, default='Actividades Sueltas (Sin Etapa)')
     etapa_orden = serializers.IntegerField(source='operacion_maestra.etapa.orden', read_only=True, default=999999)
     
@@ -167,17 +163,13 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         model = FaseLote
         fields = [
             'id', 'lote', 'lote_codigo', 'operacion_maestra', 'operacion_nombre', 'operacion_id_paso',
+            'tipo_operacion', # <-- Añadido explícitamente a los fields
             'etapa_nombre', 'etapa_orden',
             'estado', 
-            # --- Forecast actual (Programable) ---
             'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',
-            # --- [NUEVO] Baseline inmutable expuestos para el Gantt ---
             'fecha_base_cpm', 'hora_inicio_base_cpm', 'hora_fin_base_cpm',
-            # --- [NUEVO] Auditoría de reprogramación ---
             'motivo_reprogramacion', 'notas_reprogramacion',
-            # --- [NUEVO] Soporte de muestreos cíclicos ---
             'es_subtarea_muestreo', 'indice_muestreo',
-            # --- Recursos y Trazabilidad GxP ---
             'equipos_asignados', 'equipos_detalles', 'materiales_asignados', 'materiales_detalles',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados'
@@ -188,7 +180,6 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         }
 
     def get_operacion_nombre(self, obj):
-        # Retorna el nombre con la edad del cultivo si es un muestreo
         if obj.es_subtarea_muestreo and obj.nombre_tarea_dinamica:
             return obj.nombre_tarea_dinamica
         return obj.operacion_maestra.nombre

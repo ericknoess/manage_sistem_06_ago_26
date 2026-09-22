@@ -43,7 +43,6 @@ class TipoTurno(models.Model):
         help_text="Baja lógica para preservar la trazabilidad histórica GxP"
     )
     
-    # Nuevos atributos de franja horaria operativa
     hora_inicio = models.TimeField(
         null=True, 
         blank=True, 
@@ -93,8 +92,7 @@ class Cuadrilla(models.Model):
 
 class RolOperador(models.Model):
     """
-    NUEVO CATÁLOGO: Define los niveles de experiencia, roles o certificaciones 
-    (Ej: Junior, Senior, Especialista, Supervisor). Reemplaza al hardcode anterior.
+    Define los niveles de experiencia, roles o certificaciones.
     """
     nombre = models.CharField(max_length=100, unique=True, verbose_name="Nombre del Rol / Nivel")
     descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción de Competencias")
@@ -114,7 +112,7 @@ class RolOperador(models.Model):
 class Operador(models.Model):
     """
     Representa a un colaborador asignado a una cuadrilla específica dentro de la planta,
-    ahora vinculado dinámicamente a un catálogo de Roles/Competencias.
+    ahora preparado para autenticación eBR (Electronic Batch Record).
     """
     cuadrilla = models.ForeignKey(
         Cuadrilla, 
@@ -126,7 +124,6 @@ class Operador(models.Model):
     codigo_empleado = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="Código de Empleado")
     foto = models.ImageField(upload_to='operadores/fotos/', blank=True, null=True, verbose_name="Fotografía del Colaborador")
     
-    # NUEVO CAMPO: Relación dinámica con el catálogo de Roles
     rol = models.ForeignKey(
         RolOperador,
         on_delete=models.PROTECT,
@@ -134,6 +131,15 @@ class Operador(models.Model):
         blank=True,
         related_name='operadores',
         verbose_name="Rol / Nivel de Expertiz"
+    )
+
+    # --- [NUEVO CAMPO] AUTENTICACIÓN MÓVIL eBR ---
+    pin_acceso = models.CharField(
+        max_length=6,
+        blank=True,
+        null=True,
+        verbose_name="PIN GxP (eBR)",
+        help_text="Código numérico (4-6 dígitos) para la firma electrónica en la Tablet."
     )
     
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
@@ -185,8 +191,7 @@ class TurnoDia(models.Model):
 
 class IncidenciaTurno(models.Model):
     """
-    Registro de incidencias operativas, anomalías de horario o notas asociadas 
-    a la asignación diaria de un operador (TurnoDia).
+    Registro de incidencias operativas, anomalías de horario o notas asociadas.
     """
     turno_dia = models.OneToOneField(
         TurnoDia,
@@ -197,22 +202,19 @@ class IncidenciaTurno(models.Model):
     minutos_retardo = models.PositiveIntegerField(
         null=True,
         blank=True,
-        verbose_name="Minutos de Retardo",
-        help_text="Tiempo de llegada tardía en minutos."
+        verbose_name="Minutos de Retardo"
     )
     horas_salida_anticipada = models.DecimalField(
         max_digits=4,
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name="Horas de Salida Anticipada",
-        help_text="Ejemplo: 1.5 para hora y media."
+        verbose_name="Horas de Salida Anticipada"
     )
     notas = models.TextField(
         null=True,
         blank=True,
-        verbose_name="Notas u Observaciones",
-        help_text="Justificación o anotación general sobre el evento."
+        verbose_name="Notas u Observaciones"
     )
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Registro")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")

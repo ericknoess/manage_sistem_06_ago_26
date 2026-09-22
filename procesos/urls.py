@@ -9,7 +9,8 @@ from .views import (
     OperacionProcesoViewSet,
     LoteProduccionViewSet,
     FaseLoteViewSet,
-    AsignacionFaseOperadorViewSet
+    AsignacionFaseOperadorViewSet,
+    MobileeBRViewSet  # [NUEVO] Importamos la vista de la API móvil para piso de planta
 )
 
 # Instanciamos el enrutador por defecto de DRF
@@ -25,18 +26,24 @@ router.register(r'lotes', LoteProduccionViewSet, basename='lote')
 router.register(r'fases-lote', FaseLoteViewSet, basename='fase-lote')
 router.register(r'asignaciones-operador', AsignacionFaseOperadorViewSet, basename='asignacion-operador')
 
+# 3. [NUEVO] Rutas de la API Móvil para Operadores (Autenticación rápida y tareas)
+router.register(r'mobile', MobileeBRViewSet, basename='mobile-ebr')
+
 urlpatterns = [
-    # Ruta visual para el Tablero de Piso de Planta (Ejecución eBR)
+    # Ruta visual para el Tablero de Piso de Planta (Ejecución eBR Gerencial)
     path('ejecucion/', TemplateView.as_view(template_name='procesos/ejecucion.html'), name='ejecucion-lotes'),
     
     # Ruta visual para el Tablero de Planificación y Asignación Semanal (MES)
     path('planificacion/', TemplateView.as_view(template_name='procesos/planificacion.html'), name='planificacion-semanal'),
     
-    # Ruta visual para el diseño de procesos
+    # Ruta visual para el diseño de procesos maestros (CPM)
     path('procesos/', TemplateView.as_view(template_name='procesos/index.html'), name='procesos-index'),
     
-    # [NUEVO] Ruta visual para el Diagrama de Gantt (Master Level Scheduling)
+    # Ruta visual para el Diagrama de Gantt (Master Level Scheduling)
     path('gantt/', TemplateView.as_view(template_name='procesos/gantt.html'), name='gantt-lotes'),
+    
+    # [NUEVO] Ruta visual exclusiva para la PWA/Tablet del Operador
+    path('mobile/', TemplateView.as_view(template_name='procesos/mobile_dashboard.html'), name='mobile-dashboard'),
     
     # Rutas generadas automáticamente por el router de la API
     path('api/', include(router.urls)),

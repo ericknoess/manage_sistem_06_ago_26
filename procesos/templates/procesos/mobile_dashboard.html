@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>eBR Mobile - Piso de Planta</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <style>
+        :root {
+            /* Paleta Enterprise Dark Mode */
+            --bg-body: #020617; /* Slate 950 - Ultra oscuro para el exterior */
+            --bg-app: #0f172a;  /* Slate 900 - Fondo de la tablet */
+            --panel-bg: #1e293b; /* Slate 800 - Tarjetas */
+            --border-color: #334155;
+            
+            /* Colores de Acción (Alto Contraste) */
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            --success: #22c65e;
+            --success-hover: #16a34a;
+            --warning: #eab308; /* Yellow 500 para mayor contraste con texto negro */
+            --danger: #ef4444;
+            
+            /* Tipografía */
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            overscroll-behavior-y: none; /* Previene "pull-to-refresh" */
+            display: flex;
+            justify-content: center; /* Centrado en pantallas grandes */
+        }
+
+        /* Contenedor tipo Tablet */
+        .app-container {
+            width: 100%;
+            max-width: 768px; /* Ancho de un iPad Mini/Standard en portrait */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-app);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8); /* Sombra para resaltar en desktop */
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+        }
+
+        /* --- VISTA DE LOGIN --- */
+        .login-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            z-index: 10;
+        }
+
+        .login-card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+        }
+
+        .login-title {
+            text-align: center;
+            color: var(--accent);
+            font-size: 1.75rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+            letter-spacing: -0.025em;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 2.5rem;
+            font-weight: 500;
+        }
+
+        .input-group { margin-bottom: 1.5rem; }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-gxp {
+            width: 100%;
+            background-color: rgba(0,0,0,0.2);
+            border: 2px solid var(--border-color);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            text-align: center;
+            letter-spacing: 2px;
+            outline: none;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .input-gxp:focus {
+            border-color: var(--accent);
+            background-color: rgba(56, 189, 248, 0.05);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+        }
+
+        .btn-massive {
+            width: 100%;
+            padding: 1.1rem;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 800;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary { background-color: var(--accent); color: #020617; }
+        .btn-primary:active { background-color: var(--accent-hover); transform: scale(0.97); }
+        
+        .btn-success { background-color: var(--success); color: white; }
+        .btn-success:active { background-color: var(--success-hover); transform: scale(0.97); }
+
+        /* --- VISTA DASHBOARD (WORKLIST) --- */
+        .dashboard-view {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .top-nav {
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+            z-index: 5;
+        }
+
+        .nav-profile { display: flex; flex-direction: column; gap: 0.1rem; }
+        .nav-profile strong { color: var(--accent); font-size: 1.1rem; line-height: 1.2; }
+        .nav-profile span { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; }
+
+        .btn-logout {
+            background-color: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-logout:hover { background-color: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: var(--danger); }
+
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        /* --- DISEÑO DE TARJETAS (CARDS) --- */
+        .task-card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            border-left: 5px solid var(--border-color); /* Borde indicador de estado */
+        }
+
+        .task-card.en-progreso {
+            border-left-color: var(--warning);
+            background-color: rgba(30, 41, 59, 0.8); /* Ligeramente diferente para resaltar */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(234, 179, 8, 0.1);
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
+
+        .badge {
+            padding: 0.35rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        /* Contraste Alto WCAG */
+        .badge-pendiente { background-color: #475569; color: #f8fafc; }
+        .badge-progreso { background-color: var(--warning); color: #451a03; } /* Texto oscuro sobre amarillo */
+
+        .task-title { font-size: 1.25rem; font-weight: 700; margin: 0; color: white; line-height: 1.3; }
+        .task-lote { font-size: 0.85rem; color: var(--accent); margin-top: 0.3rem; font-weight: 600; }
+        
+        .task-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+            background-color: rgba(0,0,0,0.25);
+            padding: 1rem;
+            border-radius: 8px;
+            line-height: 1.5; /* Evita el clipping del texto */
+        }
+
+        .detail-item strong { color: var(--text-muted); display: block; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.2rem; }
+        .detail-item span { font-weight: 500; }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            border: 1px dashed var(--border-color);
+        }
+        .empty-state h3 { color: var(--success); font-size: 1.5rem; margin-bottom: 0.75rem; }
+
+        /* Loader */
+        .loader-overlay { position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 50; flex-direction: column; }
+        .spinner { width: 48px; height: 48px; border: 4px solid var(--border-color); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- LOADER -->
+        <div class="loader-overlay" id="globalLoader">
+            <div class="spinner"></div>
+            <div style="margin-top: 1.5rem; color: var(--accent); font-weight: bold; letter-spacing: 1px;" id="loaderText">Procesando...</div>
+        </div>
+
+        <!-- 1. VISTA DE LOGIN GxP -->
+        <div class="login-view" id="loginView">
+            <div class="login-card">
+                <div class="login-title">eBR Terminal</div>
+                <div class="login-subtitle">Firma Electrónica (21 CFR Part 11)</div>
+                
+                <form id="loginForm" onsubmit="handleLogin(event)">
+                    <div class="input-group">
+                        <label>Código de Empleado</label>
+                        <input type="text" id="inputCodigo" class="input-gxp" required autocomplete="off" placeholder="Ej: OP-001">
+                    </div>
+                    <div class="input-group">
+                        <label>PIN de Acceso</label>
+                        <input type="password" id="inputPin" class="input-gxp" required autocomplete="off" pattern="[0-9]*" inputmode="numeric" placeholder="••••">
+                    </div>
+                    
+                    <button type="submit" class="btn-massive btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+                        Iniciar Sesión
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 2. VISTA DE DASHBOARD -->
+        <div class="dashboard-view" id="dashboardView">
+            <div class="top-nav">
+                <div class="nav-profile">
+                    <strong id="uiOpNombre">Cargando...</strong>
+                    <span id="uiOpCuadrilla">Cuadrilla</span>
+                </div>
+                <button class="btn-logout" onclick="handleLogout()">Cerrar Sesión</button>
+            </div>
+
+            <div class="task-list" id="taskListContainer">
+                <!-- Tareas inyectadas vía JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Utilidad: Leer token CSRF
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        let session = JSON.parse(localStorage.getItem('ebr_session')) || null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (session && session.operador_id) {
+                mostrarDashboard();
+            } else {
+                mostrarLogin();
+            }
+        });
+
+        function mostrarLoader(texto = "Procesando...") {
+            document.getElementById('loaderText').innerText = texto;
+            document.getElementById('globalLoader').style.display = 'flex';
+        }
+
+        function ocultarLoader() {
+            document.getElementById('globalLoader').style.display = 'none';
+        }
+
+        function mostrarLogin() {
+            document.getElementById('dashboardView').style.display = 'none';
+            const loginView = document.getElementById('loginView');
+            loginView.style.display = 'flex';
+            gsap.fromTo(loginView, {opacity: 0, scale: 0.95}, {opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.2)"});
+        }
+
+        function mostrarDashboard() {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('uiOpNombre').innerText = session.nombre;
+            document.getElementById('uiOpCuadrilla').innerText = `${session.codigo_empleado} | ${session.rol}`;
+            
+            const dashView = document.getElementById('dashboardView');
+            dashView.style.display = 'flex';
+            gsap.fromTo(dashView, {opacity: 0}, {opacity: 1, duration: 0.3});
+            
+            cargarTareasPendientes();
+        }
+
+        // --- AUTHENTICATION ---
+        async function handleLogin(e) {
+            e.preventDefault();
+            const codigo = document.getElementById('inputCodigo').value.trim();
+            const pin = document.getElementById('inputPin').value.trim();
+
+            mostrarLoader("Autenticando firma...");
+
+            try {
+                const res = await fetch('/api/mobile/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ codigo_empleado: codigo, pin_acceso: pin })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    session = data;
+                    localStorage.setItem('ebr_session', JSON.stringify(session));
+                    document.getElementById('loginForm').reset();
+                    ocultarLoader();
+                    mostrarDashboard();
+                } else {
+                    ocultarLoader();
+                    alert("Acceso Denegado: " + (data.error || "Credenciales inválidas."));
+                }
+            } catch (err) {
+                ocultarLoader();
+                alert("Error de conexión con el servidor.");
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('ebr_session');
+            session = null;
+            document.getElementById('taskListContainer').innerHTML = '';
+            mostrarLogin();
+        }
+
+        // --- CARGA DE DATOS ---
+        async function cargarTareasPendientes() {
+            if (!session) return;
+            mostrarLoader("Obteniendo plan de trabajo...");
+
+            try {
+                const res = await fetch(`/api/mobile/${session.operador_id}/tareas-pendientes/`);
+                if (res.ok) {
+                    const data = await res.json();
+                    renderizarTareas(data.tareas_pendientes);
+                } else {
+                    alert("Error al cargar tareas. Inicie sesión nuevamente.");
+                    handleLogout();
+                }
+            } catch (err) {
+                alert("Error de red al consultar tareas.");
+            } finally {
+                ocultarLoader();
+            }
+        }
+
+        function renderizarTareas(tareas) {
+            const container = document.getElementById('taskListContainer');
+            container.innerHTML = '';
+
+            if (!tareas || tareas.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
+                        <h3>¡Excelente trabajo!</h3>
+                        <p>No tienes tareas operativas pendientes para tu turno actual en este momento.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            tareas.forEach(t => {
+                const card = document.createElement('div');
+                card.className = `task-card ${t.estado === 'EN_PROGRESO' ? 'en-progreso' : ''}`;
+                card.id = `task-card-${t.fase_id}`;
+                
+                let badgeClass = t.estado === 'EN_PROGRESO' ? 'badge-progreso' : 'badge-pendiente';
+                let badgeText = t.estado.replace('_', ' ');
+
+                let accionHtml = '';
+                if (t.estado === 'PENDIENTE') {
+                    accionHtml = `<button class="btn-massive btn-primary" onclick="cambiarEstadoFase(${t.fase_id}, 'EN_PROGRESO')">▶ INICIAR ACTIVIDAD</button>`;
+                } else if (t.estado === 'EN_PROGRESO') {
+                    accionHtml = `<button class="btn-massive btn-success" onclick="cambiarEstadoFase(${t.fase_id}, 'COMPLETADA')">✔ MARCAR COMPLETADA</button>`;
+                }
+
+                const tInicio = t.hora_inicio_programada ? t.hora_inicio_programada.substring(0,5) : '--:--';
+                const tFin = t.hora_fin_programada ? t.hora_fin_programada.substring(0,5) : '--:--';
+
+                card.innerHTML = `
+                    <div class="task-header">
+                        <div style="flex: 1; padding-right: 1rem;">
+                            <h4 class="task-title">[${t.identificador_paso}] ${t.tarea_nombre}</h4>
+                            <div class="task-lote">Lote: ${t.lote_identificador} | ${t.proceso_nombre}</div>
+                        </div>
+                        <span class="badge ${badgeClass}">${badgeText}</span>
+                    </div>
+                    
+                    <div class="task-details">
+                        <div class="detail-item"><strong>📅 Programado</strong><span>${t.fecha_programada || 'N/A'}</span></div>
+                        <div class="detail-item"><strong>⏱ Forecast</strong><span>${tInicio} a ${tFin} hrs</span></div>
+                        <div class="detail-item"><strong>👤 Rol Requerido</strong><span>${t.rol_asignado}</span></div>
+                        <div class="detail-item"><strong>⚙️ Tipo</strong><span>${t.tipo_operacion}</span></div>
+                    </div>
+
+                    ${accionHtml}
+                `;
+                container.appendChild(card);
+            });
+
+            // Animación de cascada suave (Stagger)
+            gsap.from(".task-card", {
+                y: 30, 
+                opacity: 0, 
+                duration: 0.4, 
+                stagger: 0.1, 
+                ease: "power2.out",
+                clearProps: "all"
+            });
+        }
+
+        // --- ACTUALIZACIÓN TRANSACCIONAL eBR ---
+        async function cambiarEstadoFase(faseId, nuevoEstado) {
+            let accionTxt = nuevoEstado === 'EN_PROGRESO' ? 'iniciar' : 'completar';
+            if (!confirm(`¿Firma electrónicamente que desea ${accionTxt} esta actividad bajo las normas GxP?`)) return;
+
+            mostrarLoader("Registrando firma electrónica...");
+
+            try {
+                const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ estado: nuevoEstado })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const card = document.getElementById(`task-card-${faseId}`);
+                    
+                    // Animación de éxito
+                    gsap.to(card, {
+                        x: -50, opacity: 0, height: 0, marginBottom: 0, padding: 0, duration: 0.3, 
+                        onComplete: () => {
+                            // [NUEVO] Si el backend inyectó el mensaje del Efecto Cascada, avisamos al operador
+                            if (data.mensaje_cascada) {
+                                alert("✨ Inteligencia Operativa MES:\n\n" + data.mensaje_cascada);
+                            }
+                            cargarTareasPendientes();
+                        } 
+                    });
+                } else {
+                    const errorData = await res.json();
+                    alert("⚠️ Bloqueo GxP:\n\n" + (errorData.error || "No se puede procesar la solicitud."));
+                    ocultarLoader();
+                }
+            } catch (err) {
+                alert("Error de red. Verifique la conexión WiFi de la Tablet.");
+                ocultarLoader();
+            }
+        }
+    </script>
+</body>
+</html>

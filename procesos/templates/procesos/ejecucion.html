@@ -17,6 +17,7 @@
             --warning: #f59e0b;
             --info: #38bdf8;
             --success: #22c65e;
+            --incubation: #8b5cf6;
         }
 
         * { box-sizing: border-box; }
@@ -42,7 +43,7 @@
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 0.85rem 1.25rem;
+            padding: 0.85rem 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -80,17 +81,18 @@
             align-items: center;
         }
 
-        .btn-primary { background-color: var(--info); color: #0f172a; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; transition: all 0.2s; }
+        .btn-primary { background-color: var(--info); color: #0f172a; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; transition: all 0.2s; }
         .btn-primary:hover { background-color: #0284c7; color: white; }
         
-        .btn-action { background-color: var(--accent); color: #fff; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .btn-action { background-color: var(--accent); color: #fff; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
         .btn-action:hover { background-color: var(--accent-hover); }
 
-        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
-        .btn-danger { background-color: var(--danger); color: white; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; }
+        .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+        .btn-danger { background-color: var(--danger); color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; }
 
         .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 3px 6px; border-radius: 4px; transition: background-color 0.2s; }
-        .btn-icon:hover { background-color: rgba(255,255,255,0.1); }
+        .btn-icon:hover:not(:disabled) { background-color: rgba(255,255,255,0.1); }
+        .btn-icon:disabled { opacity: 0.3; cursor: not-allowed; }
 
         .list-container { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; flex: 1; }
         .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.9rem; }
@@ -107,7 +109,7 @@
 
         .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
         .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
-        input[type="text"], input[type="date"], input[type="datetime-local"], select, textarea { 
+        input[type="text"], input[type="time"], input[type="date"], input[type="datetime-local"], select, textarea { 
             background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; 
         }
         input:focus, select:focus, textarea:focus { border-color: var(--accent); }
@@ -121,6 +123,8 @@
         thead { background-color: rgba(0,0,0,0.2); color: var(--text-muted); }
         th, td { padding: 0.6rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
         tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+        
+        .row-incubation { background-color: rgba(139, 92, 246, 0.03); }
 
         .etapa-header-row td {
             background-color: rgba(15, 23, 42, 0.8);
@@ -137,8 +141,13 @@
         
         .progress-container { width: 100%; background-color: rgba(255, 255, 255, 0.05); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 4px; }
         .progress-fill { height: 100%; background-color: var(--success); transition: width 0.5s ease-in-out; }
-        .tag-delay { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
-        .tag-ontime { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        
+        /* Estilos de Desviación */
+        .tag-delay { background-color: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .tag-warning { background-color: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid var(--warning); padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .tag-ontime { background-color: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .tag-none { background-color: rgba(148, 163, 184, 0.1); color: var(--text-muted); border: 1px solid var(--border-color); padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .tag-machine { background-color: rgba(139, 92, 246, 0.1); color: var(--incubation); border: 1px solid var(--incubation); padding: 3px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
         
         .gxp-lock-banner { background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--warning); padding: 0.75rem; margin: 1rem 1rem 0 1rem; border-radius: 6px; font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
     </style>
@@ -151,7 +160,7 @@
             <p>Ejecución de lotes, seguimiento de fases Upstream y asignación real de operadores.</p>
         </div>
         <div style="display: flex; gap: 0.5rem;">
-            <a href="/procesos/" class="btn-primary">⬅️ Volver a Diseño CPM</a>
+            <a href="/procesos/" class="btn-secondary">⬅️ Volver a Diseño CPM</a>
             <button class="btn-action" onclick="abrirModalInstanciarLote()">➕ Instanciar Lote</button>
         </div>
     </div>
@@ -262,6 +271,54 @@
         </div>
     </div>
 
+    <!-- MODAL REPROGRAMAR FASE (FORECAST) -->
+    <div class="modal-overlay" id="modalReprogramar" style="display: none;">
+        <div class="modal-content" style="width: 450px;">
+            <div class="modal-header">
+                <h3 style="margin:0; font-size:1rem; color:var(--warning);">⏱ Reprogramar Actividad</h3>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">
+                Ajuste el <strong>Forecast</strong> de la tarea debido a desviaciones. El Baseline GxP original permanecerá inmutable.
+            </div>
+            
+            <input type="hidden" id="repFaseId">
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
+                <div class="form-group">
+                    <label>Nueva Fecha (Forecast)</label>
+                    <input type="date" id="repFecha" required>
+                </div>
+                <div class="form-group">
+                    <label>Nueva Hora Inicio</label>
+                    <input type="time" id="repCHora" required>
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-top:0.5rem;">
+                <label>Motivo de Reprogramación</label>
+                <select id="repMotivo" required>
+                    <option value="">-- Seleccionar Razón --</option>
+                    <option value="MANTENIMIENTO">Mantenimiento de Equipo</option>
+                    <option value="INSUMOS">Falta de Insumos</option>
+                    <option value="PERSONAL">Ausentismo / Personal</option>
+                    <option value="CALIDAD">Desviación de Calidad previa</option>
+                    <option value="PRODUCCION">Retraso acumulado en planta</option>
+                    <option value="OTRO">Otro (Especificar)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Notas de Justificación</label>
+                <textarea id="repNotas" rows="2" placeholder="Justificación técnica..."></textarea>
+            </div>
+            
+            <div class="modal-actions" style="margin-top:1rem;">
+                <button class="btn-secondary" onclick="cerrarModalReprogramar()">Cancelar</button>
+                <button class="btn-primary" style="background-color:var(--warning); color:white;" onclick="ejecutarReprogramacionAPI()">Guardar Ajuste</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let lotesGlobales = [];
         let procesosMaestrosGlobales = [];
@@ -320,26 +377,13 @@
                 let badgeClass = lote.estado === 'PLANEADO' ? 'status-planeado' : (lote.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
                 let progress = lote.progreso_porcentual !== undefined ? lote.progreso_porcentual : 0;
 
-                // --- BOTONES DE GESTIÓN SEGÚN ESTADO (GxP) ---
                 let actionButtonHtml = '';
                 if (lote.estado === 'PLANEADO') {
-                    actionButtonHtml = `
-                        <button class="btn-icon" style="color: var(--danger);" title="Eliminar Lote Planificado" onclick="eliminarLoteAPI(${lote.id}, event)">
-                            🗑️
-                        </button>
-                    `;
+                    actionButtonHtml = `<button class="btn-icon" style="color: var(--danger);" title="Eliminar Lote Planificado" onclick="eliminarLoteAPI(${lote.id}, event)">🗑️</button>`;
                 } else if (lote.estado === 'EN_PROGRESO' || lote.estado === 'DESVIACION') {
-                    actionButtonHtml = `
-                        <button class="btn-icon" style="color: var(--warning);" title="Abortar Lote" onclick="abrirModalAbortar(${lote.id}, event)">
-                            🛑
-                        </button>
-                    `;
+                    actionButtonHtml = `<button class="btn-icon" style="color: var(--warning);" title="Abortar Lote" onclick="abrirModalAbortar(${lote.id}, event)">🛑</button>`;
                 } else if (lote.estado === 'COMPLETADO') {
-                    actionButtonHtml = `
-                        <button class="btn-icon" style="color: var(--success);" title="Archivar Lote" onclick="archivarLoteAPI(${lote.id}, event)">
-                            📦
-                        </button>
-                    `;
+                    actionButtonHtml = `<button class="btn-icon" style="color: var(--success);" title="Archivar Lote" onclick="archivarLoteAPI(${lote.id}, event)">📦</button>`;
                 }
 
                 card.innerHTML = `
@@ -369,7 +413,7 @@
             renderizarDetalleLote(); 
         }
 
-        function renderizarDetalleLote() {
+        async function renderizarDetalleLote() {
             const container = document.getElementById('editorLote');
             const headerTitle = document.getElementById('tituloLoteActivo');
 
@@ -385,20 +429,14 @@
                 <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
             `;
 
-            let fechaPlaneadaTxt = loteSeleccionado.fecha_inicio_planeada 
-                ? new Date(loteSeleccionado.fecha_inicio_planeada).toLocaleString() 
-                : '-';
-                
+            let fechaPlaneadaTxt = loteSeleccionado.fecha_inicio_planeada ? new Date(loteSeleccionado.fecha_inicio_planeada).toLocaleString() : '-';
             let progress = loteSeleccionado.progreso_porcentual !== undefined ? loteSeleccionado.progreso_porcentual : 0;
             let isLocked = loteSeleccionado.estado === 'COMPLETADO';
             
             let bannerLockHtml = isLocked ? `
                 <div class="gxp-lock-banner">
                     <span style="font-size: 1.2rem;">🔒</span> 
-                    <div>
-                        <strong>Data Lock (QA Release):</strong> Este Lote de Producción ha sido cerrado. 
-                        Sus registros son estrictamente inmutables cumpliendo con la normativa 21 CFR Part 11.
-                    </div>
+                    <div><strong>Data Lock (QA Release):</strong> Este Lote de Producción ha sido cerrado. Sus registros son estrictamente inmutables (21 CFR Part 11).</div>
                 </div>
             ` : '';
 
@@ -409,22 +447,18 @@
                         <div style="font-weight: bold; color: var(--info);">${loteSeleccionado.proceso_nombre}</div>
                     </div>
                     <div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha y Hora Planeada</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha Planeada</div>
                         <div style="font-weight: bold;">${fechaPlaneadaTxt}</div>
                     </div>
                     <div style="flex: 1; max-width: 200px;">
                         <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between;">
-                            <span>Progreso de Receta</span>
+                            <span>Progreso</span>
                             <span style="font-weight: bold; color: var(--success);">${progress}%</span>
                         </div>
-                        <div class="progress-container">
-                            <div class="progress-fill" style="width: ${progress}%;"></div>
-                        </div>
+                        <div class="progress-container"><div class="progress-fill" style="width: ${progress}%;"></div></div>
                     </div>
                 </div>
-                
                 ${bannerLockHtml}
-                
                 <div style="padding: 1rem;">
                     <h4 style="margin-top: 0; margin-bottom: 0.8rem; color: var(--accent);">Fases de Producción (Ruta Crítica Instanciada)</h4>
                     <table>
@@ -433,101 +467,133 @@
                                 <th style="width: 50px;">ID</th>
                                 <th>Operación / Fase</th>
                                 <th>Estado</th>
-                                <th>Inicio Real</th>
-                                <th>Fin Real</th>
-                                <th>Rendimiento (MES)</th>
+                                <th>Horario (Forecast vs Real)</th>
+                                <th>Desviación (Live)</th>
                                 <th>Operadores Asignados</th>
-                                <th style="text-align: center; width: 100px;">Acciones</th>
+                                <th style="text-align: center; width: 110px;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
 
-            let fasesPorEtapa = {};
-            loteSeleccionado.fases.forEach(fase => {
-                let etapaNombre = fase.etapa_nombre || 'Actividades Sueltas (Sin Etapa)';
-                let etapaOrden = fase.etapa_orden || 999999;
-                
-                if (!fasesPorEtapa[etapaNombre]) {
-                    fasesPorEtapa[etapaNombre] = { orden: etapaOrden, fases: [] };
-                }
-                fasesPorEtapa[etapaNombre].fases.push(fase);
-            });
+            try {
+                const resFases = await fetch('/api/fases-lote/');
+                const todasFases = await resFases.json();
+                const fasesLote = todasFases.filter(f => f.lote === loteSeleccionado.id);
 
-            let etapasArray = Object.keys(fasesPorEtapa).map(key => ({
-                nombre: key,
-                orden: fasesPorEtapa[key].orden,
-                fases: fasesPorEtapa[key].fases
-            })).sort((a, b) => a.orden - b.orden);
-
-            etapasArray.forEach(etapa => {
-                html += `
-                    <tr class="etapa-header-row">
-                        <td colspan="8">📁 ETAPA: ${etapa.nombre}</td>
-                    </tr>
-                `;
-
-                etapa.fases.forEach(fase => {
-                    let badgeClass = 'status-pendiente';
-                    if(fase.estado === 'EN_PROGRESO') badgeClass = 'status-progreso';
-                    if(fase.estado === 'COMPLETADA') badgeClass = 'status-completado';
-
-                    let inicioTxt = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : '-';
-                    let finTxt = fase.fecha_fin_real ? new Date(fase.fecha_fin_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : '-';
-
-                    let asignacionesHtml = fase.operadores_asignados.length > 0 
-                        ? fase.operadores_asignados.map(a => `<div class="tag-resource">👤 ${a.operador_nombre} (${a.rol_nombre})</div>`).join('') 
-                        : '<span style="color: var(--text-muted); font-size: 0.7rem;">Sin asignar</span>';
-
-                    let rendimientoHtml = '<span style="color: var(--text-muted); font-size: 0.7rem;">-</span>';
-                    if (fase.desviacion_horas !== null) {
-                        if (fase.desviacion_horas > 0) {
-                            rendimientoHtml = `<span class="tag-delay" title="Retraso respecto a receta">+${fase.desviacion_horas}h ⚠️</span>`;
-                        } else {
-                            rendimientoHtml = `<span class="tag-ontime" title="A tiempo / Eficiente">${fase.desviacion_horas}h ✓</span>`;
-                        }
-                    }
-                    
-                    let accionesHtml = '';
-                    if (isLocked) {
-                        accionesHtml = `<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
-                    } else {
-                        accionesHtml = `
-                            <button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>
-                            <button class="btn-icon" title="Actualizar Estado (Iniciar/Finalizar)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
-                        `;
-                    }
-
-                    html += `
-                        <tr>
-                            <td style="color: var(--info); font-weight: bold;">${fase.operacion_id_paso}</td>
-                            <td style="font-weight: bold;">
-                                ${fase.operacion_nombre}
-                                <div style="font-size: 0.65rem; color: var(--text-muted);">Teórico: ${fase.duracion_estimada}h</div>
-                            </td>
-                            <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
-                            <td style="font-size: 0.75rem;">${inicioTxt}</td>
-                            <td style="font-size: 0.75rem;">${finTxt}</td>
-                            <td>${rendimientoHtml}</td>
-                            <td>${asignacionesHtml}</td>
-                            <td style="text-align: center; white-space: nowrap;">
-                                ${accionesHtml}
-                            </td>
-                        </tr>
-                    `;
+                let fasesPorEtapa = {};
+                fasesLote.forEach(fase => {
+                    let etapaNombre = fase.etapa_nombre || 'Actividades Sueltas (Sin Etapa)';
+                    let etapaOrden = fase.etapa_orden || 999999;
+                    if (!fasesPorEtapa[etapaNombre]) fasesPorEtapa[etapaNombre] = { orden: etapaOrden, fases: [] };
+                    fasesPorEtapa[etapaNombre].fases.push(fase);
                 });
-            });
 
-            html += `</tbody></table></div>`;
-            container.innerHTML = html;
+                let etapasArray = Object.keys(fasesPorEtapa).map(key => ({
+                    nombre: key, orden: fasesPorEtapa[key].orden, fases: fasesPorEtapa[key].fases
+                })).sort((a, b) => a.orden - b.orden);
+
+                etapasArray.forEach(etapa => {
+                    html += `<tr class="etapa-header-row"><td colspan="7">📁 ETAPA: ${etapa.nombre}</td></tr>`;
+
+                    etapa.fases.forEach(fase => {
+                        let badgeClass = 'status-pendiente';
+                        if(fase.estado === 'EN_PROGRESO') badgeClass = 'status-progreso';
+                        if(fase.estado === 'COMPLETADA') badgeClass = 'status-completado';
+
+                        // INDICADORES Y BLOQUEOS
+                        let estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(fase.estado);
+                        let lockIconUI = estaIniciada ? '<span style="color:var(--warning); font-size:0.7rem;" title="Iniciada en Piso">🔒</span> ' : '';
+
+                        let fcstInicio = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '--:--';
+                        let fcstFin = fase.hora_fin_programada ? fase.hora_fin_programada.substring(0,5) : '--:--';
+                        let actInicio = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false}) : '--:--';
+                        let actFin = fase.fecha_fin_real ? new Date(fase.fecha_fin_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false}) : '--:--';
+
+                        let rendimientoHtml = `<span class="tag-none">Sin Medición</span>`;
+                        if (fase.fecha_programada && fase.hora_inicio_programada) {
+                            const dtForecast = new Date(`${fase.fecha_programada}T${fase.hora_inicio_programada}`);
+                            
+                            if (estaIniciada && fase.fecha_inicio_real) {
+                                const dtReal = new Date(fase.fecha_inicio_real);
+                                const diffMins = Math.round((dtReal - dtForecast) / 60000);
+                                if (diffMins <= 5) rendimientoHtml = `<span class="tag-ontime">✔ A tiempo</span>`;
+                                else if (diffMins <= 30) rendimientoHtml = `<span class="tag-warning">⚠ +${diffMins}m</span>`;
+                                else rendimientoHtml = `<span class="tag-delay">🚨 +${diffMins}m</span>`;
+                            } else if (fase.estado === 'PENDIENTE') {
+                                const now = new Date();
+                                const diffMins = Math.round((now - dtForecast) / 60000);
+                                if (diffMins > 15) rendimientoHtml = `<span class="tag-delay" title="Retraso proyectado actual">🚨 Proyecta +${diffMins}m</span>`;
+                                else rendimientoHtml = `<span class="tag-none">A la espera</span>`;
+                            }
+                        }
+
+                        let asignacionesHtml = fase.operadores_asignados.length > 0 
+                            ? fase.operadores_asignados.map(a => `<div class="tag-resource">👤 ${a.operador_nombre}</div>`).join('') 
+                            : '<span style="color: var(--text-muted); font-size: 0.7rem;">Sin asignar</span>';
+
+                        // [NUEVO] IDENTIFICACIÓN DE TAREA PASIVA (MÁQUINA)
+                        let esPasiva = fase.tipo_operacion === 'INCUBACION' && !fase.es_subtarea_muestreo;
+                        let rowClass = esPasiva ? 'class="row-incubation"' : '';
+                        
+                        if(esPasiva) {
+                            asignacionesHtml = `<span class="tag-machine" title="Tiempo de Máquina continuo. No requiere firma de asignación humana.">🧫 Automatizado</span>`;
+                        }
+
+                        let idMostrar = fase.operacion_id_paso || fase.operacion_maestra?.identificador_paso || '-';
+                        let nombreMostrar = fase.operacion_nombre || fase.nombre_tarea_dinamica || fase.operacion_maestra?.nombre || 'Operación';
+
+                        // ACCIONES CON BLOQUEOS
+                        let accionesHtml = '';
+                        if (isLocked) {
+                            accionesHtml = `<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
+                        } else {
+                            let btnReprogramar = estaIniciada
+                                ? `<button class="btn-icon" title="Bloqueo GxP: Tarea iniciada en planta. No se puede reprogramar." disabled>🔒</button>`
+                                : `<button class="btn-icon" title="Reprogramar Tarea (Ajustar Forecast)" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${fase.hora_inicio_programada}')">⏱️</button>`;
+
+                            // [NUEVO] Bloqueo de Asignación Manual para Tareas Pasivas
+                            let btnAsignar = esPasiva 
+                                ? `<button class="btn-icon" disabled title="Bloqueo GxP: Fase puramente mecanizada/pasiva.">🚫</button>`
+                                : `<button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>`;
+
+                            accionesHtml = `
+                                ${btnReprogramar}
+                                ${btnAsignar}
+                                <button class="btn-icon" title="Forzar Estado (Supervisor)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
+                            `;
+                        }
+
+                        html += `
+                            <tr ${rowClass}>
+                                <td style="color: var(--info); font-weight: bold;">${idMostrar}</td>
+                                <td style="font-weight: bold;">${lockIconUI}${nombreMostrar}</td>
+                                <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
+                                <td style="font-size: 0.75rem;">
+                                    <div style="color: var(--text-muted); font-size: 0.65rem;">FCST: ${fcstInicio} a ${fcstFin}</div>
+                                    <div style="color: white; margin-top:2px;">REAL: ${actInicio} a ${actFin}</div>
+                                </td>
+                                <td>${rendimientoHtml}</td>
+                                <td>${asignacionesHtml}</td>
+                                <td style="text-align: center; white-space: nowrap;">${accionesHtml}</td>
+                            </tr>
+                        `;
+                    });
+                });
+
+                html += `</tbody></table></div>`;
+                container.innerHTML = html;
+
+            } catch (err) {
+                container.innerHTML = '<div style="color:var(--danger); text-align:center;">Error cargando fases.</div>';
+            }
         }
 
+        // --- FUNCIONES ORIGINALES ---
         function llenarSelectProcesos() {
             const select = document.getElementById('selectProcesoMaestro');
             select.innerHTML = '<option value="">-- Seleccione una Receta Maestra --</option>';
-            procesosMaestrosGlobales.forEach(p => {
-                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.operaciones.length} fases)</option>`;
-            });
+            procesosMaestrosGlobales.forEach(p => { select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.operaciones.length} fases)</option>`; });
         }
 
         function abrirModalInstanciarLote() {
@@ -542,76 +608,39 @@
         function cerrarModalInstanciarLote() { document.getElementById('modalInstanciarLote').style.display = 'none'; }
 
         async function crearLoteAPI() {
-            const identificador_lote = document.getElementById('nuevoLoteId').value.trim();
-            const proceso_maestro = document.getElementById('selectProcesoMaestro').value;
-            const fecha_inicio_planeada = document.getElementById('nuevoLoteFecha').value;
+            const idLote = document.getElementById('nuevoLoteId').value.trim();
+            const idProceso = document.getElementById('selectProcesoMaestro').value;
+            const fechaPlaneada = document.getElementById('nuevoLoteFecha').value;
 
-            if (!identificador_lote || !proceso_maestro || !fecha_inicio_planeada) {
-                return alert("Por favor complete todos los campos obligatorios GxP.");
-            }
-
-            let fechaIsoParaDjango = new Date(fecha_inicio_planeada).toISOString();
+            if (!idLote || !idProceso || !fechaPlaneada) return alert("Complete los campos obligatorios.");
 
             try {
                 const res = await fetch('/api/lotes/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ 
-                        identificador_lote: identificador_lote, 
-                        proceso_maestro: parseInt(proceso_maestro), 
-                        estado: 'PLANEADO', 
-                        fecha_inicio_planeada: fechaIsoParaDjango 
-                    })
+                    body: JSON.stringify({ identificador_lote: idLote, proceso_maestro: parseInt(idProceso), estado: 'PLANEADO', fecha_inicio_planeada: new Date(fechaPlaneada).toISOString() })
                 });
 
-                if (res.ok) {
-                    cerrarModalInstanciarLote();
-                    await cargarCatalogos(); 
-                } else {
-                    const data = await res.json();
-                    alert("Error al instanciar lote: " + JSON.stringify(data));
-                }
+                if (res.ok) { cerrarModalInstanciarLote(); await cargarCatalogos(); } 
+                else { const data = await res.json(); alert("Error al instanciar: " + JSON.stringify(data)); }
             } catch (err) { alert("Error de red."); }
         }
 
-        // --- ACCIONES DE GESTIÓN GxP (ELIMINAR, ARCHIVAR, ABORTAR) ---
         async function eliminarLoteAPI(loteId, event) {
             event.stopPropagation();
-            if (!confirm("⚠️ ADVERTENCIA GxP: ¿Está seguro que desea eliminar este Lote de Producción planificado? Esta acción es irreversible.")) return;
-
+            if (!confirm("⚠️ ¿Desea eliminar este Lote planificado?")) return;
             try {
-                const res = await fetch(`/api/lotes/${loteId}/`, {
-                    method: 'DELETE',
-                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
-                });
-
-                if (res.ok || res.status === 204) {
-                    limpiarSeleccionSiCorresponde(loteId);
-                    await cargarCatalogos();
-                } else {
-                    const data = await res.json();
-                    alert("No se pudo eliminar el lote: " + (data.error || JSON.stringify(data)));
-                }
+                const res = await fetch(`/api/lotes/${loteId}/`, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+                if (res.ok || res.status === 204) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
             } catch (err) { alert("Error de red."); }
         }
 
         async function archivarLoteAPI(loteId, event) {
             event.stopPropagation();
-            if (!confirm("📦 ¿Desea archivar este Lote completado? Desaparecerá del tablero activo de ejecución pero se mantendrá en el histórico GxP.")) return;
-
+            if (!confirm("📦 ¿Desea archivar este Lote completado?")) return;
             try {
-                const res = await fetch(`/api/lotes/${loteId}/archivar/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
-                });
-
-                if (res.ok) {
-                    limpiarSeleccionSiCorresponde(loteId);
-                    await cargarCatalogos();
-                } else {
-                    const data = await res.json();
-                    alert("Error al archivar: " + (data.error || JSON.stringify(data)));
-                }
+                const res = await fetch(`/api/lotes/${loteId}/archivar/`, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+                if (res.ok) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
             } catch (err) { alert("Error de red."); }
         }
 
@@ -625,58 +654,36 @@
         async function ejecutarAbortarAPI() {
             const loteId = document.getElementById('abortarLoteId').value;
             const motivo = document.getElementById('textareaMotivoAborto').value.trim();
-
-            if (motivo.length < 10) {
-                alert("Violación GxP: El motivo del aborto debe contener al menos 10 caracteres explicativos.");
-                return;
-            }
-
+            if (motivo.length < 10) return alert("Violación GxP: El motivo debe contener al menos 10 caracteres.");
             try {
                 const res = await fetch(`/api/lotes/${loteId}/abortar/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                     body: JSON.stringify({ motivo_aborto: motivo })
                 });
-
-                if (res.ok) {
-                    document.getElementById('modalAbortarLote').style.display = 'none';
-                    limpiarSeleccionSiCorresponde(parseInt(loteId));
-                    await cargarCatalogos();
-                } else {
-                    const data = await res.json();
-                    alert("Error al abortar lote: " + (data.error || JSON.stringify(data)));
-                }
+                if (res.ok) { document.getElementById('modalAbortarLote').style.display = 'none'; limpiarSeleccionSiCorresponde(parseInt(loteId)); await cargarCatalogos(); }
             } catch (err) { alert("Error de red."); }
         }
 
         function limpiarSeleccionSiCorresponde(loteId) {
             if (loteSeleccionado && loteSeleccionado.id === loteId) {
                 loteSeleccionado = null;
-                document.getElementById('editorLote').innerHTML = '<div class="empty-state">👈 Selecciona un lote activo del panel izquierdo para ver sus fases y registrar firmas GxP.</div>';
+                document.getElementById('editorLote').innerHTML = '<div class="empty-state">👈 Selecciona un lote activo.</div>';
                 document.getElementById('tituloLoteActivo').innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>';
             }
         }
 
         async function cambiarEstadoFase(faseId, estadoActual) {
-            let siguienteEstado = '';
-            if (estadoActual === 'PENDIENTE') siguienteEstado = 'EN_PROGRESO';
-            else if (estadoActual === 'EN_PROGRESO') siguienteEstado = 'COMPLETADA';
-            else return;
-
-            if (!confirm(`¿Confirma cambiar el estado de la fase a [${siguienteEstado}]?`)) return;
-
+            let siguienteEstado = estadoActual === 'PENDIENTE' ? 'EN_PROGRESO' : (estadoActual === 'EN_PROGRESO' ? 'COMPLETADA' : null);
+            if (!siguienteEstado) return;
+            if (!confirm(`¿Forzar estado a [${siguienteEstado}]?`)) return;
             try {
                 const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
                     body: JSON.stringify({ estado: siguienteEstado })
                 });
-
                 if (res.ok) await cargarCatalogos();
-                else {
-                    const data = await res.json();
-                    alert("Error GxP: " + (data.error || JSON.stringify(data)));
-                }
             } catch (err) { alert("Error de red."); }
         }
 
@@ -686,7 +693,6 @@
                 const [resOps, resRoles] = await Promise.all([fetch('/api/operadores/'), fetch('/api/roles-operador/')]);
                 const ops = await resOps.json();
                 const roles = await resRoles.json();
-                
                 document.getElementById('selectOperador').innerHTML = ops.map(o => `<option value="${o.id}">${o.nombre}</option>`).join('');
                 document.getElementById('selectRolAsignado').innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('');
                 document.getElementById('modalAsignarOperador').style.display = 'flex';
@@ -694,23 +700,50 @@
         }
 
         async function ejecutarAsignacionAPI() {
-            const fase_lote = document.getElementById('asignarFaseId').value;
-            const operador = document.getElementById('selectOperador').value;
-            const rol_ejercido = document.getElementById('selectRolAsignado').value;
-
+            const f_id = document.getElementById('asignarFaseId').value, op_id = document.getElementById('selectOperador').value, rol_id = document.getElementById('selectRolAsignado').value;
             try {
                 const res = await fetch('/api/asignaciones-operador/', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ fase_lote: parseInt(f_id), operador: parseInt(op_id), rol_ejercido: parseInt(rol_id), horas_invertidas: 0.0 })
+                });
+                if (res.ok) { document.getElementById('modalAsignarOperador').style.display = 'none'; await cargarCatalogos(); } 
+                else { const data = await res.json(); alert("Error GxP: " + JSON.stringify(data)); }
+            } catch (err) { alert("Error de red."); }
+        }
+
+        function abrirModalReprogramar(faseId, currentFecha, currentHora) {
+            document.getElementById('repFaseId').value = faseId;
+            document.getElementById('repFecha').value = currentFecha || '';
+            document.getElementById('repCHora').value = currentHora ? currentHora.substring(0,5) : '';
+            document.getElementById('repMotivo').value = '';
+            document.getElementById('repNotas').value = '';
+            document.getElementById('modalReprogramar').style.display = 'flex';
+        }
+
+        function cerrarModalReprogramar() { document.getElementById('modalReprogramar').style.display = 'none'; }
+
+        async function ejecutarReprogramacionAPI() {
+            const id = document.getElementById('repFaseId').value;
+            const fecha = document.getElementById('repFecha').value;
+            const hora = document.getElementById('repCHora').value;
+            const motivo = document.getElementById('repMotivo').value;
+            const notas = document.getElementById('repNotas').value;
+
+            if (!fecha || !hora || !motivo) return alert("Fecha, Hora y Motivo son obligatorios.");
+
+            try {
+                const res = await fetch(`/api/fases-lote/${id}/reprogramar/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ fase_lote: parseInt(fase_lote), operador: parseInt(operador), rol_ejercido: parseInt(rol_ejercido), horas_invertidas: 0.0 })
+                    body: JSON.stringify({ fecha_programada: fecha, hora_inicio_programada: hora, motivo_reprogramacion: motivo, notas_reprogramacion: notas })
                 });
 
                 if (res.ok) {
-                    document.getElementById('modalAsignarOperador').style.display = 'none';
-                    await cargarCatalogos();
+                    cerrarModalReprogramar();
+                    if (loteSeleccionado) renderizarDetalleLote();
                 } else {
                     const data = await res.json();
-                    alert("Error GxP: " + JSON.stringify(data));
+                    alert("Error GxP:\n" + (data.error || JSON.stringify(data)));
                 }
             } catch (err) { alert("Error de red."); }
         }

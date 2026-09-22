@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planificación y Asignación Semanal - MES Upstream GxP</title>
+    <title>Planificación y Asignación - MES Upstream GxP</title>
     <style>
         :root {
             --bg-dark: #0f172a;
@@ -15,301 +15,117 @@
             --success: #22c65e;
             --danger: #ef4444;
             --purple: #a855f7;
+            --lock: #64748b;
         }
 
-        body {
-            margin: 0;
-            padding: 1rem;
-            background-color: var(--bg-dark);
-            color: var(--text);
-            font-family: system-ui, -apple-system, sans-serif;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            box-sizing: border-box;
-            gap: 0.75rem;
-        }
-
+        body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--text); font-family: system-ui, -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; gap: 0.75rem; overflow: hidden; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-dark); border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-        .supervisor-toolbar {
-            background-color: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 0.85rem 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .toolbar-title {
-            font-size: 0.9rem;
-            font-weight: bold;
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
+        .supervisor-toolbar { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .toolbar-title { font-size: 0.9rem; font-weight: bold; color: var(--accent); display: flex; align-items: center; gap: 0.75rem; }
 
         .btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; transition: all 0.2s; }
         .btn-primary:hover { opacity: 0.9; }
-
         .btn-secondary { background-color: var(--border-color); color: var(--text); border: none; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
         .btn-secondary:hover { background-color: #475569; }
-
         .btn-icon { background: none; border: none; cursor: pointer; font-size: 0.9rem; padding: 4px; border-radius: 4px; transition: background-color 0.2s; }
-        .btn-icon:hover { background-color: rgba(255,255,255,0.1); }
+        .btn-icon:hover:not(:disabled) { background-color: rgba(255,255,255,0.1); }
+        .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        .dashboard-container {
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 0.75rem;
-            flex: 1;
-            overflow: hidden;
-        }
+        .dashboard-container { display: grid; grid-template-columns: 1fr 380px; gap: 0.75rem; flex: 1; overflow: hidden; min-height: 0; }
+        .panel-box { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+        .panel-title { padding: 0.6rem 0.8rem; background-color: rgba(15, 23, 42, 0.6); border-bottom: 1px solid var(--border-color); font-size: 0.8rem; font-weight: bold; color: var(--accent); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
 
-        .panel-box {
-            background-color: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+        /* TOGGLE DE VISTAS */
+        .view-toggle { display: flex; background: var(--bg-dark); border-radius: 6px; padding: 2px; border: 1px solid var(--border-color); }
+        .btn-view { background: transparent; color: var(--text-muted); border: none; padding: 4px 10px; font-size: 0.7rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-view.active { background: var(--border-color); color: var(--text); }
 
-        .panel-title {
-            padding: 0.6rem 0.8rem;
-            background-color: rgba(15, 23, 42, 0.6);
-            border-bottom: 1px solid var(--border-color);
-            font-size: 0.8rem;
-            font-weight: bold;
-            color: var(--accent);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .weekly-nav-controls { display: flex; align-items: center; gap: 0.5rem; }
+        .btn-nav { background-color: var(--border-color); color: var(--text); border: none; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; cursor: pointer; transition: all 0.2s ease; }
+        .btn-nav:hover { background-color: var(--accent); color: #0f172a; font-weight: bold; }
+        .current-week-label { font-size: 0.75rem; color: var(--text); font-weight: bold; min-width: 150px; text-align: center; }
 
-        .weekly-nav-controls {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .btn-nav {
-            background-color: var(--border-color);
-            color: var(--text);
-            border: none;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .btn-nav:hover {
-            background-color: var(--accent);
-            color: #0f172a;
-            font-weight: bold;
-        }
-        
-        .current-week-label {
-            font-size: 0.75rem;
-            color: var(--text);
-            font-weight: bold;
-            min-width: 140px;
-            text-align: center;
-        }
-
-        .weekly-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 1px;
-            background-color: var(--border-color);
-            flex: 1;
-            overflow-y: auto;
-        }
-
-        .day-column {
-            background-color: var(--panel-bg);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .day-header {
-            background-color: var(--bg-dark);
-            padding: 0.5rem;
-            text-align: center;
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 5;
-        }
-
+        /* --- GRID SEMANAL --- */
+        .weekly-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background-color: var(--border-color); flex: 1; overflow-y: auto; min-height: 0; }
+        .day-column { background-color: var(--panel-bg); display: flex; flex-direction: column; }
+        .day-header { background-color: var(--bg-dark); padding: 0.5rem; text-align: center; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 5; }
         .day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
         .day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
         .day-header.today { background-color: rgba(56, 189, 248, 0.1); border-bottom: 2px solid var(--accent); }
         .day-header.today .day-date { color: var(--accent); }
+        .day-tasks { padding: 0.4rem; display: flex; flex-direction: column; gap: 0.4rem; flex: 1; }
 
-        .day-tasks {
-            padding: 0.4rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-            flex: 1;
-        }
+        /* --- GRID DIARIA (GANTT LOTE CON SCROLL HORIZONTAL) --- */
+        .daily-grid { display: flex; flex-direction: column; flex: 1; min-height: 0; background-color: var(--bg-dark); overflow: hidden; }
+        
+        .daily-scroll-container { display: flex; flex-direction: column; flex: 1; overflow: auto; position: relative; scroll-behavior: smooth; }
+        
+        .daily-header-row { display: flex; border-bottom: 1px solid var(--border-color); background: var(--panel-bg); position: sticky; top: 0; z-index: 10; width: max-content; min-width: 100%; }
+        .daily-time-col-header { width: 60px; flex-shrink: 0; border-right: 1px solid var(--border-color); background: var(--bg-dark); position: sticky; left: 0; z-index: 15; }
+        
+        .daily-lote-header { width: 240px; min-width: 240px; text-align: center; padding: 0.6rem; font-size: 0.75rem; font-weight: bold; color: var(--accent); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; background: var(--panel-bg); }
+        
+        .daily-body-wrapper { display: flex; width: max-content; min-width: 100%; position: relative; }
+        .daily-time-ruler { width: 60px; flex-shrink: 0; border-right: 1px solid var(--border-color); background: var(--bg-dark); position: sticky; left: 0; z-index: 10; }
+        
+        .daily-hour-marker { height: 60px; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.65rem; text-align: right; padding-right: 4px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; }
+        
+        .daily-lote-col { width: 240px; min-width: 240px; border-right: 1px solid var(--border-color); position: relative; background-image: linear-gradient(to bottom, transparent 59px, var(--border-color) 60px); background-size: 100% 60px; height: 1440px; flex-shrink: 0; }
+        
+        .daily-task-block { position: absolute; left: 6px; right: 6px; border-radius: 6px; padding: 6px; overflow: hidden; font-size: 0.7rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-left: 4px solid var(--accent); background: var(--panel-bg); cursor: pointer; transition: transform 0.1s; z-index: 5; display: flex; flex-direction: column; gap: 2px; }
+        .daily-task-block:hover { transform: scale(1.01); z-index: 6; box-shadow: 0 6px 12px rgba(0,0,0,0.5); border-color: var(--accent); }
+        .daily-task-block.selected { border: 1px solid var(--accent); box-shadow: 0 0 0 2px var(--accent); background-color: rgba(56, 189, 248, 0.15); z-index: 7; }
 
-        .task-card {
-            background-color: var(--bg-dark);
-            border: 1px solid var(--border-color);
-            border-left: 3px solid var(--accent);
-            border-radius: 6px;
-            padding: 0.5rem;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-        }
-
+        /* --- CARDS GENERALES --- */
+        .task-card { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-left: 3px solid var(--accent); border-radius: 6px; padding: 0.5rem; cursor: pointer; transition: all 0.15s ease; display: flex; flex-direction: column; gap: 0.35rem; }
         .task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
         .task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
+        
+        .locked { opacity: 0.85; }
+        .state-progreso { border-left-color: var(--warning) !important; background-color: rgba(245, 158, 11, 0.05); }
+        .state-completado { border-left-color: var(--success) !important; background-color: rgba(34, 197, 94, 0.05); opacity: 0.7; }
+        .state-omitida { border-left-color: var(--danger) !important; opacity: 0.5; }
 
-        .task-time { font-size: 0.65rem; font-weight: bold; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+        .task-time { font-size: 0.65rem; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
         .task-title { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+        .status-micro-badge { font-size: 0.55rem; padding: 1px 4px; border-radius: 3px; font-weight: bold; letter-spacing: 0.5px; }
 
-        .task-resources-preview {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2px;
-            margin-top: 2px;
-        }
-
-        .tag-micro {
-            font-size: 0.58rem;
-            padding: 1px 4px;
-            border-radius: 3px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-color);
-            color: #cbd5e1;
-        }
-
+        .task-resources-preview { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 2px; }
+        .tag-micro { font-size: 0.58rem; padding: 1px 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: #cbd5e1; }
         .tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
         .tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
         .tag-micro.op { border-color: rgba(56, 189, 248, 0.4); color: #bae6fd; }
 
-        .task-assignee-box {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 4px;
-            padding-top: 4px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
-        .badge-headcount { font-size: 0.62rem; color: #94a3b8; }
         .badge-delay { font-size: 0.6rem; color: var(--danger); border: 1px solid var(--danger); background: rgba(239, 68, 68, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
 
-        .availability-panel {
-            padding: 0.75rem;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .info-card {
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.6rem;
-            font-size: 0.75rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
+        /* --- PANEL DISPONIBILIDAD --- */
+        .availability-panel { padding: 0.75rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; flex: 1; min-height: 0; }
+        .info-card { background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem; font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; flex-shrink: 0; }
         .info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
-
-        .resource-section {
-            background: var(--bg-dark);
-            padding: 0.5rem;
-            border-radius: 4px;
-            border: 1px solid var(--border-color);
-        }
-
-        .resource-title {
-            font-size: 0.68rem;
-            font-weight: bold;
-            color: #94a3b8;
-            margin-bottom: 0.3rem;
-        }
-
-        .resource-tags-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-            margin-bottom: 0.4rem;
-        }
-
-        .resource-chip {
-            font-size: 0.65rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border: 1px solid var(--purple); color: #e9d5ff; }
-        .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border: 1px solid var(--success); color: #bbf7d0; }
-        .resource-chip.op { background: rgba(56, 189, 248, 0.2); border: 1px solid var(--accent); color: #bae6fd; }
-
+        .resource-section { background: var(--bg-dark); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); }
+        .resource-title { font-size: 0.68rem; font-weight: bold; color: #94a3b8; margin-bottom: 0.3rem; }
+        .resource-tags-container { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 0.4rem; }
+        .resource-chip { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid transparent; }
+        .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border-color: var(--purple); color: #e9d5ff; }
+        .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border-color: var(--success); color: #bbf7d0; }
+        .resource-chip.op { background: rgba(56, 189, 248, 0.2); border-color: var(--accent); color: #bae6fd; }
+        .resource-chip.warning-chip { background-color: rgba(245, 158, 11, 0.15) !important; border-color: var(--warning) !important; color: var(--warning) !important; }
+        .resource-chip.danger-chip { background-color: rgba(239, 68, 68, 0.15) !important; border-color: var(--danger) !important; color: #fca5a5 !important; }
         .btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
         .btn-remove-tag:hover { color: var(--danger); }
-
-        .select-resource {
-            width: 100%;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text);
-            font-size: 0.7rem;
-            padding: 4px;
-            border-radius: 4px;
-            outline: none;
-        }
-        
-        .op-availability-card {
-            background-color: var(--bg-dark);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.6rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .select-resource { width: 100%; background: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text); font-size: 0.7rem; padding: 4px; border-radius: 4px; outline: none; }
+        .op-availability-card { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
         .op-availability-card.available { border-left: 3px solid var(--success); }
-
         .op-header { display: flex; align-items: center; gap: 0.5rem; }
         .op-name { font-size: 0.78rem; font-weight: bold; }
         .op-status-text { font-size: 0.68rem; color: #94a3b8; }
-
-        .btn-assign {
-            background-color: var(--accent);
-            color: #0f172a;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .btn-assign:hover { opacity: 0.9; }
-
+        .btn-assign { background-color: var(--accent); color: #0f172a; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; cursor: pointer; }
         .empty-state { text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 2rem; }
+        .gxp-lock-banner { background-color: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); color: var(--warning); padding: 0.5rem; border-radius: 4px; font-size: 0.7rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-shrink: 0; }
 
         /* MODALES */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
@@ -321,17 +137,21 @@
         .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
         .form-control { background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; }
         .form-control:focus { border-color: var(--accent); }
-        textarea.form-control { resize: vertical; }
     </style>
 </head>
 <body>
 
     <div class="supervisor-toolbar">
         <div class="toolbar-title">
-            <span>📅 Tablero de Asignación y Planificación Semanal (MES)</span>
+            <span>📅 Dispatching Board (Planificación MES)</span>
+            
+            <div class="view-toggle">
+                <button id="btnViewWeekly" class="btn-view active" onclick="cambiarModoVista('semanal')">Semanal</button>
+                <button id="btnViewDaily" class="btn-view" onclick="cambiarModoVista('diaria')">Día por Lote</button>
+            </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <a href="/ejecucion/" class="btn-primary">🏭 Ir a eBR (Piso de Planta)</a>
+            <a href="/ejecucion/" class="btn-primary">🏭 Ir a Tablero de Lotes</a>
             <span style="font-size: 0.78rem; color: #94a3b8;">Planta: <strong>Upstream GxP</strong></span>
         </div>
     </div>
@@ -339,73 +159,55 @@
     <div class="dashboard-container">
         <div class="panel-box">
             <div class="panel-title">
-                <span>🗓️ Fases de Lotes Programadas (CPM Forward Scheduling)</span>
+                <span id="tituloFiltro">🗓️ Tareas Operativas (Filtro Labor Time)</span>
                 
                 <div class="weekly-nav-controls">
-                    <button class="btn-nav" onclick="cambiarSemana(-1)">⬅️ Ant</button>
-                    <button class="btn-nav" onclick="irHoy()" title="Volver a la semana actual">Hoy</button>
-                    <span class="current-week-label" id="labelSemanaActual">Cargando...</span>
-                    <button class="btn-nav" onclick="cambiarSemana(1)">Sig ➡️</button>
+                    <button class="btn-nav" onclick="navegarTiempo(-1)">⬅️ Ant</button>
+                    <button class="btn-nav" onclick="irHoy()" title="Volver a la fecha actual">Hoy</button>
+                    <span class="current-week-label" id="labelTiempoActual">Cargando...</span>
+                    <button class="btn-nav" onclick="navegarTiempo(1)">Sig ➡️</button>
                 </div>
             </div>
-            <div class="weekly-grid" id="gridSemanal">
-                <!-- Se inyecta dinámicamente el calendario -->
+            
+            <div id="contenedorGrillas" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height:0;">
+                <div class="weekly-grid" id="gridSemanal"></div>
+                <div class="daily-grid" id="gridDiaria" style="display: none;"></div>
             </div>
         </div>
 
         <div class="panel-box">
             <div class="panel-title">
-                <span>⚙️ Configuración de Recursos & Roster</span>
+                <span>⚙️ Asignación de Recursos & Roster</span>
             </div>
             <div class="availability-panel" id="panelDisponibilidad">
                 <div class="empty-state">
-                    👈 Selecciona una fase del calendario para asignar equipos, materiales y personal calificado.
+                    👈 Selecciona una fase del calendario para asignar personal y equipos.
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MODAL DE REPROGRAMACIÓN (RESCHEDULING) -->
+    <!-- MODAL DE REPROGRAMACIÓN -->
     <div class="modal-overlay" id="modalReprogramar" style="display: none;">
         <div class="modal-content" style="width: 450px;">
             <div class="modal-header">
                 <h3>⏳ Reprogramar Tarea (Ajuste GxP)</h3>
             </div>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">
-                Altera el forecast actual del plan de producción. Esta acción medirá el retraso respecto a la línea base y quedará registrada en la auditoría.
-            </div>
-            
             <input type="hidden" id="reprogramarFaseId">
-            
             <div style="display: flex; gap: 0.8rem; margin-top: 0.5rem;">
-                <div class="form-group" style="flex: 2;">
-                    <label>Nueva Fecha de Inicio</label>
-                    <input type="date" id="inputReprogramarFecha" class="form-control" required>
-                </div>
-                <div class="form-group" style="flex: 1;">
-                    <label>Nueva Hora</label>
-                    <input type="time" id="inputReprogramarHora" class="form-control" required>
-                </div>
+                <div class="form-group" style="flex: 2;"><label>Nueva Fecha</label><input type="date" id="inputReprogramarFecha" class="form-control" required></div>
+                <div class="form-group" style="flex: 1;"><label>Nueva Hora</label><input type="time" id="inputReprogramarHora" class="form-control" required></div>
             </div>
-
             <div class="form-group">
                 <label>Motivo Estandarizado (GxP)</label>
                 <select id="selectMotivoReprogramacion" class="form-control" required>
                     <option value="">-- Seleccionar Motivo --</option>
                     <option value="MANTENIMIENTO">⚙️ Mantenimiento de Equipo</option>
                     <option value="INSUMOS">📦 Falta / Retraso de Insumos</option>
-                    <option value="PERSONAL">👥 Ausentismo / Falta de Personal</option>
-                    <option value="CALIDAD">🔬 Desviación de Calidad previa</option>
-                    <option value="PRODUCCION">⏳ Retraso acumulado en producción</option>
-                    <option value="OTRO">📝 Otro (Especificar en notas)</option>
+                    <option value="PERSONAL">👥 Ausentismo de Personal</option>
+                    <option value="PRODUCCION">⏳ Retraso en producción</option>
                 </select>
             </div>
-
-            <div class="form-group">
-                <label>Notas / Justificación del Ajuste</label>
-                <textarea id="inputNotasReprogramacion" class="form-control" rows="3" placeholder="Detalle la causa raíz de la desviación del schedule..."></textarea>
-            </div>
-
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="cerrarModalReprogramar()">Cancelar</button>
                 <button class="btn-primary" onclick="ejecutarReprogramacionAPI()">Confirmar Cambio</button>
@@ -414,10 +216,12 @@
     </div>
 
     <script>
-        // --- 1. GESTOR DE ESTADO TEMPORAL ---
-        let currentDateBase = new Date();
+        let currentDateBase = new Date(); 
+        let modoVista = 'semanal'; 
+        let dailyScrollMemory = (7 * 60) - 20; 
+        
         let diasSemana = [];
-        const nombresDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+        const nombresDias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
         const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
         let fasesGlobales = [];
@@ -426,7 +230,6 @@
         let materialesGlobales = [];
         let faseSeleccionadaId = null;
 
-        // --- 2. LÓGICA DE CÁLCULO DE FECHAS ---
         function obtenerLunes(date) {
             const d = new Date(date);
             const day = d.getDay();
@@ -434,195 +237,261 @@
             return new Date(d.setDate(diff));
         }
 
-        function generarDiasSemana() {
-            diasSemana = [];
-            let currentDay = new Date(currentDateBase);
-            currentDay.setHours(0,0,0,0);
-            
-            for (let i = 0; i < 7; i++) {
-                const year = currentDay.getFullYear();
-                const month = String(currentDay.getMonth() + 1).padStart(2, '0');
-                const day = String(currentDay.getDate()).padStart(2, '0');
+        function getTodayString() {
+            const today = new Date();
+            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        }
+
+        function formatToDateString(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function actualizarMecanismoTiempo() {
+            if (modoVista === 'semanal') {
+                diasSemana = [];
+                let currentDay = obtenerLunes(currentDateBase);
+                currentDay.setHours(0,0,0,0);
                 
-                diasSemana.push({
-                    nombre: nombresDias[i],
-                    fecha: `${year}-${month}-${day}`,
-                    diaMes: currentDay.getDate(),
-                    mesNombre: nombresMeses[currentDay.getMonth()]
-                });
-                currentDay.setDate(currentDay.getDate() + 1);
+                for (let i = 0; i < 7; i++) {
+                    diasSemana.push({
+                        nombre: nombresDias[currentDay.getDay()].substring(0,3),
+                        fecha: formatToDateString(currentDay),
+                        diaMes: currentDay.getDate(),
+                        mesNombre: nombresMeses[currentDay.getMonth()]
+                    });
+                    currentDay.setDate(currentDay.getDate() + 1);
+                }
+                const primer = diasSemana[0];
+                const ultimo = diasSemana[6];
+                document.getElementById('labelTiempoActual').innerText = `${primer.diaMes} ${primer.mesNombre} -${ultimo.diaMes} ${ultimo.mesNombre}${primer.fecha.split('-')[0]}`;
+            } else {
+                const dia = currentDateBase.getDate();
+                const mes = nombresMeses[currentDateBase.getMonth()];
+                const anio = currentDateBase.getFullYear();
+                const diaNombre = nombresDias[currentDateBase.getDay()];
+                document.getElementById('labelTiempoActual').innerText = `${diaNombre},${dia} de ${mes}${anio}`;
             }
-            actualizarEtiquetaSemana();
         }
 
-        function actualizarEtiquetaSemana() {
-            const primerDia = diasSemana[0];
-            const ultimoDia = diasSemana[6];
-            document.getElementById('labelSemanaActual').innerText = `${primerDia.diaMes} ${primerDia.mesNombre} - ${ultimoDia.diaMes} ${ultimoDia.mesNombre} ${primerDia.fecha.split('-')[0]}`;
-        }
-
-        function cambiarSemana(direccion) {
-            currentDateBase.setDate(currentDateBase.getDate() + (direccion * 7));
-            generarDiasSemana();
-            cargarDatosPlanificacion();
+        function navegarTiempo(direccion) {
+            if (modoVista === 'semanal') {
+                currentDateBase.setDate(currentDateBase.getDate() + (direccion * 7));
+            } else {
+                currentDateBase.setDate(currentDateBase.getDate() + direccion);
+            }
+            actualizarMecanismoTiempo();
+            renderGrillaActiva();
         }
 
         function irHoy() {
-            currentDateBase = obtenerLunes(new Date());
-            generarDiasSemana();
-            cargarDatosPlanificacion();
+            currentDateBase = new Date();
+            actualizarMecanismoTiempo();
+            renderGrillaActiva();
         }
 
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
+        function cambiarModoVista(modo) {
+            modoVista = modo;
+            document.getElementById('btnViewWeekly').classList.toggle('active', modo === 'semanal');
+            document.getElementById('btnViewDaily').classList.toggle('active', modo === 'diaria');
+            
+            document.getElementById('gridSemanal').style.display = modo === 'semanal' ? 'grid' : 'none';
+            document.getElementById('gridDiaria').style.display = modo === 'diaria' ? 'flex' : 'none';
+            
+            actualizarMecanismoTiempo();
+            renderGrillaActiva();
         }
 
-        function getTodayString() {
-            const today = new Date();
-            const yyyy = today.getFullYear();
-            const mm = String(today.getMonth() + 1).padStart(2, '0');
-            const dd = String(today.getDate()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}`;
-        }
-
-        // --- 3. CARGA Y RENDERIZADO DE DATOS ---
         async function cargarDatosPlanificacion() {
             try {
                 const [resFases, resOp, resEq, resMat] = await Promise.all([
-                    fetch('/api/fases-lote/'), 
-                    fetch('/api/operadores/?activo=true'),
-                    fetch('/api/equipos/'),
-                    fetch('/api/materiales/')
+                    fetch('/api/fases-lote/'), fetch('/api/operadores/?activo=true'),
+                    fetch('/api/equipos/'), fetch('/api/materiales/')
                 ]);
 
-                if (!resFases.ok || !resOp.ok || !resEq.ok || !resMat.ok) throw new Error('Error al sincronizar datos del servidor');
+                if (!resFases.ok) throw new Error('Error de red');
 
                 fasesGlobales = await resFases.json();
                 operadoresGlobales = await resOp.json();
                 equiposGlobales = await resEq.json();
                 materialesGlobales = await resMat.json();
                 
-                renderGrillaSemanal();
+                renderGrillaActiva();
                 
                 if (faseSeleccionadaId) {
-                    renderPanelDetalle(faseSeleccionadaId);
-                } else {
-                    document.getElementById('panelDisponibilidad').innerHTML = `<div class="empty-state">👈 Selecciona una fase del calendario para asignar equipos, materiales y personal calificado.</div>`;
+                    const fExist = fasesGlobales.find(f => f.id === faseSeleccionadaId && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo));
+                    if(fExist) renderPanelDetalle(faseSeleccionadaId);
+                    else document.getElementById('panelDisponibilidad').innerHTML = `<div class="empty-state">Seleccione una tarea.</div>`;
                 }
-            } catch (error) {
-                console.error("Error:", error);
-            }
+            } catch (error) { console.error("Error:", error); }
         }
 
+        function renderGrillaActiva() {
+            const scrollContainer = document.querySelector('.daily-scroll-container');
+            if (modoVista === 'diaria' && scrollContainer && scrollContainer.scrollTop > 0) {
+                dailyScrollMemory = scrollContainer.scrollTop;
+            }
+
+            if (modoVista === 'semanal') renderGrillaSemanal();
+            else renderGrillaDiaria();
+        }
+
+        // ====================================================================
+        // RENDERIZADO: VISTA DIARIA CON SCROLL HORIZONTAL DINÁMICO
+        // ====================================================================
+        function renderGrillaDiaria() {
+            const grid = document.getElementById('gridDiaria');
+            const targetDateStr = formatToDateString(currentDateBase);
+            
+            const fasesDia = fasesGlobales.filter(f => f.fecha_programada === targetDateStr && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo === true));
+
+            const lotesIdsMap = new Map();
+            fasesDia.forEach(f => lotesIdsMap.set(f.lote, f.lote_codigo));
+            const lotesUnicos = Array.from(lotesIdsMap, ([id, codigo]) => ({ id, codigo }));
+
+            if (lotesUnicos.length === 0) {
+                grid.innerHTML = `<div class="empty-state" style="margin-top:4rem; font-size:1rem;">☕ No hay actividades programadas para este día.</div>`;
+                return;
+            }
+
+            // Contenedor principal con scroll horizontal y vertical unificado
+            let html = `<div class="daily-scroll-container">`;
+
+            // 1. Fila de Cabecera (Sticky top)
+            html += `<div class="daily-header-row"><div class="daily-time-col-header"></div>`;
+            lotesUnicos.forEach(lote => { 
+                html += `<div class="daily-lote-header">LOTE DE PRODUCCIÓN<span style="color:white; font-size:0.9rem;">${lote.codigo}</span></div>`; 
+            });
+            html += `</div>`;
+
+            // 2. Cuerpo del Gantt (Regla de tiempo + Columnas de lotes con ancho dinámico)
+            html += `<div class="daily-body-wrapper">`;
+            
+            // Columna fija de horas a la izquierda (Sticky left)
+            html += `<div class="daily-time-ruler">`;
+            for (let i = 0; i < 24; i++) {
+                html += `<div class="daily-hour-marker">${String(i).padStart(2, '0')}:00</div>`;
+            }
+            html += `</div>`;
+
+            // Columnas de lotes independientes
+            lotesUnicos.forEach(lote => {
+                html += `<div class="daily-lote-col">`;
+                const fasesLote = fasesDia.filter(f => f.lote === lote.id);
+                
+                fasesLote.forEach(f => {
+                    if (!f.hora_inicio_programada) return;
+                    
+                    const [hIni, mIni] = f.hora_inicio_programada.split(':').map(Number);
+                    const topPx = (hIni * 60) + mIni;
+                    
+                    let duracionMins = 60; 
+                    if (f.hora_fin_programada) {
+                        const [hFin, mFin] = f.hora_fin_programada.split(':').map(Number);
+                        let totalFin = (hFin * 60) + mFin;
+                        if (totalFin <= topPx) totalFin += (24 * 60); 
+                        duracionMins = totalFin - topPx;
+                    }
+                    
+                    const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(f.estado);
+                    let stateClass = '';
+                    if (f.estado === 'EN_PROGRESO') stateClass = 'state-progreso';
+                    if (f.estado === 'COMPLETADA') stateClass = 'state-completado';
+                    if (f.estado === 'OMITIDA') stateClass = 'state-omitida';
+                    
+                    const isSelected = f.id === faseSeleccionadaId ? 'selected' : '';
+                    const timeStr = `${f.hora_inicio_programada.substring(0,5)} -${f.hora_fin_programada.substring(0,5)}`;
+                    const headcountReq = f.personal_requerido || 1;
+                    const asignados = (f.operadores_asignados || []).length;
+                    const alertOps = asignados < headcountReq ? `<span style="color:var(--danger);">⚠️</span>` : ``;
+
+                    html += `
+                        <div id="daily-task-${f.id}" class="daily-task-block ${stateClass} ${isSelected} ${estaIniciada?'locked':''}" 
+                             style="top: ${topPx}px; height: ${duracionMins}px; min-height: 28px;"
+                             onclick="seleccionarFase(${f.id})">
+                             <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; font-size:0.65rem; color:var(--text-muted);">
+                                <span>⏰ ${timeStr}</span>
+                                <span>👥 ${asignados}/${headcountReq} ${alertOps}</span>
+                             </div>
+                             <div style="font-weight:bold; font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                [${f.operacion_id_paso}] ${f.operacion_nombre}
+                             </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            });
+
+            html += `</div></div>`; // Cierre wrapper y scroll container
+            grid.innerHTML = html;
+            
+            setTimeout(() => {
+                const newScrollContainer = document.querySelector('.daily-scroll-container');
+                if(newScrollContainer) {
+                    newScrollContainer.scrollTop = dailyScrollMemory;
+                }
+            }, 10);
+        }
+
+        // ====================================================================
+        // RENDERIZADO: VISTA SEMANAL
+        // ====================================================================
         function renderGrillaSemanal() {
             const grid = document.getElementById('gridSemanal');
             grid.innerHTML = '';
-            
             const fechaHoy = getTodayString();
 
             diasSemana.forEach(dia => {
                 const col = document.createElement('div');
                 col.className = 'day-column';
+                const headerClass = dia.fecha === fechaHoy ? 'day-header today' : 'day-header';
 
-                const isToday = dia.fecha === fechaHoy;
-                const headerClass = isToday ? 'day-header today' : 'day-header';
-
-                col.innerHTML = `
-                    <div class="${headerClass}">
-                        <div class="day-name">${dia.nombre}</div>
-                        <div class="day-date">${dia.diaMes} ${dia.mesNombre}</div>
-                    </div>
-                `;
+                col.innerHTML = `<div class="${headerClass}"><div class="day-name">${dia.nombre}</div><div class="day-date">${dia.diaMes} ${dia.mesNombre}</div></div>`;
 
                 const tasksContainer = document.createElement('div');
                 tasksContainer.className = 'day-tasks';
 
-                const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha);
-
-                if (fasesDia.length === 0) {
-                    tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin programación</div>`;
-                }
+                const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo === true));
+                if (fasesDia.length === 0) tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin programación</div>`;
 
                 fasesDia.forEach(f => {
+                    const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(f.estado);
+                    let stateClass = '';
+                    if (f.estado === 'EN_PROGRESO') stateClass = 'state-progreso';
+                    if (f.estado === 'COMPLETADA') stateClass = 'state-completado';
+                    if (f.estado === 'OMITIDA') stateClass = 'state-omitida';
+
                     const card = document.createElement('div');
-                    card.className = `task-card ${f.id === faseSeleccionadaId ? 'selected' : ''}`;
+                    card.id = `weekly-task-${f.id}`;
+                    card.className = `task-card ${f.id === faseSeleccionadaId ? 'selected' : ''} ${estaIniciada ? 'locked' : ''} ${stateClass}`;
                     card.onclick = () => seleccionarFase(f.id);
 
-                    let horaInicioTxt = f.hora_inicio_programada ? f.hora_inicio_programada.substring(0,5) : '00:00';
-                    let horaFinTxt = f.hora_fin_programada ? f.hora_fin_programada.substring(0,5) : '00:00';
-
-                    // CÁLCULO VISUAL DE RETRASO VS BASELINE
+                    let hIni = f.hora_inicio_programada ? f.hora_inicio_programada.substring(0,5) : '00:00';
+                    let hFin = f.hora_fin_programada ? f.hora_fin_programada.substring(0,5) : '00:00';
                     let delayHtml = '';
                     if (f.fecha_base_cpm && f.fecha_programada && f.hora_inicio_base_cpm && f.hora_inicio_programada) {
-                        const baseDate = new Date(`${f.fecha_base_cpm}T${f.hora_inicio_base_cpm}`);
-                        const progDate = new Date(`${f.fecha_programada}T${f.hora_inicio_programada}`);
-                        const diffHours = (progDate - baseDate) / (1000 * 60 * 60);
-                        
-                        if (diffHours > 0) {
-                            delayHtml = `<span class="badge-delay">+${diffHours.toFixed(1)}h Retraso</span>`;
-                        } else if (diffHours < 0) {
-                            delayHtml = `<span class="badge-delay" style="color:var(--info); border-color:var(--info); background:rgba(56,189,248,0.1);">${diffHours.toFixed(1)}h Ant.</span>`;
-                        }
+                        const bd = new Date(`${f.fecha_base_cpm}T${f.hora_inicio_base_cpm}`);
+                        const pd = new Date(`${f.fecha_programada}T${f.hora_inicio_programada}`);
+                        const diffHours = (pd - bd) / 3600000;
+                        if (diffHours > 0) delayHtml = `<span class="badge-delay">+${diffHours.toFixed(1)}h</span>`;
                     }
 
-                    let assigneesHTML = '';
                     const opsDetalles = f.operadores_asignados || [];
                     const headcountReq = f.personal_requerido || 1;
-
-                    if (opsDetalles.length > 0) {
-                        assigneesHTML = `<div class="task-resources-preview">`;
-                        opsDetalles.forEach(a => {
-                            assigneesHTML += `<span class="tag-micro op" title="${a.operador_nombre}">👤 ${a.operador_nombre.split(' ')[0]}</span>`;
-                        });
-                        assigneesHTML += `</div>`;
-                    } else {
-                        assigneesHTML = `
-                            <div class="task-assignee-box">
-                                <span class="badge-unassigned">⚠️ Sin Asignar</span>
-                            </div>
-                        `;
-                    }
-
-                    let recursosHTML = '';
-                    if ((f.equipos_detalles && f.equipos_detalles.length) || (f.materiales_detalles && f.materiales_detalles.length)) {
-                        recursosHTML = '<div class="task-resources-preview">';
-                        (f.equipos_detalles || []).forEach(eq => {
-                            recursosHTML += `<span class="tag-micro eq" title="${eq.nombre}">⚙️ ${eq.id}</span>`;
-                        });
-                        (f.materiales_detalles || []).forEach(mat => {
-                            recursosHTML += `<span class="tag-micro mat" title="${mat.nombre}">🧪 ${mat.id}</span>`;
-                        });
-                        recursosHTML += '</div>';
-                    }
+                    let assigneesHTML = opsDetalles.length > 0 
+                        ? `<div class="task-resources-preview">${opsDetalles.map(a => `<span class="tag-micro op">👤 ${a.operador_nombre.split(' ')[0]}</span>`).join('')}</div>`
+                        : `<div class="task-assignee-box"><span class="badge-unassigned">⚠️ Sin Asignar</span></div>`;
 
                     card.innerHTML = `
-                        <div class="task-time">
-                            <span>⏰ ${horaInicioTxt} - ${horaFinTxt}</span>
-                            ${delayHtml}
-                        </div>
+                        <div class="task-time"><span>⏰ ${hIni} - ${hFin}</span> <span style="color:var(--text-muted);">${f.estado}</span></div>
                         <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
-                        <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between;">
+                        <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
                             <span>Lote: ${f.lote_codigo}</span>
-                            <span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span>
+                            <div style="display:flex; gap:0.25rem; align-items:center;">${delayHtml}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
                         </div>
-                        ${recursosHTML}
                         ${assigneesHTML}
                     `;
-
                     tasksContainer.appendChild(card);
                 });
-
                 col.appendChild(tasksContainer);
                 grid.appendChild(col);
             });
@@ -630,260 +499,139 @@
 
         function seleccionarFase(faseId) {
             faseSeleccionadaId = faseId;
-            renderGrillaSemanal();
+            document.querySelectorAll('.task-card, .daily-task-block').forEach(el => el.classList.remove('selected'));
+            
+            const dailyBlock = document.getElementById(`daily-task-${faseId}`);
+            if (dailyBlock) dailyBlock.classList.add('selected');
+            
+            const weeklyCard = document.getElementById(`weekly-task-${faseId}`);
+            if (weeklyCard) weeklyCard.classList.add('selected');
+
             renderPanelDetalle(faseId);
+        }
+
+        function checkConflictosOperador(operadorId, fecha, horaIniStr, horaFinStr, currentFaseId) {
+            if (!horaIniStr || !horaFinStr) return null;
+            const toMins = (str) => { const [h, m] = str.split(':').map(Number); return h * 60 + m; };
+            const iniMin = toMins(horaIniStr);
+            let finMin = toMins(horaFinStr);
+            if (finMin <= iniMin) finMin += 1440; 
+
+            const fasesMismoDia = fasesGlobales.filter(f => 
+                f.fecha_programada === fecha && f.id !== currentFaseId && f.estado !== 'OMITIDA' &&
+                f.operadores_asignados && f.operadores_asignados.some(a => a.operador === operadorId)
+            );
+
+            for (let f of fasesMismoDia) {
+                if (!f.hora_inicio_programada || !f.hora_fin_programada) continue;
+                const fIni = toMins(f.hora_inicio_programada);
+                let fFin = toMins(f.hora_fin_programada);
+                if (fFin <= fIni) fFin += 1440;
+
+                if (iniMin < fFin && finMin > fIni) return `Cruce con: [${f.operacion_id_paso}] ${f.lote_codigo}`;
+            }
+            return null;
         }
 
         function renderPanelDetalle(faseId) {
             const panel = document.getElementById('panelDisponibilidad');
             const fase = fasesGlobales.find(f => f.id === faseId);
             if (!fase) return;
-
-            const equiposAsociadosIds = fase.equipos_asignados || [];
-            const equiposChips = equiposAsociadosIds.map(eqId => {
-                const eq = equiposGlobales.find(e => e.id === eqId);
-                return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} <span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span></span>`;
-            }).join('');
-
-            const equiposDisponiblesOpts = equiposGlobales
-                .filter(eq => !equiposAsociadosIds.includes(eq.id))
-                .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`)
-                .join('');
-
-            const materialesAsociadosIds = fase.materiales_asignados || [];
-            const materialesChips = materialesAsociadosIds.map(matId => {
-                const mat = materialesGlobales.find(m => m.id === matId);
-                return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} <span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'material', '${matId}', 'remover')">✕</span></span>`;
-            }).join('');
-
-            const materialesDisponiblesOpts = materialesGlobales
-                .filter(mat => !materialesAsociadosIds.includes(mat.id))
-                .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`)
-                .join('');
+            
+            const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(fase.estado);
+            const lockClass = estaIniciada ? 'locked' : '';
+            const bannerLock = estaIniciada ? `<div class="gxp-lock-banner"><span>🔒</span> <div><strong>Bloqueo eBR:</strong> Tarea iniciada en planta.</div></div>` : '';
 
             const operadoresAsignados = fase.operadores_asignados || [];
             const operadoresAsignadosIds = operadoresAsignados.map(a => a.operador);
             const headcountReq = fase.personal_requerido || 1;
 
             const operadoresChips = operadoresAsignados.map(a => {
-                return `<span class="resource-chip op">👤 ${a.operador_nombre} (${a.rol_nombre}) <span class="btn-remove-tag" onclick="removerAsignacionOperador(${a.id})">✕</span></span>`;
+                const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="removerAsignacionOperador(${a.id})">✕</span>`;
+                const opData = operadoresGlobales.find(o => o.id === a.operador);
+                let advertenciaUI = '';
+                let extraClass = '';
+
+                if (opData) {
+                    const tDia = opData.turnos.find(t => t.fecha === fase.fecha_programada);
+                    if (!tDia || tDia.codigo_turno === 'OFF') {
+                        advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;">[⚠️ DÍA OFF]</span>`;
+                        extraClass = 'danger-chip';
+                    } else {
+                        const conf = checkConflictosOperador(a.operador, fase.fecha_programada, fase.hora_inicio_programada, fase.hora_fin_programada, fase.id);
+                        if (conf) {
+                            advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;" title="${conf}">[⚠️ CRUCE]</span>`;
+                            extraClass = 'warning-chip';
+                        }
+                    }
+                }
+                return `<span class="resource-chip op ${extraClass}">👤 ${a.operador_nombre.split(' ')[0]} ${advertenciaUI} ${btnRemover}</span>`;
             }).join('');
 
-            let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
-            let horaFinTxt = fase.hora_fin_programada ? fase.hora_fin_programada.substring(0,5) : '00:00';
-
-            // HTML del panel, inyectando el botón de Reprogramar
             let html = `
-                <div class="info-card">
+                ${bannerLock}
+                <div class="info-card ${lockClass}">
                     <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
                     <div>Lote: <strong>${fase.lote_codigo}</strong></div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>📅 Programación: <strong>${fase.fecha_programada} | ${horaInicioTxt} hrs</strong></span>
-                        <button class="btn-icon" title="Reprogramar y Ajustar Horario" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>
-                    </div>
-                    <div>👥 Personal Asignado / Requerido: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
-
+                    <div style="margin-top:0.5rem; color:var(--text-muted);">👥 Requerido: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
+                    
                     <div class="resource-section" style="margin-top: 0.5rem;">
-                        <div class="resource-title">OPERADORES ASIGNADOS (GxP):</div>
-                        <div class="resource-tags-container">
-                            ${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Ningún operador asignado</span>'}
-                        </div>
+                        <div class="resource-title">OPERADORES ASIGNADOS:</div>
+                        <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Sin asignar</span>'}</div>
                     </div>
-
-                    <div class="resource-section" style="margin-top: 0.5rem;">
-                        <div class="resource-title">EQUIPOS ASIGNADOS:</div>
-                        <div class="resource-tags-container">
-                            ${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
-                        </div>
-                        <select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')">
-                            <option value="" disabled selected>+ Agregar Equipo...</option>
-                            ${equiposDisponiblesOpts}
-                        </select>
-                    </div>
-
-                    <div class="resource-section" style="margin-top: 0.5rem;">
-                        <div class="resource-title">MATERIALES Y INSUMOS:</div>
-                        <div class="resource-tags-container">
-                            ${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno asignado</span>'}
-                        </div>
-                        <select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'material', this.value, 'agregar')">
-                            <option value="" disabled selected>+ Agregar Material...</option>
-                            ${materialesDisponiblesOpts}
-                        </select>
-                    </div>
-                </div>
-
-                <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">
-                    Operadores Disponibles en Turno (${fase.fecha_programada}):
                 </div>
             `;
 
-            const operadoresDisponibles = operadoresGlobales.filter(op => {
-                if (operadoresAsignadosIds.includes(op.id)) return false;
-                const turnosOp = op.turnos || [];
-                const turnoDia = turnosOp.find(t => t.fecha === fase.fecha_programada);
-                if (!turnoDia || !turnoDia.codigo_turno || turnoDia.codigo_turno === 'OFF') return false;
-                return true;
-            });
+            if (!estaIniciada) {
+                html += `<div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">Disponibles (${fase.fecha_programada}):</div>`;
+                const opsDisp = operadoresGlobales.filter(op => {
+                    if (operadoresAsignadosIds.includes(op.id)) return false;
+                    const tDia = (op.turnos || []).find(t => t.fecha === fase.fecha_programada);
+                    if (!tDia || !tDia.codigo_turno || tDia.codigo_turno === 'OFF') return false;
+                    if (checkConflictosOperador(op.id, fase.fecha_programada, fase.hora_inicio_programada, fase.hora_fin_programada, fase.id)) return false;
+                    return true;
+                });
 
-            if (operadoresDisponibles.length === 0) {
-                html += `<div class="empty-state">⚠️ No hay operadores con turno activo en el Roster para esta fecha.</div>`;
-            }
+                if (opsDisp.length === 0) html += `<div class="empty-state">⚠️ Nadie disponible.</div>`;
 
-            operadoresDisponibles.forEach(op => {
-                const turnoDia = op.turnos.find(t => t.fecha === fase.fecha_programada);
-                html += `
-                    <div class="op-availability-card available">
-                        <div class="op-header">
-                            ${op.foto ? `<img src="${op.foto}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;">` : `<div style="width:28px; height:28px; border-radius:50%; background:#334155;"></div>`}
-                            <div>
-                                <div class="op-name">${op.nombre}</div>
-                                <div class="op-status-text">Turno: <strong>${turnoDia.codigo_turno}</strong></div>
+                opsDisp.forEach(op => {
+                    const tDia = op.turnos.find(t => t.fecha === fase.fecha_programada);
+                    html += `
+                        <div class="op-availability-card available">
+                            <div class="op-header">
+                                <div>
+                                    <div class="op-name">${op.nombre}</div>
+                                    <div class="op-status-text">Turno: <strong>${tDia.codigo_turno}</strong></div>
+                                </div>
                             </div>
+                            <button class="btn-assign" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
                         </div>
-                        <button class="btn-assign" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
-                    </div>
-                `;
-            });
-
+                    `;
+                });
+            }
+            panel.html = html; // Fixed property assignment issue below in actual DOM
             panel.innerHTML = html;
         }
 
-        // --- 4. LÓGICA DE REPROGRAMACIÓN Y MODAL ---
-        function abrirModalReprogramar(faseId, fechaActual, horaActual) {
-            document.getElementById('reprogramarFaseId').value = faseId;
-            document.getElementById('inputReprogramarFecha').value = fechaActual;
-            document.getElementById('inputReprogramarHora').value = horaActual;
-            document.getElementById('selectMotivoReprogramacion').value = '';
-            document.getElementById('inputNotasReprogramacion').value = '';
-            document.getElementById('modalReprogramar').style.display = 'flex';
-        }
-
-        function cerrarModalReprogramar() {
-            document.getElementById('modalReprogramar').style.display = 'none';
-        }
-
-        async function ejecutarReprogramacionAPI() {
-            const faseId = document.getElementById('reprogramarFaseId').value;
-            const nuevaFecha = document.getElementById('inputReprogramarFecha').value;
-            const nuevaHora = document.getElementById('inputReprogramarHora').value;
-            const motivo = document.getElementById('selectMotivoReprogramacion').value;
-            const notas = document.getElementById('inputNotasReprogramacion').value;
-
-            if (!nuevaFecha || !nuevaHora || !motivo) {
-                return alert("Por favor, seleccione una fecha, hora y el motivo estandarizado GxP.");
-            }
-
+        function getCookie(name) { let c = null; if(document.cookie && document.cookie!=='') { document.cookie.split(';').forEach(x => { if(x.trim().startsWith(name+'=')) c = decodeURIComponent(x.trim().substring(name.length+1)); }); } return c; }
+        
+        async function asignarOperadorFase(faseId, opId, rolId) {
             try {
-                const response = await fetch(`/api/fases-lote/${faseId}/reprogramar/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({
-                        fecha_programada: nuevaFecha,
-                        hora_inicio_programada: nuevaHora,
-                        motivo_reprogramacion: motivo,
-                        notas_reprogramacion: notas
-                    })
-                });
-
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error || "Error al reprogramar.");
-                }
-
-                cerrarModalReprogramar();
-                await cargarDatosPlanificacion(); 
-
-                // Si al reprogramar la tarea se movió a otra semana, sería buena idea hacer que la vista siga a la tarea:
-                // Pero por ahora solo refrescamos la semana actual
-            } catch (error) {
-                alert(error.message);
-            }
-        }
-
-
-        // Funciones de Recursos
-        async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
-            if (!recursoId) return;
-            const fase = fasesGlobales.find(f => f.id === faseId);
-            if (!fase) return;
-
-            let nuevosEquipos = [...(fase.equipos_asignados || [])];
-            let nuevosMateriales = [...(fase.materiales_asignados || [])];
-
-            if (tipo === 'equipo') {
-                if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
-                if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
-            } else if (tipo === 'material') {
-                if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
-                if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
-            }
-
-            try {
-                const response = await fetch(`/api/fases-lote/${faseId}/`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken')
-                    },
-                    body: JSON.stringify({
-                        equipos_asignados: nuevosEquipos,
-                        materiales_asignados: nuevosMateriales
-                    })
-                });
-
-                if (!response.ok) throw new Error('Error al actualizar recursos de la fase');
+                const res = await fetch('/api/asignaciones-operador/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') }, body: JSON.stringify({ fase_lote: faseId, operador: opId, rol_ejercido: rolId, horas_invertidas: 0 }) });
+                if (!res.ok) { const err = await res.json(); throw new Error(JSON.stringify(err)); }
                 await cargarDatosPlanificacion();
-            } catch (error) {
-                alert("Error: " + error.message);
-            }
+            } catch (e) { alert("Error: " + e.message); }
         }
 
-        async function asignarOperadorFase(faseId, operadorId, rolId) {
+        async function removerAsignacionOperador(asigId) {
             try {
-                const response = await fetch('/api/asignaciones-operador/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken')
-                    },
-                    body: JSON.stringify({
-                        fase_lote: faseId,
-                        operador: operadorId,
-                        rol_ejercido: rolId,
-                        horas_invertidas: 0.0
-                    })
-                });
-
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(JSON.stringify(errData));
-                }
+                const res = await fetch(`/api/asignaciones-operador/${asigId}/`, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+                if (!res.ok) throw new Error('Error de red');
                 await cargarDatosPlanificacion();
-            } catch (error) {
-                alert("Error al asignar operador: " + error.message);
-            }
+            } catch (e) { alert("Error: " + e.message); }
         }
 
-        async function removerAsignacionOperador(asignacionId) {
-            try {
-                const response = await fetch(`/api/asignaciones-operador/${asignacionId}/`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRFToken': getCookie('csrftoken')
-                    }
-                });
-
-                if (!response.ok) throw new Error('Error al remover la asignación');
-                await cargarDatosPlanificacion();
-            } catch (error) {
-                alert("Error: " + error.message);
-            }
-        }
-
-        // --- INICIALIZACIÓN ---
-        currentDateBase = obtenerLunes(new Date()); 
-        generarDiasSemana(); 
+        actualizarMecanismoTiempo();
         cargarDatosPlanificacion();
 
     </script>
