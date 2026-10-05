@@ -59,24 +59,96 @@
         .day-header.today .day-date { color: var(--accent); }
         .day-tasks { padding: 0.4rem; display: flex; flex-direction: column; gap: 0.4rem; flex: 1; }
 
-        /* --- GRID DIARIA (GANTT LOTE CON SCROLL HORIZONTAL) --- */
+        /* --- GRID DIARIA (CSS GRID NATIVO) --- */
         .daily-grid { display: flex; flex-direction: column; flex: 1; min-height: 0; background-color: var(--bg-dark); overflow: hidden; }
-        
         .daily-scroll-container { display: flex; flex-direction: column; flex: 1; overflow: auto; position: relative; scroll-behavior: smooth; }
         
-        .daily-header-row { display: flex; border-bottom: 1px solid var(--border-color); background: var(--panel-bg); position: sticky; top: 0; z-index: 10; width: max-content; min-width: 100%; }
-        .daily-time-col-header { width: 60px; flex-shrink: 0; border-right: 1px solid var(--border-color); background: var(--bg-dark); position: sticky; left: 0; z-index: 15; }
-        
-        .daily-lote-header { width: 240px; min-width: 240px; text-align: center; padding: 0.6rem; font-size: 0.75rem; font-weight: bold; color: var(--accent); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; background: var(--panel-bg); }
-        
-        .daily-body-wrapper { display: flex; width: max-content; min-width: 100%; position: relative; }
-        .daily-time-ruler { width: 60px; flex-shrink: 0; border-right: 1px solid var(--border-color); background: var(--bg-dark); position: sticky; left: 0; z-index: 10; }
-        
-        .daily-hour-marker { height: 60px; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.65rem; text-align: right; padding-right: 4px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; }
-        
-        .daily-lote-col { width: 240px; min-width: 240px; border-right: 1px solid var(--border-color); position: relative; background-image: linear-gradient(to bottom, transparent 59px, var(--border-color) 60px); background-size: 100% 60px; height: 1440px; flex-shrink: 0; }
-        
-        .daily-task-block { position: absolute; left: 6px; right: 6px; border-radius: 6px; padding: 6px; overflow: hidden; font-size: 0.7rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-left: 4px solid var(--accent); background: var(--panel-bg); cursor: pointer; transition: transform 0.1s; z-index: 5; display: flex; flex-direction: column; gap: 2px; }
+        .gantt-table {
+            display: grid;
+            position: relative;
+            width: max-content;
+            min-width: 100%;
+            background-color: var(--bg-dark);
+        }
+
+        .gantt-header-cell {
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            padding: 0.6rem;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--accent);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .gantt-header-cell.time-col {
+            background-color: var(--bg-dark);
+            z-index: 25;
+            position: sticky;
+            left: 0;
+            width: 60px;
+            min-width: 60px;
+            padding: 0;
+        }
+
+        .gantt-time-ruler {
+            background-color: var(--bg-dark);
+            border-right: 1px solid var(--border-color);
+            position: sticky;
+            left: 0;
+            z-index: 15;
+            width: 60px;
+            min-width: 60px;
+        }
+
+        .daily-hour-marker { 
+            height: 60px; 
+            border-bottom: 1px solid var(--border-color); 
+            color: var(--text-muted); 
+            font-size: 0.65rem; 
+            text-align: right; 
+            padding-right: 4px; 
+            box-sizing: border-box; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: flex-end; 
+        }
+
+        .gantt-lote-col {
+            border-right: 1px solid var(--border-color);
+            position: relative;
+            background-image: linear-gradient(to bottom, transparent 59px, var(--border-color) 60px);
+            background-size: 100% 60px;
+            height: 1440px;
+            min-width: 240px;
+            width: 240px;
+        }
+
+        .daily-task-block { 
+            position: absolute; 
+            left: 6px; 
+            right: 6px; 
+            border-radius: 6px; 
+            padding: 6px; 
+            overflow: hidden; 
+            font-size: 0.7rem; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+            border-left: 4px solid var(--accent); 
+            background: var(--panel-bg); 
+            cursor: pointer; 
+            transition: transform 0.1s; 
+            z-index: 5; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 2px; 
+        }
         .daily-task-block:hover { transform: scale(1.01); z-index: 6; box-shadow: 0 6px 12px rgba(0,0,0,0.5); border-color: var(--accent); }
         .daily-task-block.selected { border: 1px solid var(--accent); box-shadow: 0 0 0 2px var(--accent); background-color: rgba(56, 189, 248, 0.15); z-index: 7; }
 
@@ -92,8 +164,7 @@
 
         .task-time { font-size: 0.65rem; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
         .task-title { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
-        .status-micro-badge { font-size: 0.55rem; padding: 1px 4px; border-radius: 3px; font-weight: bold; letter-spacing: 0.5px; }
-
+        
         .task-resources-preview { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 2px; }
         .tag-micro { font-size: 0.58rem; padding: 1px 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: #cbd5e1; }
         .tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
@@ -102,22 +173,27 @@
 
         .badge-delay { font-size: 0.6rem; color: var(--danger); border: 1px solid var(--danger); background: rgba(239, 68, 68, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
 
-        /* --- PANEL DISPONIBILIDAD --- */
+        /* --- PANEL DISPONIBILIDAD & RECURSOS --- */
         .availability-panel { padding: 0.75rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; flex: 1; min-height: 0; }
         .info-card { background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem; font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; flex-shrink: 0; }
         .info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
+        
         .resource-section { background: var(--bg-dark); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); }
         .resource-title { font-size: 0.68rem; font-weight: bold; color: #94a3b8; margin-bottom: 0.3rem; }
         .resource-tags-container { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 0.4rem; }
+        
         .resource-chip { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid transparent; }
         .resource-chip.eq { background: rgba(168, 85, 247, 0.2); border-color: var(--purple); color: #e9d5ff; }
         .resource-chip.mat { background: rgba(34, 198, 94, 0.2); border-color: var(--success); color: #bbf7d0; }
         .resource-chip.op { background: rgba(56, 189, 248, 0.2); border-color: var(--accent); color: #bae6fd; }
         .resource-chip.warning-chip { background-color: rgba(245, 158, 11, 0.15) !important; border-color: var(--warning) !important; color: var(--warning) !important; }
         .resource-chip.danger-chip { background-color: rgba(239, 68, 68, 0.15) !important; border-color: var(--danger) !important; color: #fca5a5 !important; }
+        
         .btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
         .btn-remove-tag:hover { color: var(--danger); }
-        .select-resource { width: 100%; background: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text); font-size: 0.7rem; padding: 4px; border-radius: 4px; outline: none; }
+        
+        .select-resource { width: 100%; background: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text); font-size: 0.7rem; padding: 4px; border-radius: 4px; outline: none; margin-top: 0.25rem; }
+        
         .op-availability-card { background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
         .op-availability-card.available { border-left: 3px solid var(--success); }
         .op-header { display: flex; align-items: center; gap: 0.5rem; }
@@ -181,7 +257,7 @@
             </div>
             <div class="availability-panel" id="panelDisponibilidad">
                 <div class="empty-state">
-                    👈 Selecciona una fase del calendario para asignar personal y equipos.
+                    👈 Selecciona una fase del calendario para asignar personal, equipos e insumos.
                 </div>
             </div>
         </div>
@@ -207,6 +283,10 @@
                     <option value="PERSONAL">👥 Ausentismo de Personal</option>
                     <option value="PRODUCCION">⏳ Retraso en producción</option>
                 </select>
+            </div>
+            <div class="form-group">
+                <label>Notas / Justificación</label>
+                <textarea id="inputNotasReprogramacion" class="form-control" rows="2" placeholder="Detalle la causa raíz..."></textarea>
             </div>
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="cerrarModalReprogramar()">Cancelar</button>
@@ -336,7 +416,7 @@
         }
 
         // ====================================================================
-        // RENDERIZADO: VISTA DIARIA CON SCROLL HORIZONTAL DINÁMICO
+        // RENDERIZADO: VISTA DIARIA (CSS GRID NATIVO)
         // ====================================================================
         function renderGrillaDiaria() {
             const grid = document.getElementById('gridDiaria');
@@ -353,29 +433,23 @@
                 return;
             }
 
-            // Contenedor principal con scroll horizontal y vertical unificado
-            let html = `<div class="daily-scroll-container">`;
+            const gridTemplateColumnsValue = `60px repeat(${lotesUnicos.length}, 240px)`;
 
-            // 1. Fila de Cabecera (Sticky top)
-            html += `<div class="daily-header-row"><div class="daily-time-col-header"></div>`;
-            lotesUnicos.forEach(lote => { 
-                html += `<div class="daily-lote-header">LOTE DE PRODUCCIÓN<span style="color:white; font-size:0.9rem;">${lote.codigo}</span></div>`; 
+            let html = `<div class="daily-scroll-container"><div class="gantt-table" style="grid-template-columns: ${gridTemplateColumnsValue};">`;
+
+            html += `<div class="gantt-header-cell time-col"></div>`;
+            lotesUnicos.forEach(lote => {
+                html += `<div class="gantt-header-cell">LOTE DE PRODUCCIÓN<span style="color:white; font-size:0.9rem;">${lote.codigo}</span></div>`;
             });
-            html += `</div>`;
 
-            // 2. Cuerpo del Gantt (Regla de tiempo + Columnas de lotes con ancho dinámico)
-            html += `<div class="daily-body-wrapper">`;
-            
-            // Columna fija de horas a la izquierda (Sticky left)
-            html += `<div class="daily-time-ruler">`;
+            html += `<div class="gantt-time-ruler">`;
             for (let i = 0; i < 24; i++) {
                 html += `<div class="daily-hour-marker">${String(i).padStart(2, '0')}:00</div>`;
             }
             html += `</div>`;
 
-            // Columnas de lotes independientes
             lotesUnicos.forEach(lote => {
-                html += `<div class="daily-lote-col">`;
+                html += `<div class="gantt-lote-col">`;
                 const fasesLote = fasesDia.filter(f => f.lote === lote.id);
                 
                 fasesLote.forEach(f => {
@@ -421,7 +495,7 @@
                 html += `</div>`;
             });
 
-            html += `</div></div>`; // Cierre wrapper y scroll container
+            html += `</div></div>`; 
             grid.innerHTML = html;
             
             setTimeout(() => {
@@ -533,6 +607,9 @@
             return null;
         }
 
+        // ====================================================================
+        // [RESTAURADO] PANEL DE DETALLE COMPLETO (OPERADORES, EQUIPOS, MATERIALES)
+        // ====================================================================
         function renderPanelDetalle(faseId) {
             const panel = document.getElementById('panelDisponibilidad');
             const fase = fasesGlobales.find(f => f.id === faseId);
@@ -542,6 +619,7 @@
             const lockClass = estaIniciada ? 'locked' : '';
             const bannerLock = estaIniciada ? `<div class="gxp-lock-banner"><span>🔒</span> <div><strong>Bloqueo eBR:</strong> Tarea iniciada en planta.</div></div>` : '';
 
+            // 1. Operadores Asignados
             const operadoresAsignados = fase.operadores_asignados || [];
             const operadoresAsignadosIds = operadoresAsignados.map(a => a.operador);
             const headcountReq = fase.personal_requerido || 1;
@@ -568,16 +646,63 @@
                 return `<span class="resource-chip op ${extraClass}">👤 ${a.operador_nombre.split(' ')[0]} ${advertenciaUI} ${btnRemover}</span>`;
             }).join('');
 
+            // 2. Equipos Asignados
+            const equiposAsignadosIds = fase.equipos_asignados || [];
+            const equiposChips = equiposAsignadosIds.map(eqId => {
+                const eq = equiposGlobales.find(e => e.id === eqId);
+                const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span>`;
+                return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} ${btnRemover}</span>`;
+            }).join('');
+            
+            const equiposOpts = equiposGlobales
+                .filter(eq => !equiposAsignadosIds.includes(eq.id))
+                .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`).join('');
+
+            // 3. Materiales Asignados
+            const materialesAsignadosIds = fase.materiales_asignados || [];
+            const materialesChips = materialesAsignadosIds.map(matId => {
+                const mat = materialesGlobales.find(m => m.id === matId);
+                const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'material', '${matId}', 'remover')">✕</span>`;
+                return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} ${btnRemover}</span>`;
+            }).join('');
+
+            const materialesOpts = materialesGlobales
+                .filter(mat => !materialesAsignadosIds.includes(mat.id))
+                .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`).join('');
+
+            let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
+            const botonAjustarHtml = estaIniciada 
+                ? `<button class="btn-icon" title="Bloqueado" disabled>🔒</button>` 
+                : `<button class="btn-icon" title="Reprogramar" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>`;
+
             let html = `
                 ${bannerLock}
                 <div class="info-card ${lockClass}">
-                    <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
-                    <div>Lote: <strong>${fase.lote_codigo}</strong></div>
-                    <div style="margin-top:0.5rem; color:var(--text-muted);">👥 Requerido: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
+                            <div>Lote: <strong>${fase.lote_codigo}</strong></div>
+                        </div>
+                        ${botonAjustarHtml}
+                    </div>
+                    <div>📅 Fecha: <strong>${fase.fecha_programada}</strong> | ⏰ ${horaInicioTxt}</div>
+                    <div style="color:var(--text-muted);">👥 Personal: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
                     
-                    <div class="resource-section" style="margin-top: 0.5rem;">
+                    <div class="resource-section">
                         <div class="resource-title">OPERADORES ASIGNADOS:</div>
-                        <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Sin asignar</span>'}</div>
+                        <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Sin operador</span>'}</div>
+                    </div>
+
+                    <div class="resource-section">
+                        <div class="resource-title">EQUIPOS ASIGNADOS:</div>
+                        <div class="resource-tags-container">${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
+                        ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')"><option value="" disabled selected>+ Agregar equipo...</option>${equiposOpts}</select>`}
+                    </div>
+
+                    <div class="resource-section">
+                        <div class="resource-title">MATERIALES E INSUMOS:</div>
+                        <div class="resource-tags-container">${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
+                        ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'material', this.value, 'agregar')"><option value="" disabled selected>+ Agregar material...</option>${materialesOpts}</select>`}
                     </div>
                 </div>
             `;
@@ -609,8 +734,84 @@
                     `;
                 });
             }
-            panel.html = html; // Fixed property assignment issue below in actual DOM
             panel.innerHTML = html;
+        }
+
+        // --- FUNCIONES DE REPROGRAMACIÓN Y RECURSOS ---
+        function abrirModalReprogramar(faseId, fechaActual, horaActual) {
+            document.getElementById('reprogramarFaseId').value = faseId;
+            document.getElementById('inputReprogramarFecha').value = fechaActual;
+            document.getElementById('inputReprogramarHora').value = horaActual;
+            document.getElementById('selectMotivoReprogramacion').value = '';
+            document.getElementById('inputNotasReprogramacion').value = '';
+            document.getElementById('modalReprogramar').style.display = 'flex';
+        }
+
+        function cerrarModalReprogramar() {
+            document.getElementById('modalReprogramar').style.display = 'none';
+        }
+
+        async function ejecutarReprogramacionAPI() {
+            const faseId = document.getElementById('reprogramarFaseId').value;
+            const nuevaFecha = document.getElementById('inputReprogramarFecha').value;
+            const nuevaHora = document.getElementById('inputReprogramarHora').value;
+            const motivo = document.getElementById('selectMotivoReprogramacion').value;
+            const notas = document.getElementById('inputNotasReprogramacion').value;
+
+            if (!nuevaFecha || !nuevaHora || !motivo) {
+                return alert("Por favor complete los campos obligatorios.");
+            }
+
+            try {
+                const response = await fetch(`/api/fases-lote/${faseId}/reprogramar/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({
+                        fecha_programada: nuevaFecha,
+                        hora_inicio_programada: nuevaHora,
+                        motivo_reprogramacion: motivo,
+                        notas_reprogramacion: notas
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || "Error al reprogramar.");
+                }
+
+                cerrarModalReprogramar();
+                await cargarDatosPlanificacion(); 
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
+            if (!recursoId) return;
+            const fase = fasesGlobales.find(f => f.id === faseId);
+            if (!fase) return;
+
+            let nuevosEquipos = [...(fase.equipos_asignados || [])];
+            let nuevosMateriales = [...(fase.materiales_asignados || [])];
+
+            if (tipo === 'equipo') {
+                if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
+                if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
+            } else if (tipo === 'material') {
+                if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
+                if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
+            }
+
+            try {
+                const response = await fetch(`/api/fases-lote/${faseId}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ equipos_asignados: nuevosEquipos, materiales_asignados: nuevosMateriales })
+                });
+
+                if (!response.ok) throw new Error('Error al actualizar recursos');
+                await cargarDatosPlanificacion();
+            } catch (error) { alert("Error: " + error.message); }
         }
 
         function getCookie(name) { let c = null; if(document.cookie && document.cookie!=='') { document.cookie.split(';').forEach(x => { if(x.trim().startsWith(name+'=')) c = decodeURIComponent(x.trim().substring(name.length+1)); }); } return c; }
