@@ -1,0 +1,569 @@
+// procesos/static/procesos/js/planificacion.js
+
+let currentDateBase = new Date(); 
+let modoVista = 'semanal'; 
+let dailyScrollMemory = (7 * 60) - 20; 
+
+let diasSemana = [];
+const nombresDias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+let fasesGlobales = [];
+let operadoresGlobales = [];
+let equiposGlobales = [];
+let materialesGlobales = [];
+let faseSeleccionadaId = null;
+
+function obtenerLunes(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+function getTodayString() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
+function formatToDateString(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function actualizarMecanismoTiempo() {
+    if (modoVista === 'semanal') {
+        diasSemana = [];
+        let currentDay = obtenerLunes(currentDateBase);
+        currentDay.setHours(0,0,0,0);
+
+        for (let i = 0; i < 7; i++) {
+            diasSemana.push({
+                nombre: nombresDias[currentDay.getDay()].substring(0,3),
+                fecha: formatToDateString(currentDay),
+                diaMes: currentDay.getDate(),
+                mesNombre: nombresMeses[currentDay.getMonth()]
+            });
+            currentDay.setDate(currentDay.getDate() + 1);
+        }
+        const primer = diasSemana[0];
+        const ultimo = diasSemana[6];
+        document.getElementById('labelTiempoActual').innerText = `${primer.diaMes} ${primer.mesNombre} -${ultimo.diaMes} ${ultimo.mesNombre}${primer.fecha.split('-')[0]}`;
+    } else {
+        const dia = currentDateBase.getDate();
+        const mes = nombresMeses[currentDateBase.getMonth()];
+        const anio = currentDateBase.getFullYear();
+        const diaNombre = nombresDias[currentDateBase.getDay()];
+        document.getElementById('labelTiempoActual').innerText = `${diaNombre},${dia} de ${mes}${anio}`;
+    }
+}
+
+function navegarTiempo(direccion) {
+    if (modoVista === 'semanal') {
+        currentDateBase.setDate(currentDateBase.getDate() + (direccion * 7));
+    } else {
+        currentDateBase.setDate(currentDateBase.getDate() + direccion);
+    }
+    actualizarMecanismoTiempo();
+    renderGrillaActiva();
+}
+
+function irHoy() {
+    currentDateBase = new Date();
+    actualizarMecanismoTiempo();
+    renderGrillaActiva();
+}
+
+function cambiarModoVista(modo) {
+    modoVista = modo;
+    document.getElementById('btnViewWeekly').classList.toggle('active', modo === 'semanal');
+    document.getElementById('btnViewDaily').classList.toggle('active', modo === 'diaria');
+
+    document.getElementById('gridSemanal').style.display = modo === 'semanal' ? 'grid' : 'none';
+    document.getElementById('gridDiaria').style.display = modo === 'diaria' ? 'flex' : 'none';
+
+    actualizarMecanismoTiempo();
+    renderGrillaActiva();
+}
+
+async function cargarDatosPlanificacion() {
+    try {
+        const [resFases, resOp, resEq, resMat] = await Promise.all([
+            fetch('/api/fases-lote/'), fetch('/api/operadores/?activo=true'),
+            fetch('/api/equipos/'), fetch('/api/materiales/')
+        ]);
+
+        if (!resFases.ok) throw new Error('Error de red');
+
+        fasesGlobales = await resFases.json();
+        operadoresGlobales = await resOp.json();
+        equiposGlobales = await resEq.json();
+        materialesGlobales = await resMat.json();
+
+        renderGrillaActiva();
+
+        if (faseSeleccionadaId) {
+            const fExist = fasesGlobales.find(f => f.id === faseSeleccionadaId && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo));
+            if(fExist) renderPanelDetalle(faseSeleccionadaId);
+            else document.getElementById('panelDisponibilidad').innerHTML = `<div class="empty-state">Seleccione una tarea.</div>`;
+        }
+    } catch (error) { console.error("Error:", error); }
+}
+
+function renderGrillaActiva() {
+    const scrollContainer = document.querySelector('.daily-scroll-container');
+    if (modoVista === 'diaria' && scrollContainer && scrollContainer.scrollTop > 0) {
+        dailyScrollMemory = scrollContainer.scrollTop;
+    }
+
+    if (modoVista === 'semanal') renderGrillaSemanal();
+    else renderGrillaDiaria();
+}
+
+// ====================================================================
+// RENDERIZADO: VISTA DIARIA (CSS GRID NATIVO)
+// ====================================================================
+const ANCHO_COLUMNA_LOTE = 240;   // px de una columna de lote sin cruces
+const ANCHO_MIN_CARRIL = 170;     // px mínimos por carril cuando hay fases cruzadas
+const ALTO_MIN_BLOQUE = 44;       // px (= minutos) para que una fase corta muestre hora y nombre
+
+// Ubica una fase en la columna del día: 1 px por minuto, recortada a medianoche si sigue al día siguiente
+function medirBloqueDiario(f, fechaStr) {
+    const inicioDia = new Date(`${fechaStr}T00:00:00`);
+    const finDia = new Date(inicioDia);
+    finDia.setDate(finDia.getDate() + 1);
+    const inicio = new Date(f.inicio_programado);
+    const fin = f.fin_programado ? new Date(Math.min(new Date(f.fin_programado), finDia)) : new Date(inicio.getTime() + 3600000);
+    const top = Math.max(0, Math.round((inicio - inicioDia) / 60000));
+    const alto = Math.max(ALTO_MIN_BLOQUE, Math.round((fin - inicio) / 60000));
+    return { fase: f, top, alto };
+}
+
+// Reparte en carriles los bloques que se enciman (por su altura visible) y fija el número de carriles de cada grupo
+function distribuirEnCarriles(bloques) {
+    bloques.sort((a, b) => a.top - b.top || b.alto - a.alto);
+    let grupo = [], finesCarriles = [], finGrupo = -1;
+    const cerrarGrupo = () => grupo.forEach(b => { b.totalCarriles = finesCarriles.length; });
+
+    bloques.forEach(b => {
+        if (b.top >= finGrupo) {
+            cerrarGrupo();
+            grupo = [];
+            finesCarriles = [];
+        }
+        let carril = finesCarriles.findIndex(fin => fin <= b.top);
+        if (carril === -1) carril = finesCarriles.length;
+        finesCarriles[carril] = b.top + b.alto;
+        b.carril = carril;
+        grupo.push(b);
+        finGrupo = Math.max(finGrupo, b.top + b.alto);
+    });
+    cerrarGrupo();
+    return bloques;
+}
+
+function renderGrillaDiaria() {
+    const grid = document.getElementById('gridDiaria');
+    const targetDateStr = formatToDateString(currentDateBase);
+
+    const fasesDia = fasesGlobales.filter(f => f.fecha_programada === targetDateStr && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo === true));
+
+    const lotesIdsMap = new Map();
+    fasesDia.forEach(f => lotesIdsMap.set(f.lote, f.lote_codigo));
+    const lotesUnicos = Array.from(lotesIdsMap, ([id, codigo]) => ({ id, codigo }));
+
+    if (lotesUnicos.length === 0) {
+        grid.innerHTML = `<div class="empty-state" style="margin-top:4rem; font-size:1rem;">☕ No hay actividades programadas para este día.</div>`;
+        return;
+    }
+
+    // Posición vertical (1 px = 1 min) y reparto en carriles de las fases que se cruzan dentro de cada lote
+    const layoutPorLote = new Map(lotesUnicos.map(lote => [
+        lote.id,
+        distribuirEnCarriles(fasesDia.filter(f => f.lote === lote.id && f.inicio_programado).map(f => medirBloqueDiario(f, targetDateStr)))
+    ]));
+    const anchoPorLote = new Map(lotesUnicos.map(lote => {
+        const carriles = Math.max(1, ...layoutPorLote.get(lote.id).map(b => b.totalCarriles));
+        return [lote.id, Math.max(ANCHO_COLUMNA_LOTE, carriles * ANCHO_MIN_CARRIL)];
+    }));
+
+    const gridTemplateColumnsValue = `60px ${lotesUnicos.map(lote => `${anchoPorLote.get(lote.id)}px`).join(' ')}`;
+
+    let html = `<div class="daily-scroll-container"><div class="gantt-table" style="grid-template-columns: ${gridTemplateColumnsValue};">`;
+
+    html += `<div class="gantt-header-cell time-col"></div>`;
+    lotesUnicos.forEach(lote => {
+        html += `<div class="gantt-header-cell">LOTE DE PRODUCCIÓN<span style="color:white; font-size:0.9rem;">${lote.codigo}</span></div>`;
+    });
+
+    html += `<div class="gantt-time-ruler">`;
+    for (let i = 0; i < 24; i++) {
+        html += `<div class="daily-hour-marker">${String(i).padStart(2, '0')}:00</div>`;
+    }
+    html += `</div>`;
+
+    lotesUnicos.forEach(lote => {
+        const ancho = anchoPorLote.get(lote.id);
+        html += `<div class="gantt-lote-col" style="width: ${ancho}px; min-width: ${ancho}px;">`;
+
+        layoutPorLote.get(lote.id).forEach(bloque => {
+            const f = bloque.fase;
+            const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(f.estado);
+            let stateClass = '';
+            if (f.estado === 'EN_PROGRESO') stateClass = 'state-progreso';
+            if (f.estado === 'COMPLETADA') stateClass = 'state-completado';
+            if (f.estado === 'OMITIDA') stateClass = 'state-omitida';
+
+            const isSelected = f.id === faseSeleccionadaId ? 'selected' : '';
+            const timeStr = formatearRangoFase(f.inicio_programado, f.fin_programado);
+            const headcountReq = f.personal_requerido || 1;
+            const asignados = (f.operadores_asignados || []).length;
+            const alertOps = asignados < headcountReq ? `<span style="color:var(--danger);">⚠️</span>` : ``;
+            const anchoCarril = `(100% - 12px) / ${bloque.totalCarriles}`;
+
+            html += `
+                <div id="daily-task-${f.id}" class="daily-task-block ${stateClass} ${isSelected} ${estaIniciada?'locked':''}" 
+                     style="top: ${bloque.top}px; height: ${bloque.alto}px; left: calc(6px + ${bloque.carril} * ${anchoCarril}); width: calc(${anchoCarril} - 4px); right: auto;"
+                     title="[${f.operacion_id_paso}] ${f.operacion_nombre} · ${timeStr}"
+                     onclick="seleccionarFase(${f.id})">
+                     <div class="daily-task-meta">
+                        <span>⏰ ${timeStr}</span>
+                        <span>👥 ${asignados}/${headcountReq} ${alertOps}</span>
+                     </div>
+                     <div class="daily-task-title">
+                        [${f.operacion_id_paso}] ${f.operacion_nombre}
+                     </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    });
+
+    html += `</div></div>`; 
+    grid.innerHTML = html;
+
+    setTimeout(() => {
+        const newScrollContainer = document.querySelector('.daily-scroll-container');
+        if(newScrollContainer) {
+            newScrollContainer.scrollTop = dailyScrollMemory;
+        }
+    }, 10);
+}
+
+// ====================================================================
+// RENDERIZADO: VISTA SEMANAL
+// ====================================================================
+function renderGrillaSemanal() {
+    const grid = document.getElementById('gridSemanal');
+    grid.innerHTML = '';
+    const fechaHoy = getTodayString();
+
+    diasSemana.forEach(dia => {
+        const col = document.createElement('div');
+        col.className = 'day-column';
+        const headerClass = dia.fecha === fechaHoy ? 'day-header today' : 'day-header';
+
+        col.innerHTML = `<div class="${headerClass}"><div class="day-name">${dia.nombre}</div><div class="day-date">${dia.diaMes} ${dia.mesNombre}</div></div>`;
+
+        const tasksContainer = document.createElement('div');
+        tasksContainer.className = 'day-tasks';
+
+        const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo === true));
+        if (fasesDia.length === 0) tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin programación</div>`;
+
+        fasesDia.forEach(f => {
+            const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(f.estado);
+            let stateClass = '';
+            if (f.estado === 'EN_PROGRESO') stateClass = 'state-progreso';
+            if (f.estado === 'COMPLETADA') stateClass = 'state-completado';
+            if (f.estado === 'OMITIDA') stateClass = 'state-omitida';
+
+            const card = document.createElement('div');
+            card.id = `weekly-task-${f.id}`;
+            card.className = `task-card ${f.id === faseSeleccionadaId ? 'selected' : ''} ${estaIniciada ? 'locked' : ''} ${stateClass}`;
+            card.onclick = () => seleccionarFase(f.id);
+
+            let delayHtml = '';
+            if (f.inicio_base_cpm && f.inicio_programado) {
+                const diffHours = (new Date(f.inicio_programado) - new Date(f.inicio_base_cpm)) / 3600000;
+                if (diffHours > 0) delayHtml = `<span class="badge-delay">+${diffHours.toFixed(1)}h</span>`;
+            }
+
+            const opsDetalles = f.operadores_asignados || [];
+            const headcountReq = f.personal_requerido || 1;
+            let assigneesHTML = opsDetalles.length > 0 
+                ? `<div class="task-resources-preview">${opsDetalles.map(a => `<span class="tag-micro op">👤 ${a.operador_nombre.split(' ')[0]}</span>`).join('')}</div>`
+                : `<div class="task-assignee-box"><span class="badge-unassigned">⚠️ Sin Asignar</span></div>`;
+
+            card.innerHTML = `
+                <div class="task-time"><span>⏰ ${formatearRangoFase(f.inicio_programado, f.fin_programado)}</span> <span style="color:var(--text-muted);">${f.estado}</span></div>
+                <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
+                <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Lote: ${f.lote_codigo}</span>
+                    <div style="display:flex; gap:0.25rem; align-items:center;">${delayHtml}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
+                </div>
+                ${assigneesHTML}
+            `;
+            tasksContainer.appendChild(card);
+        });
+        col.appendChild(tasksContainer);
+        grid.appendChild(col);
+    });
+}
+
+function seleccionarFase(faseId) {
+    faseSeleccionadaId = faseId;
+    document.querySelectorAll('.task-card, .daily-task-block').forEach(el => el.classList.remove('selected'));
+
+    const dailyBlock = document.getElementById(`daily-task-${faseId}`);
+    if (dailyBlock) dailyBlock.classList.add('selected');
+
+    const weeklyCard = document.getElementById(`weekly-task-${faseId}`);
+    if (weeklyCard) weeklyCard.classList.add('selected');
+
+    renderPanelDetalle(faseId);
+}
+
+// Traslape por fecha-hora completas (detecta cruces de medianoche y fases de varios días); misma regla que el servidor
+function checkConflictosOperador(operadorId, fase) {
+    if (!fase.inicio_programado || !fase.fin_programado) return null;
+    const inicio = new Date(fase.inicio_programado);
+    const fin = new Date(fase.fin_programado);
+
+    for (const f of fasesGlobales) {
+        if (f.id === fase.id || f.estado === 'OMITIDA' || !f.inicio_programado || !f.fin_programado) continue;
+        if (!(f.operadores_asignados || []).some(a => a.operador === operadorId)) continue;
+        if (inicio < new Date(f.fin_programado) && fin > new Date(f.inicio_programado)) {
+            return `Cruce con: [${f.operacion_id_paso}] ${f.lote_codigo}`;
+        }
+    }
+    return null;
+}
+
+// ====================================================================
+// [RESTAURADO] PANEL DE DETALLE COMPLETO (OPERADORES, EQUIPOS, MATERIALES)
+// ====================================================================
+function renderPanelDetalle(faseId) {
+    const panel = document.getElementById('panelDisponibilidad');
+    const fase = fasesGlobales.find(f => f.id === faseId);
+    if (!fase) return;
+
+    const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(fase.estado);
+    const lockClass = estaIniciada ? 'locked' : '';
+    const bannerLock = estaIniciada ? `<div class="gxp-lock-banner"><span>🔒</span> <div><strong>Bloqueo eBR:</strong> Tarea iniciada en planta.</div></div>` : '';
+
+    // 1. Operadores Asignados
+    const operadoresAsignados = fase.operadores_asignados || [];
+    const operadoresAsignadosIds = operadoresAsignados.map(a => a.operador);
+    const headcountReq = fase.personal_requerido || 1;
+
+    const operadoresChips = operadoresAsignados.map(a => {
+        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="removerAsignacionOperador(${a.id})">✕</span>`;
+        const opData = operadoresGlobales.find(o => o.id === a.operador);
+        let advertenciaUI = '';
+        let extraClass = '';
+
+        if (opData) {
+            const tDia = opData.turnos.find(t => t.fecha === fase.fecha_programada);
+            if (!tDia || tDia.codigo_turno === 'OFF') {
+                advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;">[⚠️ DÍA OFF]</span>`;
+                extraClass = 'danger-chip';
+            } else {
+                const conf = checkConflictosOperador(a.operador, fase);
+                if (conf) {
+                    advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;" title="${conf}">[⚠️ CRUCE]</span>`;
+                    extraClass = 'warning-chip';
+                }
+            }
+        }
+        return `<span class="resource-chip op ${extraClass}">👤 ${a.operador_nombre.split(' ')[0]} ${advertenciaUI} ${btnRemover}</span>`;
+    }).join('');
+
+    // 2. Equipos Asignados
+    const equiposAsignadosIds = fase.equipos_asignados || [];
+    const equiposChips = equiposAsignadosIds.map(eqId => {
+        const eq = equiposGlobales.find(e => e.id === eqId);
+        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span>`;
+        return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} ${btnRemover}</span>`;
+    }).join('');
+
+    const equiposOpts = equiposGlobales
+        .filter(eq => !equiposAsignadosIds.includes(eq.id))
+        .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`).join('');
+
+    // 3. Materiales Asignados
+    const materialesAsignadosIds = fase.materiales_asignados || [];
+    const materialesChips = materialesAsignadosIds.map(matId => {
+        const mat = materialesGlobales.find(m => m.id === matId);
+        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'material', '${matId}', 'remover')">✕</span>`;
+        return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} ${btnRemover}</span>`;
+    }).join('');
+
+    const materialesOpts = materialesGlobales
+        .filter(mat => !materialesAsignadosIds.includes(mat.id))
+        .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`).join('');
+
+    let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
+    const botonAjustarHtml = estaIniciada 
+        ? `<button class="btn-icon" title="Bloqueado" disabled>🔒</button>` 
+        : `<button class="btn-icon" title="Reprogramar" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>`;
+
+    let html = `
+        ${bannerLock}
+        <div class="info-card ${lockClass}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <h4>[${fase.operacion_id_paso}] ${fase.operacion_nombre}</h4>
+                    <div>Lote: <strong>${fase.lote_codigo}</strong></div>
+                </div>
+                ${botonAjustarHtml}
+            </div>
+            <div>📅 Fecha: <strong>${fase.fecha_programada}</strong> | ⏰ ${formatearRangoFase(fase.inicio_programado, fase.fin_programado)}</div>
+            <div style="color:var(--text-muted);">👥 Personal: <strong>${operadoresAsignados.length} / ${headcountReq}</strong></div>
+
+            <div class="resource-section">
+                <div class="resource-title">OPERADORES ASIGNADOS:</div>
+                <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Sin operador</span>'}</div>
+            </div>
+
+            <div class="resource-section">
+                <div class="resource-title">EQUIPOS ASIGNADOS:</div>
+                <div class="resource-tags-container">${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
+                ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')"><option value="" disabled selected>+ Agregar equipo...</option>${equiposOpts}</select>`}
+            </div>
+
+            <div class="resource-section">
+                <div class="resource-title">MATERIALES E INSUMOS:</div>
+                <div class="resource-tags-container">${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
+                ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'material', this.value, 'agregar')"><option value="" disabled selected>+ Agregar material...</option>${materialesOpts}</select>`}
+            </div>
+        </div>
+    `;
+
+    if (!estaIniciada) {
+        html += `<div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">Disponibles (${fase.fecha_programada}):</div>`;
+        const opsDisp = operadoresGlobales.filter(op => {
+            if (operadoresAsignadosIds.includes(op.id)) return false;
+            const tDia = (op.turnos || []).find(t => t.fecha === fase.fecha_programada);
+            if (!tDia || !tDia.codigo_turno || tDia.codigo_turno === 'OFF') return false;
+            if (checkConflictosOperador(op.id, fase)) return false;
+            return true;
+        });
+
+        if (opsDisp.length === 0) html += `<div class="empty-state">⚠️ Nadie disponible.</div>`;
+
+        opsDisp.forEach(op => {
+            const tDia = op.turnos.find(t => t.fecha === fase.fecha_programada);
+            html += `
+                <div class="op-availability-card available">
+                    <div class="op-header">
+                        <div>
+                            <div class="op-name">${op.nombre}</div>
+                            <div class="op-status-text">Turno: <strong>${tDia.codigo_turno}</strong></div>
+                        </div>
+                    </div>
+                    <button class="btn-assign" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
+                </div>
+            `;
+        });
+    }
+    panel.innerHTML = html;
+}
+
+// --- FUNCIONES DE REPROGRAMACIÓN Y RECURSOS ---
+function abrirModalReprogramar(faseId, fechaActual, horaActual) {
+    document.getElementById('reprogramarFaseId').value = faseId;
+    document.getElementById('inputReprogramarFecha').value = fechaActual;
+    document.getElementById('inputReprogramarHora').value = horaActual;
+    document.getElementById('selectMotivoReprogramacion').value = '';
+    document.getElementById('inputNotasReprogramacion').value = '';
+    document.getElementById('modalReprogramar').style.display = 'flex';
+}
+
+function cerrarModalReprogramar() {
+    document.getElementById('modalReprogramar').style.display = 'none';
+}
+
+async function ejecutarReprogramacionAPI() {
+    const faseId = document.getElementById('reprogramarFaseId').value;
+    const nuevaFecha = document.getElementById('inputReprogramarFecha').value;
+    const nuevaHora = document.getElementById('inputReprogramarHora').value;
+    const motivo = document.getElementById('selectMotivoReprogramacion').value;
+    const notas = document.getElementById('inputNotasReprogramacion').value;
+
+    if (!nuevaFecha || !nuevaHora || !motivo) {
+        return alert("Por favor complete los campos obligatorios.");
+    }
+
+    try {
+        const response = await fetch(`/api/fases-lote/${faseId}/reprogramar/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({
+                fecha_programada: nuevaFecha,
+                hora_inicio_programada: nuevaHora,
+                motivo_reprogramacion: motivo,
+                notas_reprogramacion: notas
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || "Error al reprogramar.");
+        }
+
+        const data = await response.json();
+        cerrarModalReprogramar();
+        await cargarDatosPlanificacion();
+        if (data.mensaje) alert(data.mensaje);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
+    if (!recursoId) return;
+    const fase = fasesGlobales.find(f => f.id === faseId);
+    if (!fase) return;
+
+    let nuevosEquipos = [...(fase.equipos_asignados || [])];
+    let nuevosMateriales = [...(fase.materiales_asignados || [])];
+
+    if (tipo === 'equipo') {
+        if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
+        if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
+    } else if (tipo === 'material') {
+        if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
+        if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
+    }
+
+    try {
+        const response = await fetch(`/api/fases-lote/${faseId}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ equipos_asignados: nuevosEquipos, materiales_asignados: nuevosMateriales })
+        });
+
+        if (!response.ok) throw new Error('Error al actualizar recursos');
+        await cargarDatosPlanificacion();
+    } catch (error) { alert("Error: " + error.message); }
+}
+
+
+async function asignarOperadorFase(faseId, opId, rolId) {
+    try {
+        const res = await fetch('/api/asignaciones-operador/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') }, body: JSON.stringify({ fase_lote: faseId, operador: opId, rol_ejercido: rolId, horas_invertidas: 0 }) });
+        if (!res.ok) { const err = await res.json(); throw new Error(JSON.stringify(err)); }
+        await cargarDatosPlanificacion();
+    } catch (e) { alert("Error: " + e.message); }
+}
+
+async function removerAsignacionOperador(asigId) {
+    try {
+        const res = await fetch(`/api/asignaciones-operador/${asigId}/`, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+        if (!res.ok) throw new Error('Error de red');
+        await cargarDatosPlanificacion();
+    } catch (e) { alert("Error: " + e.message); }
+}
+
+actualizarMecanismoTiempo();
+cargarDatosPlanificacion();

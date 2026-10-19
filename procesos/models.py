@@ -1,5 +1,7 @@
 # procesos/models.py
 
+from datetime import timedelta
+
 from django.db import models
 from actividades.models import Equipo, MaterialInsumo
 from roster.models import RolOperador, Operador
@@ -213,13 +215,12 @@ class FaseLote(models.Model):
     indice_muestreo = models.PositiveIntegerField(default=0)
     nombre_tarea_dinamica = models.CharField(max_length=200, null=True, blank=True)
     
-    fecha_base_cpm = models.DateField(null=True, blank=True)
-    hora_inicio_base_cpm = models.TimeField(null=True, blank=True)
-    hora_fin_base_cpm = models.TimeField(null=True, blank=True)
+    # Fecha-hora completas: una fase puede durar varios días (ej. incubaciones de 72 h)
+    inicio_base_cpm = models.DateTimeField(null=True, blank=True, help_text="Inicio según la línea base CPM al instanciar el lote")
+    fin_base_cpm = models.DateTimeField(null=True, blank=True, help_text="Fin según la línea base CPM al instanciar el lote")
 
-    fecha_programada = models.DateField(null=True, blank=True)
-    hora_inicio_programada = models.TimeField(null=True, blank=True)
-    hora_fin_programada = models.TimeField(null=True, blank=True)
+    inicio_programado = models.DateTimeField(null=True, blank=True, help_text="Inicio vigente (forecast) tras reprogramaciones")
+    fin_programado = models.DateTimeField(null=True, blank=True, help_text="Fin vigente (forecast) tras reprogramaciones")
     
     motivo_reprogramacion = models.CharField(max_length=50, choices=MOTIVO_REPROGRAMACION_CHOICES, null=True, blank=True)
     notas_reprogramacion = models.TextField(null=True, blank=True)
@@ -238,6 +239,13 @@ class FaseLote(models.Model):
     def __str__(self):
         nombre_mostrar = self.nombre_tarea_dinamica if self.es_subtarea_muestreo else self.operacion_maestra.nombre
         return f"Lote: {self.lote.identificador_lote} | Fase: {nombre_mostrar} ({self.estado})"
+
+    @property
+    def duracion_planeada(self):
+        """Duración estimada: la del evento de muestreo para subtareas, la de la operación en otro caso."""
+        op = self.operacion_maestra
+        horas = op.duracion_muestreo_horas if self.es_subtarea_muestreo else op.duracion_horas
+        return timedelta(hours=horas or 0)
 
 
 class AsignacionFaseOperador(models.Model):

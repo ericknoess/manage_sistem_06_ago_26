@@ -1,0 +1,14 @@
+/* roster/static/roster/css/index.css — extraído de roster/index.html */
+
+.no-select { user-select: none; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0f172a; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; border: 1px solid #0f172a; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Garantizar que la tabla se expanda correctamente */
+table { table-layout: fixed; width: 100%; min-width: max-content; }
+.day-col { min-width: 38px; width: 40px; }
+
+/* Ventanas modales: el JS solo quita .hidden, aquí se centran sin salirse de la pantalla */
+.roster-modal:not(.hidden) { display: flex; }

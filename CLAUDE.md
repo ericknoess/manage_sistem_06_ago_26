@@ -14,23 +14,28 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 ## Comandos
 - Servidor: `python manage.py runserver`
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
-- Pruebas: `pytest`
+- Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow); el `venv/` del proyecto no tiene Pillow
+- Pruebas: `python manage.py test procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
-- `core/`: settings y URLs raíz
+- `core/`: settings, URLs raíz y la vista de la página de inicio (`/`)
+- `templates/inicio.html` + `static/core/`: página central y recursos compartidos (base.css, utils.js)
 - `roster/`: cuadrillas, operadores, roles, tipos de turno, turnos diarios, incidencias,
   secuencias de rotación y carga masiva (`roster/services.py`)
 - `actividades/`: catálogos de Equipos y Materiales, tablero semanal (legado)
 - `procesos/`: ProcesoMaestro → EtapaProceso → OperacionProceso; lotes, fases y asignaciones.
-  Lógica CPM en `procesos/services.py`.
-- Pantallas: /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/
+  Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
+  Los horarios de `FaseLote` son fecha-hora completas (`inicio_programado`/`fin_programado`, `inicio_base_cpm`/`fin_base_cpm`);
+  la API también expone `fecha_programada`/`hora_*` derivados en hora local, solo lectura.
+- Pantallas: / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/
 
 ## Convenciones
 - Código, modelos, comentarios y UI en español.
 - Lógica de negocio en `services.py`, no en las vistas.
 - Endpoints nuevos como ViewSets de DRF (`@action` para operaciones especiales).
-- Frontend sin frameworks: JS puro + Tailwind, en el template o en `static/<app>/js/`.
+- Frontend sin frameworks: JS puro + Tailwind. CSS y JS en `static/<app>/{css,js}/<pantalla>.*`, nunca inline; lo compartido en `static/core/`.
+- Toda pantalla nueva debe incluir el enlace `.btn-inicio` hacia `{% url 'inicio' %}`.
 
 ## Reglas
 - Trazabilidad GxP: preferir baja lógica (`activo=False`, `archivado`) sobre borrado físico.

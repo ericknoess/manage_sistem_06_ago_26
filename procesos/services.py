@@ -1,9 +1,11 @@
 # procesos/services.py
 
-from datetime import date
+from datetime import date, timedelta
+
+from django.utils import timezone
 from django.db.models import Count
 from roster.models import TurnoDia, Operador
-from .models import OperacionProceso, RequerimientoPersonalFase
+from .models import OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador
 
 
 class CPMCalculatorService:
@@ -199,3 +201,159 @@ def validar_disponibilidad_personal_fase(operacion_id: int, fecha_evaluacion: da
         "cumple_requerimientos_global": cumple_total,
         "detalles": detalles_cumplimiento
     }
+
+
+# ==============================================================================
+# PROGRAMACIÓN DE FASES (fecha-hora completas: soporta fases de varios días)
+# ==============================================================================
+
+def inicio_por_dependencia(operacion, inicio_predecesora, fin_predecesora):
+    """Inicio más temprano de una operación según su regla de dependencia con la predecesora."""
+    desfase = timedelta(hours=operacion.desfase_horas or 0.0)
+    if (operacion.tipo_dependencia or 'FS') in ('SS', 'OFFSET'):
+        return inicio_predecesora + desfase
+    return fin_predecesora + desfase
+
+
+def construir_fases_lote(lote):
+    """
+    Genera (sin guardar) las fases de un lote a partir de la ruta CPM de su proceso maestro,
+    incluyendo las subtareas de muestreo de las incubaciones.
+    """
+    operaciones = lote.proceso_maestro.operaciones.all()
+    cpm = {item['id']: item for item in CPMCalculatorService(operaciones).calcular_cpm()['operaciones_cpm']}
+    inicio_lote = lote.fecha_inicio_planeada
+    fases = []
+
+    for op in operaciones:
+        cpm_info = cpm.get(op.id)
+        if not cpm_info:
+            fases.append(FaseLote(lote=lote, operacion_maestra=op, estado='PENDIENTE'))
+            continue
+
+        inicio = inicio_lote + timedelta(hours=cpm_info['es'])
+        fin = inicio_lote + timedelta(hours=cpm_info['ef'])
+        fases.append(FaseLote(
+            lote=lote, operacion_maestra=op, estado='PENDIENTE',
+            inicio_base_cpm=inicio, fin_base_cpm=fin, inicio_programado=inicio, fin_programado=fin,
+        ))
+
+        if op.tipo_operacion == 'INCUBACION' and op.frecuencia_muestreo_horas > 0:
+            cantidad_muestreos = int(op.duracion_horas // op.frecuencia_muestreo_horas)
+            for i in range(1, cantidad_muestreos + 1):
+                horas_transcurridas = i * op.frecuencia_muestreo_horas
+                inicio_muestreo = inicio + timedelta(hours=horas_transcurridas)
+                fin_muestreo = inicio_muestreo + timedelta(hours=op.duracion_muestreo_horas)
+                fases.append(FaseLote(
+                    lote=lote, operacion_maestra=op, estado='PENDIENTE',
+                    es_subtarea_muestreo=True, indice_muestreo=i,
+                    nombre_tarea_dinamica=f"M-{horas_transcurridas}h - {op.nombre}",
+                    inicio_base_cpm=inicio_muestreo, fin_base_cpm=fin_muestreo,
+                    inicio_programado=inicio_muestreo, fin_programado=fin_muestreo,
+                ))
+    return fases
+
+
+def validar_inicio_contra_predecesora(fase, nuevo_inicio):
+    """Devuelve un mensaje de error si el nuevo inicio viola la dependencia con la predecesora, o None."""
+    if fase.es_subtarea_muestreo:
+        return None
+    operacion = fase.operacion_maestra
+    predecesora = operacion.predecesora
+    if not predecesora:
+        return None
+
+    fase_pred = FaseLote.objects.filter(lote=fase.lote, operacion_maestra=predecesora, es_subtarea_muestreo=False).first()
+    if not fase_pred or not fase_pred.inicio_programado or not fase_pred.fin_programado:
+        return None
+
+    limite_inferior = inicio_por_dependencia(operacion, fase_pred.inicio_programado, fase_pred.fin_programado)
+    if nuevo_inicio >= limite_inferior:
+        return None
+
+    if (operacion.tipo_dependencia or 'FS') in ('SS', 'OFFSET'):
+        regla = f"Inicio a Inicio (SS) con la fase [{predecesora.identificador_paso}]"
+    else:
+        regla = f"Fin a Inicio (FS) tras la fase [{predecesora.identificador_paso}]"
+    formato = '%Y-%m-%d %H:%M'
+    return (
+        f"Violación GxP (Colisión Lógica): La tarea no puede iniciar a las {timezone.localtime(nuevo_inicio).strftime(formato)}. "
+        f"Por regla de dependencia {regla}, lo más temprano que puede iniciar es a las {timezone.localtime(limite_inferior).strftime(formato)}."
+    )
+
+
+def propagar_programacion(fase_origen, nota_tarea, nota_muestreo):
+    """
+    Re-alinea en cascada las fases PENDIENTES que dependen de `fase_origen` (y sus muestreos),
+    enganchándolas a la ventana de su predecesora: la real si ya se completó, la programada si no.
+
+    `nota_tarea` y `nota_muestreo` admiten los marcadores {paso} (predecesora inmediata) y {origen}.
+    Devuelve la cantidad de fases actualizadas.
+    """
+    todas_fases_lote = list(fase_origen.lote.fases.all().select_related('operacion_maestra'))
+    origen = fase_origen.operacion_maestra.identificador_paso
+    fases_a_actualizar = []
+    fases_procesadas = {fase_origen.id}
+    cola_propagacion = [fase_origen]
+
+    while cola_propagacion:
+        fase_actual = cola_propagacion.pop(0)
+        paso = fase_actual.operacion_maestra.identificador_paso
+
+        if fase_actual.estado == 'COMPLETADA' and fase_actual.fecha_fin_real:
+            inicio_actual = fase_actual.fecha_inicio_real or fase_actual.fecha_fin_real
+            fin_actual = fase_actual.fecha_fin_real
+        else:
+            inicio_actual, fin_actual = fase_actual.inicio_programado, fase_actual.fin_programado
+        if not inicio_actual or not fin_actual:
+            continue
+
+        for f in todas_fases_lote:
+            if f.es_subtarea_muestreo or f.id in fases_procesadas or f.estado != 'PENDIENTE':
+                continue
+            if f.operacion_maestra.predecesora_id != fase_actual.operacion_maestra_id:
+                continue
+            f.inicio_programado = inicio_por_dependencia(f.operacion_maestra, inicio_actual, fin_actual)
+            f.fin_programado = f.inicio_programado + f.duracion_planeada
+            f.motivo_reprogramacion = 'PRODUCCION'
+            f.notas_reprogramacion = nota_tarea.format(paso=paso, origen=origen)
+            fases_a_actualizar.append(f)
+            fases_procesadas.add(f.id)
+            cola_propagacion.append(f)
+
+        if not fase_actual.es_subtarea_muestreo:
+            for m in todas_fases_lote:
+                if not m.es_subtarea_muestreo or m.id in fases_procesadas or m.estado != 'PENDIENTE':
+                    continue
+                if m.operacion_maestra_id != fase_actual.operacion_maestra_id:
+                    continue
+                m.inicio_programado = inicio_actual + timedelta(hours=m.indice_muestreo * m.operacion_maestra.frecuencia_muestreo_horas)
+                m.fin_programado = m.inicio_programado + m.duracion_planeada
+                m.motivo_reprogramacion = 'PRODUCCION'
+                m.notas_reprogramacion = nota_muestreo.format(paso=paso, origen=origen)
+                fases_a_actualizar.append(m)
+                fases_procesadas.add(m.id)
+
+    if fases_a_actualizar:
+        FaseLote.objects.bulk_update(
+            fases_a_actualizar,
+            ['inicio_programado', 'fin_programado', 'motivo_reprogramacion', 'notas_reprogramacion']
+        )
+    return len(fases_a_actualizar)
+
+
+def buscar_conflicto_operador(operador_id, fase):
+    """
+    Devuelve la asignación del operador cuya fase se traslapa con la ventana programada de `fase`
+    (comparando fecha-hora completas, incluso entre días), o None si está libre.
+    """
+    if not fase.inicio_programado or not fase.fin_programado:
+        return None
+    return AsignacionFaseOperador.objects.filter(
+        operador_id=operador_id,
+        fase_lote__inicio_programado__lt=fase.fin_programado,
+        fase_lote__fin_programado__gt=fase.inicio_programado,
+    ).exclude(fase_lote=fase).exclude(fase_lote__estado='OMITIDA').select_related(
+        'fase_lote', 'fase_lote__operacion_maestra'
+    ).first()
+

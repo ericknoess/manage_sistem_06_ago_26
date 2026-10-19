@@ -1,0 +1,121 @@
+/* static/core/css/tablero-semanal.css — vista semanal compartida (actividades y planificación) */
+
+.supervisor-toolbar {
+    background-color: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.toolbar-title {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.day-column {
+    background-color: var(--panel-bg);
+    display: flex;
+    flex-direction: column;
+}
+
+.day-header {
+    background-color: var(--bg-dark);
+    padding: 0.5rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
+
+.day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
+
+.day-tasks {
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+}
+
+.task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
+
+.task-resources-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-top: 2px;
+}
+
+.tag-micro {
+    font-size: 0.58rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: #cbd5e1;
+}
+
+.tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
+
+.tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
+
+.tag-micro.op { border-color: rgba(56, 189, 248, 0.4); color: #bae6fd; }
+
+.info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
+
+.resource-section {
+    background: var(--bg-dark);
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.resource-title {
+    font-size: 0.68rem;
+    font-weight: bold;
+    color: #94a3b8;
+    margin-bottom: 0.3rem;
+}
+
+.resource-tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 0.4rem;
+}
+
+.btn-remove-tag { cursor: pointer; font-weight: bold; margin-left: 2px; }
+
+.btn-remove-tag:hover { color: var(--danger); }
+
+.op-availability-card.available { border-left: 3px solid var(--success); }
+
+.op-header { display: flex; align-items: center; gap: 0.5rem; }
+
+.op-name { font-size: 0.78rem; font-weight: bold; }
+
+.op-status-text { font-size: 0.68rem; color: #94a3b8; }
+
+.btn-assign {
+    background-color: var(--accent);
+    color: #0f172a;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    cursor: pointer;
+}

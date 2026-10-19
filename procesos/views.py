@@ -1,10 +1,10 @@
 # procesos/views.py
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.db import transaction
 from django.db.models import RestrictedError
 from django.utils import timezone
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
  
@@ -17,7 +17,10 @@ from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
     LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer
 )
-from .services import CPMCalculatorService, validar_disponibilidad_personal_fase
+from .services import (
+    CPMCalculatorService, validar_disponibilidad_personal_fase, construir_fases_lote,
+    validar_inicio_contra_predecesora, propagar_programacion, buscar_conflicto_operador
+)
 
 
 # ==============================================================================
@@ -159,6 +162,9 @@ class OperacionProcesoViewSet(viewsets.ModelViewSet):
 # ==============================================================================
 
 class LoteProduccionViewSet(viewsets.ModelViewSet):
+    # Un lote instanciado no se edita: sus cambios pasan por abortar/archivar y por las acciones de sus fases
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
     def get_queryset(self):
         return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados').order_by('-created_at')
 
@@ -169,48 +175,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         lote = serializer.save()
-
-        operaciones_maestras = lote.proceso_maestro.operaciones.all()
-        calculadora = CPMCalculatorService(operaciones_maestras)
-        resultado_cpm = calculadora.calcular_cpm()
-        cpm_dict = {item['id']: item for item in resultado_cpm['operaciones_cpm']}
-        
-        inicio_lote = lote.fecha_inicio_planeada
-        fases_a_crear = []
-        
-        for op in operaciones_maestras:
-            cpm_info = cpm_dict.get(op.id)
-            if cpm_info:
-                dt_inicio = inicio_lote + timedelta(hours=cpm_info['es'])
-                dt_fin = inicio_lote + timedelta(hours=cpm_info['ef'])
-                fases_a_crear.append(
-                    FaseLote(
-                        lote=lote, operacion_maestra=op, estado='PENDIENTE',
-                        fecha_base_cpm=dt_inicio.date(), hora_inicio_base_cpm=dt_inicio.time(), hora_fin_base_cpm=dt_fin.time(),
-                        fecha_programada=dt_inicio.date(), hora_inicio_programada=dt_inicio.time(), hora_fin_programada=dt_fin.time()
-                    )
-                )
-                if op.tipo_operacion == 'INCUBACION' and op.frecuencia_muestreo_horas > 0:
-                    cantidad_muestreos = int(op.duracion_horas // op.frecuencia_muestreo_horas)
-                    for i in range(1, cantidad_muestreos + 1):
-                        dt_muestreo_inicio = dt_inicio + timedelta(hours=i * op.frecuencia_muestreo_horas)
-                        dt_muestreo_fin = dt_muestreo_inicio + timedelta(hours=op.duracion_muestreo_horas)
-                        tiempo_transcurrido = i * op.frecuencia_muestreo_horas
-                        if tiempo_transcurrido == int(tiempo_transcurrido): tiempo_transcurrido = int(tiempo_transcurrido)
-                        nombre_dinamico = f"M-{tiempo_transcurrido}h - {op.nombre}"
-                        
-                        fases_a_crear.append(
-                            FaseLote(
-                                lote=lote, operacion_maestra=op, estado='PENDIENTE',
-                                es_subtarea_muestreo=True, indice_muestreo=i, nombre_tarea_dinamica=nombre_dinamico,
-                                fecha_base_cpm=dt_muestreo_inicio.date(), hora_inicio_base_cpm=dt_muestreo_inicio.time(), hora_fin_base_cpm=dt_muestreo_fin.time(),
-                                fecha_programada=dt_muestreo_inicio.date(), hora_inicio_programada=dt_muestreo_inicio.time(), hora_fin_programada=dt_muestreo_fin.time()
-                            )
-                        )
-            else:
-                fases_a_crear.append(FaseLote(lote=lote, operacion_maestra=op, estado='PENDIENTE'))
-
-        FaseLote.objects.bulk_create(fases_a_crear)
+        FaseLote.objects.bulk_create(construir_fases_lote(lote))
         headers = self.get_success_headers(serializer.data)
         response_serializer = self.get_serializer(lote)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -249,7 +214,12 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido abortado."}, status=status.HTTP_200_OK)
 
 
-class FaseLoteViewSet(viewsets.ModelViewSet):
+class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """
+    Las fases se crean al instanciar el lote y no se borran. Por PATCH solo se editan equipos y materiales
+    (el serializer marca el resto como solo lectura); estado y horarios cambian únicamente vía
+    `cambiar-estado` y `reprogramar`, que aplican las reglas GxP.
+    """
     serializer_class = FaseLoteSerializer
 
     def get_queryset(self):
@@ -281,80 +251,14 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         fase.estado = nuevo_estado
         fase.save()
 
-        # =====================================================================
-        # STRICT CPM SNAPPING (Enganche Estricto por Hora Final)
-        # =====================================================================
+        # Enganche estricto de las sucesoras al término real de esta fase
         fases_actualizadas_count = 0
         if ejecutar_auto_ajuste:
-            todas_fases_lote = list(fase.lote.fases.all().select_related('operacion_maestra'))
-            fases_a_actualizar = []
-            fases_procesadas = {fase.id}
-            cola_propagacion = [fase]
-
-            while cola_propagacion:
-                fase_actual = cola_propagacion.pop(0)
-                
-                # 1. Extraer hora de inicio y fin EXACTA de la fase predecesora (fase_actual)
-                if fase_actual.estado == 'COMPLETADA' and fase_actual.fecha_fin_real:
-                    tz = timezone.get_current_timezone()
-                    dt_actual_fin = timezone.make_naive(fase_actual.fecha_fin_real, tz)
-                    dt_actual_inicio = timezone.make_naive(fase_actual.fecha_inicio_real, tz) if fase_actual.fecha_inicio_real else dt_actual_fin
-                else:
-                    dt_actual_inicio = datetime.combine(fase_actual.fecha_programada, fase_actual.hora_inicio_programada)
-                    dt_actual_fin = datetime.combine(fase_actual.fecha_programada, fase_actual.hora_fin_programada)
-                    # Corrección si la tarea cruzó la medianoche
-                    if dt_actual_fin < dt_actual_inicio:
-                        dt_actual_fin += timedelta(days=1)
-                
-                # 2. Iterar sobre los hijos directos y engancharlos matemáticamente
-                for f in todas_fases_lote:
-                    if not f.es_subtarea_muestreo and f.operacion_maestra.predecesora_id == fase_actual.operacion_maestra_id:
-                        if f.id not in fases_procesadas and f.estado == 'PENDIENTE':
-                            tipo_dep = f.operacion_maestra.tipo_dependencia or 'FS'
-                            desfase = timedelta(hours=f.operacion_maestra.desfase_horas or 0.0)
-                            
-                            # AQUÍ ESTÁ LA MAGIA DEL SNAPPING (Adiós traslapes)
-                            if tipo_dep in ['SS', 'OFFSET']:
-                                dt_f_nuevo_inicio = dt_actual_inicio + desfase
-                            else: # Finish to Start (FS)
-                                dt_f_nuevo_inicio = dt_actual_fin + desfase
-                                
-                            dt_f_nuevo_fin = dt_f_nuevo_inicio + timedelta(hours=f.operacion_maestra.duracion_horas)
-                            
-                            f.fecha_programada = dt_f_nuevo_inicio.date()
-                            f.hora_inicio_programada = dt_f_nuevo_inicio.time()
-                            f.hora_fin_programada = dt_f_nuevo_fin.time()
-                            f.motivo_reprogramacion = 'PRODUCCION'
-                            f.notas_reprogramacion = f"(Auto-Ajuste) Enganche automático con el término real de [{fase_actual.operacion_maestra.identificador_paso}]."
-                            
-                            fases_a_actualizar.append(f)
-                            fases_procesadas.add(f.id)
-                            cola_propagacion.append(f)
-                
-                # 3. Propagación para Muestreos
-                if not fase_actual.es_subtarea_muestreo:
-                    muestreos_hijos = [f for f in todas_fases_lote if f.es_subtarea_muestreo and f.operacion_maestra_id == fase_actual.operacion_maestra_id]
-                    for m in muestreos_hijos:
-                        if m.id not in fases_procesadas and m.estado == 'PENDIENTE':
-                            horas_desfase_muestreo = m.indice_muestreo * m.operacion_maestra.frecuencia_muestreo_horas
-                            dt_m_nuevo_inicio = dt_actual_inicio + timedelta(hours=horas_desfase_muestreo)
-                            dt_m_nuevo_fin = dt_m_nuevo_inicio + timedelta(hours=m.operacion_maestra.duracion_muestreo_horas)
-                            
-                            m.fecha_programada = dt_m_nuevo_inicio.date()
-                            m.hora_inicio_programada = dt_m_nuevo_inicio.time()
-                            m.hora_fin_programada = dt_m_nuevo_fin.time()
-                            m.motivo_reprogramacion = 'PRODUCCION'
-                            m.notas_reprogramacion = f"(Auto-Ajuste) Muestreo alineado con el inicio real de [{fase_actual.operacion_maestra.identificador_paso}]."
-                            
-                            fases_a_actualizar.append(m)
-                            fases_procesadas.add(m.id)
-
-            if fases_a_actualizar:
-                FaseLote.objects.bulk_update(
-                    fases_a_actualizar, 
-                    ['fecha_programada', 'hora_inicio_programada', 'hora_fin_programada', 'motivo_reprogramacion', 'notas_reprogramacion']
-                )
-                fases_actualizadas_count = len(fases_a_actualizar)
+            fases_actualizadas_count = propagar_programacion(
+                fase,
+                nota_tarea="(Auto-Ajuste) Enganche automático con el término real de [{paso}].",
+                nota_muestreo="(Auto-Ajuste) Muestreo alineado con el inicio real de [{paso}].",
+            )
 
         lote = fase.lote
         todas_fases = lote.fases.all()
@@ -395,113 +299,24 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({"error": "Formato de fecha u hora inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
-        dt_nuevo_inicio = datetime.combine(nueva_fecha, nueva_hora)
+        nuevo_inicio = timezone.make_aware(datetime.combine(nueva_fecha, nueva_hora))
 
-        # =====================================================================
-        # ESCUDO GxP: PREVENCIÓN DE PARADOJAS TEMPORALES (Corregido Midnight Bug)
-        # =====================================================================
-        if not fase_origen.es_subtarea_muestreo:
-            predecesora_maestra = fase_origen.operacion_maestra.predecesora
-            if predecesora_maestra:
-                try:
-                    fase_pred = FaseLote.objects.get(lote=fase_origen.lote, operacion_maestra=predecesora_maestra, es_subtarea_muestreo=False)
-                    if fase_pred.fecha_programada and fase_pred.hora_inicio_programada and fase_pred.hora_fin_programada:
-                        dt_pred_inicio = datetime.combine(fase_pred.fecha_programada, fase_pred.hora_inicio_programada)
-                        dt_pred_fin = datetime.combine(fase_pred.fecha_programada, fase_pred.hora_fin_programada)
-                        if dt_pred_fin < dt_pred_inicio:
-                            dt_pred_fin += timedelta(days=1) # Corrección Midnight Bug
-                        
-                        tipo_dep = fase_origen.operacion_maestra.tipo_dependencia or 'FS'
-                        desfase = timedelta(hours=fase_origen.operacion_maestra.desfase_horas or 0.0)
-                        
-                        if tipo_dep in ['SS', 'OFFSET']:
-                            limite_inferior = dt_pred_inicio + desfase
-                            mensaje_regla = f"Inicio a Inicio (SS) con la fase [{predecesora_maestra.identificador_paso}]"
-                        else:
-                            limite_inferior = dt_pred_fin + desfase
-                            mensaje_regla = f"Fin a Inicio (FS) tras la fase [{predecesora_maestra.identificador_paso}]"
-                        
-                        if dt_nuevo_inicio < limite_inferior:
-                            return Response({
-                                "error": f"Violación GxP (Colisión Lógica): La tarea no puede iniciar a las {dt_nuevo_inicio.strftime('%Y-%m-%d %H:%M')}. "
-                                         f"Por regla de dependencia {mensaje_regla}, lo más temprano que puede iniciar es a las {limite_inferior.strftime('%Y-%m-%d %H:%M')}."
-                            }, status=status.HTTP_400_BAD_REQUEST)
-                except FaseLote.DoesNotExist:
-                    pass
+        error_dependencia = validar_inicio_contra_predecesora(fase_origen, nuevo_inicio)
+        if error_dependencia:
+            return Response({"error": error_dependencia}, status=status.HTTP_400_BAD_REQUEST)
 
-        duracion_operacion = fase_origen.operacion_maestra.duracion_muestreo_horas if fase_origen.es_subtarea_muestreo else fase_origen.operacion_maestra.duracion_horas
-        dt_nuevo_fin = dt_nuevo_inicio + timedelta(hours=duracion_operacion)
-
-        fase_origen.fecha_programada = dt_nuevo_inicio.date()
-        fase_origen.hora_inicio_programada = dt_nuevo_inicio.time()
-        fase_origen.hora_fin_programada = dt_nuevo_fin.time()
+        fase_origen.inicio_programado = nuevo_inicio
+        fase_origen.fin_programado = nuevo_inicio + fase_origen.duracion_planeada
         fase_origen.motivo_reprogramacion = motivo
         fase_origen.notas_reprogramacion = notas
         fase_origen.save()
 
-        # =====================================================================
-        # STRICT CPM SNAPPING (Propagación manual hacia adelante)
-        # =====================================================================
-        fases_actualizadas = 1
-        todas_fases_lote = list(fase_origen.lote.fases.all().select_related('operacion_maestra'))
-        fases_a_actualizar = []
-        fases_procesadas = {fase_origen.id}
-        cola_propagacion = [fase_origen]
-
-        while cola_propagacion:
-            fase_actual = cola_propagacion.pop(0)
-            
-            dt_actual_inicio = datetime.combine(fase_actual.fecha_programada, fase_actual.hora_inicio_programada)
-            dt_actual_fin = datetime.combine(fase_actual.fecha_programada, fase_actual.hora_fin_programada)
-            if dt_actual_fin < dt_actual_inicio:
-                dt_actual_fin += timedelta(days=1)
-            
-            for f in todas_fases_lote:
-                if not f.es_subtarea_muestreo and f.operacion_maestra.predecesora_id == fase_actual.operacion_maestra_id:
-                    if f.id not in fases_procesadas and f.estado == 'PENDIENTE':
-                        tipo_dep = f.operacion_maestra.tipo_dependencia or 'FS'
-                        desfase = timedelta(hours=f.operacion_maestra.desfase_horas or 0.0)
-                        
-                        if tipo_dep in ['SS', 'OFFSET']:
-                            dt_f_nuevo_inicio = dt_actual_inicio + desfase
-                        else:
-                            dt_f_nuevo_inicio = dt_actual_fin + desfase
-                            
-                        dt_f_nuevo_fin = dt_f_nuevo_inicio + timedelta(hours=f.operacion_maestra.duracion_horas)
-                        
-                        f.fecha_programada = dt_f_nuevo_inicio.date()
-                        f.hora_inicio_programada = dt_f_nuevo_inicio.time()
-                        f.hora_fin_programada = dt_f_nuevo_fin.time()
-                        f.motivo_reprogramacion = 'PRODUCCION'
-                        f.notas_reprogramacion = f"(Auto-Ajuste) Re-alineación automática originada por el supervisor en [{fase_origen.operacion_maestra.identificador_paso}]."
-                        
-                        fases_a_actualizar.append(f)
-                        fases_procesadas.add(f.id)
-                        cola_propagacion.append(f)
-            
-            if not fase_actual.es_subtarea_muestreo:
-                muestreos_hijos = [f for f in todas_fases_lote if f.es_subtarea_muestreo and f.operacion_maestra_id == fase_actual.operacion_maestra_id]
-                for m in muestreos_hijos:
-                    if m.id not in fases_procesadas and m.estado == 'PENDIENTE':
-                        horas_desfase_muestreo = m.indice_muestreo * m.operacion_maestra.frecuencia_muestreo_horas
-                        dt_m_nuevo_inicio = dt_actual_inicio + timedelta(hours=horas_desfase_muestreo)
-                        dt_m_nuevo_fin = dt_m_nuevo_inicio + timedelta(hours=m.operacion_maestra.duracion_muestreo_horas)
-                        
-                        m.fecha_programada = dt_m_nuevo_inicio.date()
-                        m.hora_inicio_programada = dt_m_nuevo_inicio.time()
-                        m.hora_fin_programada = dt_m_nuevo_fin.time()
-                        m.motivo_reprogramacion = 'PRODUCCION'
-                        m.notas_reprogramacion = f"(Auto-Ajuste) Muestreo alineado solidariamente."
-                        
-                        fases_a_actualizar.append(m)
-                        fases_procesadas.add(m.id)
-        
-        if fases_a_actualizar:
-            FaseLote.objects.bulk_update(
-                fases_a_actualizar, 
-                ['fecha_programada', 'hora_inicio_programada', 'hora_fin_programada', 'motivo_reprogramacion', 'notas_reprogramacion']
-            )
-            fases_actualizadas += len(fases_a_actualizar)
+        # Propagación hacia adelante de las sucesoras pendientes
+        fases_actualizadas = 1 + propagar_programacion(
+            fase_origen,
+            nota_tarea="(Auto-Ajuste) Re-alineación automática originada por el supervisor en [{origen}].",
+            nota_muestreo="(Auto-Ajuste) Muestreo alineado solidariamente.",
+        )
 
         return Response({
             "mensaje": f"Ajuste completado. El sistema auto-alineó estrictamente {fases_actualizadas - 1} tareas sucesoras evitando cualquier traslape (Snapping).",
@@ -510,6 +325,8 @@ class FaseLoteViewSet(viewsets.ModelViewSet):
 
 
 class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
+    # Sin PUT/PATCH: cambiar una asignación saltaría la validación de cruces; se elimina y se crea de nuevo
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
     queryset = AsignacionFaseOperador.objects.select_related('operador', 'rol_ejercido').all()
     serializer_class = AsignacionFaseOperadorSerializer
 
@@ -526,25 +343,23 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
         if fase_actual.lote.estado == 'COMPLETADO': return Response({"error": "Lote cerrado."}, status=status.HTTP_403_FORBIDDEN)
         if fase_actual.estado in ['COMPLETADA', 'OMITIDA']: return Response({"error": f"Fase en estado {fase_actual.estado}."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if fase_actual.fecha_programada and fase_actual.hora_inicio_programada and fase_actual.hora_fin_programada:
-            asignaciones_existentes = AsignacionFaseOperador.objects.filter(
-                operador_id=operador_id, fase_lote__fecha_programada=fase_actual.fecha_programada
-            ).exclude(fase_lote=fase_actual).select_related('fase_lote')
-
-            ini_nueva = fase_actual.hora_inicio_programada
-            fin_nueva = fase_actual.hora_fin_programada
-
-            for asig in asignaciones_existentes:
-                fase_existente = asig.fase_lote
-                ini_ex = fase_existente.hora_inicio_programada
-                fin_ex = fase_existente.hora_fin_programada
-
-                if ini_ex and fin_ex:
-                    if ini_nueva < fin_ex and fin_nueva > ini_ex:
-                        nombre_tarea = fase_existente.nombre_tarea_dinamica if fase_existente.es_subtarea_muestreo else fase_existente.operacion_maestra.nombre
-                        return Response({"error": f"Conflicto de turnos GxP: El operador ya está asignado a [{fase_existente.operacion_maestra.identificador_paso}] {nombre_tarea} de {ini_ex.strftime('%H:%M')} a {fin_ex.strftime('%H:%M')}."}, status=status.HTTP_400_BAD_REQUEST)
+        conflicto = buscar_conflicto_operador(operador_id, fase_actual)
+        if conflicto:
+            fase_existente = conflicto.fase_lote
+            nombre_tarea = fase_existente.nombre_tarea_dinamica if fase_existente.es_subtarea_muestreo else fase_existente.operacion_maestra.nombre
+            formato = '%d/%m %H:%M'
+            return Response({"error": (
+                f"Conflicto de turnos GxP: El operador ya está asignado a [{fase_existente.operacion_maestra.identificador_paso}] {nombre_tarea} "
+                f"de {timezone.localtime(fase_existente.inicio_programado).strftime(formato)} a {timezone.localtime(fase_existente.fin_programado).strftime(formato)}."
+            )}, status=status.HTTP_400_BAD_REQUEST)
 
         return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        asignacion = self.get_object()
+        if asignacion.fase_lote.estado != 'PENDIENTE':
+            return Response({"error": f"Violación GxP: No se puede retirar al operador de una fase en estado {asignacion.fase_lote.estado}."}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 # ==============================================================================
@@ -582,7 +397,7 @@ class MobileeBRViewSet(viewsets.ViewSet):
             operador=operador, fase_lote__lote__archivado=False, fase_lote__lote__estado__in=['PLANEADO', 'EN_PROGRESO']
         ).exclude(fase_lote__estado__in=['COMPLETADA', 'OMITIDA']).select_related(
             'fase_lote', 'fase_lote__lote', 'fase_lote__operacion_maestra', 'fase_lote__lote__proceso_maestro'
-        ).order_by('fase_lote__fecha_programada', 'fase_lote__hora_inicio_programada')
+        ).order_by('fase_lote__inicio_programado')
         
         tareas_data = []
         for asig in asignaciones:
@@ -591,8 +406,8 @@ class MobileeBRViewSet(viewsets.ViewSet):
                 "fase_id": fase.id, "lote_identificador": fase.lote.identificador_lote, "proceso_nombre": fase.lote.proceso_maestro.nombre,
                 "tarea_nombre": fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo else fase.operacion_maestra.nombre,
                 "identificador_paso": fase.operacion_maestra.identificador_paso, "tipo_operacion": fase.operacion_maestra.tipo_operacion,
-                "estado": fase.estado, "fecha_programada": fase.fecha_programada, "hora_inicio_programada": fase.hora_inicio_programada,
-                "hora_fin_programada": fase.hora_fin_programada, "rol_asignado": asig.rol_ejercido.nombre
+                "estado": fase.estado, "inicio_programado": fase.inicio_programado, "fin_programado": fase.fin_programado,
+                "rol_asignado": asig.rol_ejercido.nombre
             })
             
         return Response({"tareas_pendientes": tareas_data}, status=status.HTTP_200_OK)

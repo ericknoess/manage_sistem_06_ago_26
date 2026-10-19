@@ -5,7 +5,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from .views import InicioView
+
 urlpatterns = [
+    # Página central con acceso a todas las aplicaciones
+    path('', InicioView.as_view(), name='inicio'),
+
     path('admin/', admin.site.urls),
     path('roster/', include('roster.urls')),
     path('api/', include('roster.api_urls')),

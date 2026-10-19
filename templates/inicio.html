@@ -1,0 +1,133 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio - MES Bioprocesos Upstream</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/inicio.css' %}">
+</head>
+<body>
+
+    <header class="inicio-header">
+        <div>
+            <p class="inicio-eyebrow">Bioprocesos · Upstream · GxP</p>
+            <h1>Centro de Control de Operaciones</h1>
+            <p class="inicio-subtitulo">Elige una aplicación. Desde cualquiera de ellas puedes volver aquí con el botón <strong>Menú principal</strong>.</p>
+        </div>
+        <div class="inicio-fecha">{% now "l j \d\e F \d\e Y" %}</div>
+    </header>
+
+    <section class="inicio-indicadores" aria-label="Resumen de planta">
+        {% for indicador in indicadores %}
+        <div class="indicador">
+            <span class="indicador-valor">{{ indicador.valor }}</span>
+            <span class="indicador-etiqueta">{{ indicador.etiqueta }}</span>
+        </div>
+        {% endfor %}
+    </section>
+
+    <main class="inicio-contenido">
+
+        <section class="grupo">
+            <h2 class="grupo-titulo">Flujo de producción</h2>
+            <div class="flujo">
+                <div class="etapa etapa--diseno">
+                    <div class="etapa-encabezado"><span class="etapa-numero">1</span> Diseño</div>
+                    <a class="app-card" href="{% url 'procesos-index' %}">
+                        <span class="app-icono">🧫</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Diseñador de procesos</span>
+                            <span class="app-desc">Recetas maestras ISA-88: etapas, operaciones, dependencias, muestreos y roles requeridos (CPM).</span>
+                        </span>
+                    </a>
+                </div>
+
+                <div class="etapa etapa--planificacion">
+                    <div class="etapa-encabezado"><span class="etapa-numero">2</span> Planificación</div>
+                    <a class="app-card" href="{% url 'planificacion-semanal' %}">
+                        <span class="app-icono">📅</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Planificación y asignación</span>
+                            <span class="app-desc">Tablero semanal y diario por lote para asignar operadores a cada fase.</span>
+                        </span>
+                    </a>
+                    <a class="app-card" href="{% url 'gantt-lotes' %}">
+                        <span class="app-icono">📊</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Gantt maestro</span>
+                            <span class="app-desc">Etapas de todos los lotes: línea base contra reprogramación real.</span>
+                        </span>
+                    </a>
+                    <a class="app-card" href="{% url 'tablero-semanal' %}">
+                        <span class="app-icono">🗓️</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Tablero semanal de actividades</span>
+                            <span class="app-desc">Actividades de la semana con personal, equipos y materiales.</span>
+                        </span>
+                    </a>
+                </div>
+
+                <div class="etapa etapa--ejecucion">
+                    <div class="etapa-encabezado"><span class="etapa-numero">3</span> Ejecución</div>
+                    <a class="app-card" href="{% url 'ejecucion-lotes' %}">
+                        <span class="app-icono">🏭</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Piso de planta (eBR)</span>
+                            <span class="app-desc">Instanciar lotes, seguir el avance de fases y registrar operadores reales.</span>
+                        </span>
+                    </a>
+                    <a class="app-card" href="{% url 'mobile-dashboard' %}">
+                        <span class="app-icono">📱</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Terminal del operador</span>
+                            <span class="app-desc">Acceso con número de empleado y PIN para iniciar y completar tareas en tablet.</span>
+                        </span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <div class="grupos-secundarios">
+            <section class="grupo grupo--personal">
+                <h2 class="grupo-titulo">Personal y turnos</h2>
+                <a class="app-card" href="{% url 'roster_dashboard' %}">
+                    <span class="app-icono">👥</span>
+                    <span class="app-texto">
+                        <span class="app-nombre">Roster de turnos</span>
+                        <span class="app-desc">Matriz mensual de turnos, cuadrillas, operadores, incidencias y carga masiva por secuencias.</span>
+                    </span>
+                </a>
+                <a class="app-card" href="{% url 'roster_bisemanal' %}">
+                    <span class="app-icono">🔎</span>
+                    <span class="app-texto">
+                        <span class="app-nombre">Consulta bisemanal</span>
+                        <span class="app-desc">Vista de solo lectura de 14 días agrupada por cuadrilla.</span>
+                    </span>
+                </a>
+            </section>
+
+            <section class="grupo grupo--admin">
+                <h2 class="grupo-titulo">Administración</h2>
+                <a class="app-card" href="{% url 'admin:index' %}">
+                    <span class="app-icono">⚙️</span>
+                    <span class="app-texto">
+                        <span class="app-nombre">Administración Django</span>
+                        <span class="app-desc">Catálogos, usuarios y datos maestros.</span>
+                    </span>
+                </a>
+                <a class="app-card" href="/api/">
+                    <span class="app-icono">🔌</span>
+                    <span class="app-texto">
+                        <span class="app-nombre">API REST</span>
+                        <span class="app-desc">Explorador navegable de los endpoints del sistema.</span>
+                    </span>
+                </a>
+            </section>
+        </div>
+
+    </main>
+
+</body>
+</html>

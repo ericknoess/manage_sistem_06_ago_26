@@ -1,7 +1,8 @@
 # procesos/serializers.py
 
-from rest_framework import serializers
 from django.db import transaction
+from django.utils import timezone
+from rest_framework import serializers
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
     LoteProduccion, FaseLote, AsignacionFaseOperador
@@ -140,7 +141,7 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
 class FaseLoteSerializer(serializers.ModelSerializer):
     operacion_nombre = serializers.SerializerMethodField()
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
-    duracion_estimada = serializers.FloatField(source='operacion_maestra.duracion_horas', read_only=True)
+    duracion_estimada = serializers.SerializerMethodField()
     
     # [NUEVO] Inyectamos el tipo_operacion ('ACTIVA' o 'INCUBACION') para ocultar labores pasivas en los tableros
     tipo_operacion = serializers.CharField(source='operacion_maestra.tipo_operacion', read_only=True)
@@ -159,6 +160,13 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     duracion_real_horas = serializers.SerializerMethodField()
     desviacion_horas = serializers.SerializerMethodField()
 
+    # Campos derivados en hora local para las pantallas que trabajan por día y hora
+    fecha_programada = serializers.SerializerMethodField()
+    hora_inicio_programada = serializers.SerializerMethodField()
+    hora_fin_programada = serializers.SerializerMethodField()
+    fecha_base_cpm = serializers.SerializerMethodField()
+    hora_inicio_base_cpm = serializers.SerializerMethodField()
+
     class Meta:
         model = FaseLote
         fields = [
@@ -166,18 +174,53 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'tipo_operacion', # <-- Añadido explícitamente a los fields
             'etapa_nombre', 'etapa_orden',
             'estado', 
+            'inicio_programado', 'fin_programado', 'inicio_base_cpm', 'fin_base_cpm',
             'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',
-            'fecha_base_cpm', 'hora_inicio_base_cpm', 'hora_fin_base_cpm',
+            'fecha_base_cpm', 'hora_inicio_base_cpm',
             'motivo_reprogramacion', 'notas_reprogramacion',
             'es_subtarea_muestreo', 'indice_muestreo',
             'equipos_asignados', 'equipos_detalles', 'materiales_asignados', 'materiales_detalles',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados'
         ]
+        # Estado y horarios solo cambian vía las acciones `cambiar-estado` y `reprogramar`
+        read_only_fields = [
+            'lote', 'operacion_maestra', 'estado',
+            'inicio_programado', 'fin_programado', 'inicio_base_cpm', 'fin_base_cpm',
+            'motivo_reprogramacion', 'notas_reprogramacion', 'es_subtarea_muestreo', 'indice_muestreo',
+            'fecha_inicio_real', 'fecha_fin_real',
+        ]
         extra_kwargs = {
             'equipos_asignados': {'required': False},
             'materiales_asignados': {'required': False},
         }
+
+    @staticmethod
+    def _local(valor):
+        return timezone.localtime(valor) if valor else None
+
+    def get_fecha_programada(self, obj):
+        inicio = self._local(obj.inicio_programado)
+        return inicio.date().isoformat() if inicio else None
+
+    def get_hora_inicio_programada(self, obj):
+        inicio = self._local(obj.inicio_programado)
+        return inicio.strftime('%H:%M:%S') if inicio else None
+
+    def get_hora_fin_programada(self, obj):
+        fin = self._local(obj.fin_programado)
+        return fin.strftime('%H:%M:%S') if fin else None
+
+    def get_fecha_base_cpm(self, obj):
+        inicio = self._local(obj.inicio_base_cpm)
+        return inicio.date().isoformat() if inicio else None
+
+    def get_hora_inicio_base_cpm(self, obj):
+        inicio = self._local(obj.inicio_base_cpm)
+        return inicio.strftime('%H:%M:%S') if inicio else None
+
+    def get_duracion_estimada(self, obj):
+        return obj.duracion_planeada.total_seconds() / 3600.0
 
     def get_operacion_nombre(self, obj):
         if obj.es_subtarea_muestreo and obj.nombre_tarea_dinamica:
@@ -193,8 +236,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     def get_desviacion_horas(self, obj):
         duracion_real = self.get_duracion_real_horas(obj)
         if duracion_real is not None:
-            estimada = obj.operacion_maestra.duracion_horas
-            return round(duracion_real - estimada, 4)
+            return round(duracion_real - self.get_duracion_estimada(obj), 4)
         return None
 
 
@@ -210,6 +252,8 @@ class LoteProduccionSerializer(serializers.ModelSerializer):
             'estado', 'fecha_inicio_planeada', 'progreso_porcentual', 'fases',
             'created_at', 'updated_at'
         ]
+        # El estado del lote lo gobiernan sus fases y las acciones abortar/archivar
+        read_only_fields = ['estado']
 
     def get_progreso_porcentual(self, obj):
         fases_totales = obj.fases.all()

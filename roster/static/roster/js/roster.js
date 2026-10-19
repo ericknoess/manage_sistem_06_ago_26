@@ -342,6 +342,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // El menú usa posición fija: si la tabla o la ventana se desplazan, se cierra para no quedar desalineado
+    document.addEventListener('scroll', (e) => {
+        if (e.target instanceof Element && e.target.closest('.roster-turno-dropdown')) return;
+        cerrarDropdownsTurnos();
+    }, true);
+    window.addEventListener('resize', cerrarDropdownsTurnos);
+
+    // Coloca el menú junto a la celda sin salirse del viewport (abajo si cabe, si no arriba; recortado horizontalmente)
+    function posicionarDropdownTurno(dropdown, rect) {
+        const margen = 8;
+        const separacion = 4;
+        const altoMaximo = 288;
+        const espacioAbajo = window.innerHeight - rect.bottom - separacion - margen;
+        const espacioArriba = rect.top - separacion - margen;
+        const altoContenido = Math.min(dropdown.scrollHeight, altoMaximo);
+        const abrirAbajo = espacioAbajo >= altoContenido || espacioAbajo >= espacioArriba;
+
+        const alto = Math.min(altoContenido, abrirAbajo ? espacioAbajo : espacioArriba);
+        dropdown.style.maxHeight = `${alto}px`;
+        dropdown.style.top = abrirAbajo
+            ? `${rect.bottom + separacion}px`
+            : `${rect.top - separacion - alto}px`;
+
+        const ancho = dropdown.offsetWidth;
+        const izquierda = rect.left + rect.width / 2 - ancho / 2;
+        dropdown.style.left = `${Math.max(margen, Math.min(izquierda, window.innerWidth - ancho - margen))}px`;
+        return abrirAbajo;
+    }
+
     async function asignarTurnoAPI(td, operadorId, fecha, nuevoTurno) {
         try {
             const response = await fetch('/api/turnos/', {
@@ -439,7 +468,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                if (td.querySelector('.roster-turno-dropdown')) {
+                const dropdownAbierto = document.querySelector('.roster-turno-dropdown');
+                if (dropdownAbierto && dropdownAbierto.celdaOrigen === td) {
                     cerrarDropdownsTurnos();
                     return;
                 }
@@ -461,23 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rect = td.getBoundingClientRect();
                 const dropdown = document.createElement('div');
                 
-                let dropdownClasses = 'roster-turno-dropdown absolute w-max min-w-[16rem] max-w-[20rem] max-h-72 overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
-                
-                if (window.innerWidth - rect.right < 200) {
-                    dropdownClasses += ' right-0';
-                } else if (rect.left < 150) {
-                    dropdownClasses += ' left-0';
-                } else {
-                    dropdownClasses += ' left-1/2 -translate-x-1/2';
-                }
-
-                if (window.innerHeight - rect.bottom < 250) {
-                    dropdownClasses += ' bottom-full mb-1'; 
-                } else {
-                    dropdownClasses += ' top-full mt-1'; 
-                }
-
-                dropdown.className = dropdownClasses;
+                dropdown.className = 'roster-turno-dropdown fixed font-mono text-[11px] w-max min-w-[16rem] max-w-[min(20rem,calc(100vw-1rem))] overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
+                dropdown.celdaOrigen = td;
                 
                 const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#94a3b8'}, ...tiposTurnoCache];
                 
@@ -530,10 +545,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     dropdown.appendChild(btnIncidencia);
                 }
 
-                td.appendChild(dropdown);
+                document.body.appendChild(dropdown);
+                const abreAbajo = posicionarDropdownTurno(dropdown, rect);
                 
                 if (typeof gsap !== 'undefined') {
-                    const yOffset = (window.innerHeight - rect.bottom < 250) ? 5 : -5;
+                    const yOffset = abreAbajo ? -5 : 5;
                     gsap.fromTo(dropdown, { opacity: 0, y: yOffset }, { opacity: 1, y: 0, duration: 0.15, ease: "power2.out" });
                 }
             });
@@ -1296,20 +1312,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
 
     // --- INICIALIZACIÓN ---
     initRoster();
