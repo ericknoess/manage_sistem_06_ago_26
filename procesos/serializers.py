@@ -5,9 +5,9 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
-    LoteProduccion, FaseLote, AsignacionFaseOperador
+    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase
 )
-from actividades.serializers import MaterialInsumoSerializer, EquipoSerializer
+from actividades.serializers import EquipoSerializer
 from roster.models import RolOperador
 
 
@@ -32,8 +32,28 @@ class RequerimientoPersonalFaseSerializer(serializers.ModelSerializer):
         fields = ['id', 'rol', 'rol_nombre', 'cantidad']
 
 
+class MaterialOperacionSerializer(serializers.ModelSerializer):
+    material_nombre = serializers.CharField(source='material.nombre', read_only=True)
+    unidad_medida = serializers.CharField(source='material.unidad_medida', read_only=True)
+    material_activo = serializers.BooleanField(source='material.activo', read_only=True)
+
+    class Meta:
+        model = MaterialOperacion
+        fields = ['id', 'material', 'material_nombre', 'unidad_medida', 'material_activo', 'cantidad', 'anticipacion_horas', 'aplica_a']
+
+    def validate_cantidad(self, valor):
+        if valor <= 0:
+            raise serializers.ValidationError("La cantidad debe ser mayor que cero.")
+        return valor
+
+    def validate_anticipacion_horas(self, valor):
+        if valor < 0:
+            raise serializers.ValidationError("La anticipación no puede ser negativa.")
+        return valor
+
+
 class OperacionProcesoSerializer(serializers.ModelSerializer):
-    materiales_requeridos_detalles = MaterialInsumoSerializer(source='materiales_requeridos', many=True, read_only=True)
+    materiales = MaterialOperacionSerializer(many=True, required=False)
     requerimientos_rol = RequerimientoPersonalFaseSerializer(many=True, required=False)
     requerimientos_rol_detalles = RequerimientoPersonalFaseSerializer(source='requerimientos_rol', many=True, read_only=True)
 
@@ -43,12 +63,11 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             'id', 'proceso', 'etapa', 'identificador_paso', 'nombre', 'tipo_operacion',
             'duracion_horas', 'frecuencia_muestreo_horas', 'duracion_muestreo_horas',
             'ops_muestreo', 'predecesora', 'tipo_dependencia', 'desfase_horas',
-            'personal_requerido', 'tipo_equipo_requerido', 'materiales_requeridos',
-            'materiales_requeridos_detalles', 'requerimientos_rol', 'requerimientos_rol_detalles'
+            'personal_requerido', 'tipo_equipo_requerido', 'materiales',
+            'requerimientos_rol', 'requerimientos_rol_detalles'
         ]
         extra_kwargs = {
             'etapa': {'required': False, 'allow_null': True},
-            'materiales_requeridos': {'required': False},
             'predecesora': {'required': False, 'allow_null': True},
             'tipo_dependencia': {'required': False},
             'desfase_horas': {'required': False},
@@ -75,17 +94,35 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
                 visitados.add(actual_pred.id)
                 actual_pred = actual_pred.predecesora
 
+        materiales = data.get('materiales')
+        if materiales:
+            vistos = set()
+            for m in materiales:
+                clave = (m['material'].id, m.get('aplica_a', 'ACTIVIDAD'))
+                if clave in vistos:
+                    raise serializers.ValidationError({"materiales": f"El material [{m['material'].id}] está repetido."})
+                vistos.add(clave)
+
+            # Los materiales por muestreo solo tienen sentido si la operación genera muestreos
+            valor = lambda campo: data.get(campo, getattr(self.instance, campo, None))
+            genera_muestreos = valor('tipo_operacion') == 'INCUBACION' and (valor('frecuencia_muestreo_horas') or 0) > 0
+            if not genera_muestreos and any(m.get('aplica_a') == 'MUESTREO' for m in materiales):
+                raise serializers.ValidationError({"materiales": "Solo una incubación con frecuencia de muestreo puede tener materiales por muestreo."})
+
         return data
+
+    @staticmethod
+    def _guardar_materiales(operacion, materiales_data):
+        operacion.materiales.all().delete()
+        MaterialOperacion.objects.bulk_create([MaterialOperacion(operacion=operacion, **m) for m in materiales_data])
 
     @transaction.atomic
     def create(self, validated_data):
         requerimientos_data = validated_data.pop('requerimientos_rol', [])
-        materiales_data = validated_data.pop('materiales_requeridos', [])
+        materiales_data = validated_data.pop('materiales', [])
         
         operacion = OperacionProceso.objects.create(**validated_data)
-        
-        if materiales_data:
-            operacion.materiales_requeridos.set(materiales_data)
+        self._guardar_materiales(operacion, materiales_data)
             
         for req in requerimientos_data:
             RequerimientoPersonalFase.objects.create(operacion=operacion, **req)
@@ -95,14 +132,14 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         requerimientos_data = validated_data.pop('requerimientos_rol', None)
-        materiales_data = validated_data.pop('materiales_requeridos', None)
+        materiales_data = validated_data.pop('materiales', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         if materiales_data is not None:
-            instance.materiales_requeridos.set(materiales_data)
+            self._guardar_materiales(instance, materiales_data)
 
         if requerimientos_data is not None:
             instance.requerimientos_rol.all().delete()
@@ -138,6 +175,48 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
         ]
 
 
+class MaterialFaseSerializer(serializers.ModelSerializer):
+    material_nombre = serializers.CharField(source='material.nombre', read_only=True)
+    unidad_medida = serializers.CharField(source='material.unidad_medida', read_only=True)
+    categoria = serializers.CharField(source='material.categoria', read_only=True)
+    condicion_almacenamiento = serializers.CharField(source='material.condicion_almacenamiento', read_only=True)
+    momento_requerido = serializers.DateTimeField(read_only=True)
+    ajustado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MaterialFase
+        fields = [
+            'id', 'fase', 'material', 'material_nombre', 'unidad_medida', 'categoria', 'condicion_almacenamiento',
+            'cantidad', 'cantidad_receta', 'anticipacion_horas', 'momento_requerido',
+            'activo', 'ajustado', 'motivo_ajuste', 'ajustado_en',
+        ]
+        read_only_fields = fields
+
+    def get_ajustado(self, obj):
+        return obj.ajustado_en is not None
+
+
+class RequerimientoMaterialSerializer(MaterialFaseSerializer):
+    """Fila del monitor de materiales: el requerimiento con el contexto de su lote y actividad."""
+    lote_id = serializers.IntegerField(source='fase.lote_id', read_only=True)
+    lote_codigo = serializers.CharField(source='fase.lote.identificador_lote', read_only=True)
+    lote_estado = serializers.CharField(source='fase.lote.estado', read_only=True)
+    fase_estado = serializers.CharField(source='fase.estado', read_only=True)
+    paso = serializers.CharField(source='fase.operacion_maestra.identificador_paso', read_only=True)
+    actividad = serializers.SerializerMethodField()
+    inicio_actividad = serializers.DateTimeField(source='fase.inicio_programado', read_only=True)
+
+    class Meta(MaterialFaseSerializer.Meta):
+        fields = MaterialFaseSerializer.Meta.fields + [
+            'lote_id', 'lote_codigo', 'lote_estado', 'fase_estado', 'paso', 'actividad', 'inicio_actividad',
+        ]
+        read_only_fields = fields
+
+    def get_actividad(self, obj):
+        fase = obj.fase
+        return fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo and fase.nombre_tarea_dinamica else fase.operacion_maestra.nombre
+
+
 class FaseLoteSerializer(serializers.ModelSerializer):
     operacion_nombre = serializers.SerializerMethodField()
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
@@ -155,7 +234,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     operadores_asignados = AsignacionFaseOperadorSerializer(many=True, read_only=True)
     
     equipos_detalles = EquipoSerializer(source='equipos_asignados', many=True, read_only=True)
-    materiales_detalles = MaterialInsumoSerializer(source='materiales_asignados', many=True, read_only=True)
+    materiales = MaterialFaseSerializer(many=True, read_only=True)
     
     duracion_real_horas = serializers.SerializerMethodField()
     desviacion_horas = serializers.SerializerMethodField()
@@ -179,7 +258,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'fecha_base_cpm', 'hora_inicio_base_cpm',
             'motivo_reprogramacion', 'notas_reprogramacion',
             'es_subtarea_muestreo', 'indice_muestreo',
-            'equipos_asignados', 'equipos_detalles', 'materiales_asignados', 'materiales_detalles',
+            'equipos_asignados', 'equipos_detalles', 'materiales',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados'
         ]
@@ -192,7 +271,6 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'equipos_asignados': {'required': False},
-            'materiales_asignados': {'required': False},
         }
 
     @staticmethod

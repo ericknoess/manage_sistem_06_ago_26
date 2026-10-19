@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/index.css' %}">
 </head>
 <body>
@@ -222,7 +223,7 @@
 
     <!-- MODAL: CREAR OPERACIÓN / ACTIVIDAD -->
     <div class="modal-overlay" id="modalNuevaOperacion" style="display: none;">
-        <div class="modal-content" style="width: 600px;">
+        <div class="modal-content" style="width: 680px;">
             <div class="modal-header">
                 <h3>⚙️ Añadir Nueva Actividad (CPM)</h3>
             </div>
@@ -267,7 +268,7 @@
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly>
+                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly oninput="renderizarMaterialesBuilder('crear')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -297,11 +298,16 @@
                     </select>
                 </div>
 
-                <div class="form-group" style="grid-column: span 3;">
-                    <label>Materiales Necesarios</label>
-                    <select id="selectMaterialesReq" multiple style="height: 50px;">
-                        <!-- Inyectado desde API -->
-                    </select>
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>Materiales e insumos (cantidad por ejecución)</span>
+                        <span class="seccion-materiales__acciones">
+                            <button type="button" onclick="recargarCatalogoMateriales()" title="Volver a leer el catálogo (tras crear materiales nuevos)">↻ Recargar</button>
+                            <a href="{% url 'catalogo-materiales' %}" target="_blank" title="Abrir el catálogo en otra pestaña">📚 Catálogo ↗</a>
+                        </span>
+                    </label>
+                    <div id="buscadorMaterialesCrear"></div>
+                    <div id="materialesBuilderCrear"></div>
                 </div>
 
                 <div class="form-group" style="grid-column: span 3;">
@@ -322,7 +328,7 @@
 
     <!-- MODAL EDITAR OPERACIÓN -->
     <div class="modal-overlay" id="modalEditarOperacion" style="display: none;">
-        <div class="modal-content" style="width: 600px;">
+        <div class="modal-content" style="width: 680px;">
             <div class="modal-header">
                 <h3>✏️ Editar Actividad & Competencias</h3>
             </div>
@@ -368,7 +374,7 @@
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="editOpFrecMuestreo" min="0" step="1">
+                    <input type="number" id="editOpFrecMuestreo" min="0" step="1" oninput="renderizarMaterialesBuilder('editar')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -404,6 +410,18 @@
                         <button type="button" style="background:none; border:none; cursor:pointer;" class="text-xs text-cyan-400 hover:underline" onclick="agregarFilaRolBuilder('editar')">➕ Añadir Rol</button>
                     </label>
                     <div id="rolesBuilderEditar" style="padding: 5px;"></div>
+                </div>
+
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>Materiales e insumos (cantidad por ejecución)</span>
+                        <span class="seccion-materiales__acciones">
+                            <button type="button" onclick="recargarCatalogoMateriales()" title="Volver a leer el catálogo (tras crear materiales nuevos)">↻ Recargar</button>
+                            <a href="{% url 'catalogo-materiales' %}" target="_blank" title="Abrir el catálogo en otra pestaña">📚 Catálogo ↗</a>
+                        </span>
+                    </label>
+                    <div id="buscadorMaterialesEditar"></div>
+                    <div id="materialesBuilderEditar"></div>
                 </div>
             </div>
             <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
@@ -442,6 +460,7 @@
     </div>
 
     <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/materiales.js' %}"></script>
     <script src="{% static 'procesos/js/index.js' %}"></script>
 </body>
 </html>

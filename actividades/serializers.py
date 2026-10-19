@@ -10,9 +10,27 @@ class EquipoSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'tipo', 'activo']
 
 class MaterialInsumoSerializer(serializers.ModelSerializer):
+    categoria_display = serializers.CharField(source='get_categoria_display', read_only=True)
+    condicion_almacenamiento_display = serializers.CharField(source='get_condicion_almacenamiento_display', read_only=True)
+    # Cantidad de operaciones de recetas que lo usan (anotada en el ViewSet del catálogo)
+    usos_en_recetas = serializers.SerializerMethodField()
+
     class Meta:
         model = MaterialInsumo
-        fields = ['id', 'nombre', 'stock_controlado', 'activo']
+        fields = [
+            'id', 'nombre', 'categoria', 'categoria_display', 'unidad_medida', 'codigo_erp', 'proveedor',
+            'condicion_almacenamiento', 'condicion_almacenamiento_display', 'stock_controlado', 'activo',
+            'usos_en_recetas',
+        ]
+
+    def get_usos_en_recetas(self, obj):
+        return getattr(obj, 'usos_en_recetas', None)
+
+    def validate_id(self, valor):
+        # El código es la llave primaria y lo referencian recetas y lotes: no se renombra
+        if self.instance and valor != self.instance.id:
+            raise serializers.ValidationError("El código de un material no se puede cambiar.")
+        return valor.strip()
 
 class OperadorSimpleSerializer(serializers.ModelSerializer):
     class Meta:

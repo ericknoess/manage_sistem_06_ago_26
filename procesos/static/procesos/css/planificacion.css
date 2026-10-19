@@ -184,3 +184,21 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 .form-group label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
 .form-control { background-color: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.5rem; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; }
 .form-control:focus { border-color: var(--accent); }
+
+/* Materiales del lote en el panel de detalle */
+.material-fase { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; padding: 0.3rem 0.4rem; margin-top: 0.25rem; border: 1px solid rgba(34, 198, 94, 0.35); border-radius: 4px; background: rgba(34, 198, 94, 0.08); font-size: 0.7rem; color: #bbf7d0; }
+.material-fase__meta { font-size: 0.62rem; color: #94a3b8; margin-top: 1px; }
+.material-fase__acciones { display: flex; gap: 2px; flex-shrink: 0; }
+.material-fase-ajuste { color: var(--warning); margin-left: 0.25rem; cursor: help; }
+.materiales-fase-vacio { color: #64748b; font-size: 0.65rem; }
+.materiales-fase-retirados { margin-top: 0.3rem; font-size: 0.62rem; color: #94a3b8; }
+.buscador-material-fase { margin-top: 0.35rem; }
+.buscador-material-fase .selector-material__input { font-size: 0.7rem; padding: 0.3rem 0.45rem; }
+
+.modal-material-fase { width: 440px; }
+.material-fase-resumen { font-size: 0.78rem; line-height: 1.4; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(15, 23, 42, 0.5); }
+.material-fase-resumen span { color: #94a3b8; font-size: 0.7rem; }
+.material-fase-campos { display: flex; gap: 0.8rem; }
+.material-fase-campos .form-group { flex: 1; min-width: 0; }
+.modal-material-fase .form-control { width: 100%; box-sizing: border-box; }
+

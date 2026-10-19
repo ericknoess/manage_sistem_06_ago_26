@@ -1,0 +1,166 @@
+/* procesos/static/procesos/css/monitor_materiales.css — Monitor de materiales por día y hora */
+
+:root {
+    --bg-dark: #0f172a;
+    --panel-bg: #1e293b;
+    --border-color: #334155;
+    --accent: #38bdf8;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --warning: #f59e0b;
+    --success: #22c65e;
+    --danger: #ef4444;
+    --frio: #67e8f9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 1rem;
+    min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* --- Encabezado -------------------------------------------------------------- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.85rem 1.25rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+.header-title h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+.header-enlaces { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.btn-secundario {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--text);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.btn-secundario:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- Barra de periodo y filtros --------------------------------------------- */
+.barra-herramientas {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 0.9rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+.grupo-periodo, .grupo-filtros { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+
+.barra-herramientas input,
+.barra-herramientas select,
+.btn-nav {
+    height: 32px;
+    padding: 0 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-dark);
+    color: var(--text);
+    font-size: 0.75rem;
+}
+.btn-nav { cursor: pointer; font-weight: 600; }
+.btn-nav:hover { border-color: var(--accent); color: var(--accent); }
+#filtroTexto { width: 260px; }
+.barra-herramientas input:focus, .barra-herramientas select:focus { outline: none; border-color: var(--accent); }
+input[type="date"] { color-scheme: dark; }
+
+.segmentado { display: inline-flex; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+.segmentado button { height: 30px; padding: 0 0.7rem; border: none; background: var(--bg-dark); color: var(--text-muted); font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+.segmentado button + button { border-left: 1px solid var(--border-color); }
+.segmentado button.is-activo { background: rgba(56, 189, 248, 0.18); color: var(--accent); }
+.etiqueta-periodo { font-size: 0.85rem; font-weight: 700; margin-left: 0.3rem; }
+
+/* --- Indicadores ------------------------------------------------------------- */
+.indicadores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; }
+.indicador { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.9rem; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; }
+.indicador-valor { font-size: 1.4rem; font-weight: 800; }
+.indicador-etiqueta { font-size: 0.7rem; color: var(--text-muted); }
+.indicador--frio .indicador-valor { color: var(--frio); }
+.indicador--alerta { border-color: rgba(239, 68, 68, 0.6); }
+.indicador--alerta .indicador-valor { color: #fca5a5; }
+
+/* --- Contenido --------------------------------------------------------------- */
+.contenido { display: grid; grid-template-columns: 1fr 340px; gap: 0.75rem; flex: 1; min-height: 0; align-items: start; }
+.panel { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.panel-titulo { padding: 0.65rem 1rem; background: rgba(15, 23, 42, 0.6); border-bottom: 1px solid var(--border-color); color: var(--accent); font-size: 0.85rem; font-weight: 700; }
+.estado-vacio { padding: 1rem; color: var(--text-muted); font-size: 0.78rem; font-style: italic; }
+.estado-vacio--error { color: #fca5a5; font-style: normal; }
+
+/* Línea de tiempo: día → bloques por hora → tarjetas */
+.linea-tiempo { max-height: calc(100vh - 290px); overflow-y: auto; }
+.dia + .dia { border-top: 2px solid var(--border-color); }
+.dia-encabezado {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: #172033;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+.dia--hoy .dia-encabezado { color: var(--accent); }
+.dia-conteo { color: var(--text-muted); font-weight: 500; font-size: 0.72rem; }
+
+.bloque-hora { display: grid; grid-template-columns: 64px 1fr; border-bottom: 1px solid rgba(51, 65, 85, 0.5); }
+.bloque-hora__etiqueta { padding: 0.55rem 0 0 1rem; font-family: ui-monospace, monospace; font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+.bloque-hora--actual { background: rgba(56, 189, 248, 0.06); }
+.bloque-hora--actual .bloque-hora__etiqueta { color: var(--accent); }
+.bloque-hora__tarjetas { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.45rem 0.8rem 0.45rem 0; }
+
+.tarjeta { padding: 0.45rem 0.65rem; border: 1px solid var(--border-color); border-left: 3px solid var(--success); border-radius: 6px; background: rgba(15, 23, 42, 0.55); }
+.tarjeta--refrigerado, .tarjeta--congelado, .tarjeta--ultracongelado { border-left-color: var(--frio); }
+.tarjeta--atrasada { border-color: rgba(239, 68, 68, 0.55); border-left-color: var(--danger); }
+.tarjeta__principal { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.tarjeta__hora { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--text-muted); }
+.tarjeta__cantidad { font-size: 1rem; font-weight: 800; color: #bbf7d0; }
+.tarjeta__material { font-size: 0.85rem; font-weight: 700; }
+.tarjeta__frio { margin-left: auto; font-size: 0.68rem; color: var(--text-muted); }
+.tarjeta--refrigerado .tarjeta__frio, .tarjeta--congelado .tarjeta__frio, .tarjeta--ultracongelado .tarjeta__frio { color: var(--frio); }
+.tarjeta__contexto { margin-top: 0.2rem; font-size: 0.7rem; color: var(--text-muted); }
+.tarjeta__contexto strong { color: var(--text); }
+.tarjeta__codigo { font-family: ui-monospace, monospace; color: var(--accent); margin-right: 0.35rem; }
+.tarjeta__etiquetas { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.3rem; }
+
+.etiqueta { padding: 0.05rem 0.4rem; border-radius: 999px; font-size: 0.62rem; font-weight: 600; border: 1px solid; }
+.etiqueta--ajuste { color: #fcd34d; border-color: rgba(245, 158, 11, 0.6); cursor: help; }
+.etiqueta--progreso { color: var(--accent); border-color: rgba(56, 189, 248, 0.5); }
+.etiqueta--alerta { color: #fca5a5; border-color: rgba(239, 68, 68, 0.6); }
+
+/* Totales por material */
+.totales { max-height: calc(100vh - 290px); overflow-y: auto; }
+.total { padding: 0.55rem 0.9rem; border-bottom: 1px solid rgba(51, 65, 85, 0.5); }
+.total__encabezado { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+.total__material { font-size: 0.8rem; font-weight: 700; }
+.total__cantidad { font-size: 0.95rem; font-weight: 800; color: #bbf7d0; white-space: nowrap; }
+.total__meta { font-size: 0.66rem; color: var(--text-muted); margin-top: 0.1rem; }
+.total__desglose { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; margin-top: 0.3rem; font-size: 0.66rem; color: var(--text-muted); }
+
+@media (max-width: 1100px) {
+    .contenido { grid-template-columns: 1fr; }
+    .indicadores { grid-template-columns: repeat(2, 1fr); }
+    .linea-tiempo, .totales { max-height: none; }
+    #filtroTexto { width: 100%; }
+}

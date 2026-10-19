@@ -42,6 +42,13 @@
                             <span class="app-desc">Recetas maestras ISA-88: etapas, operaciones, dependencias, muestreos y roles requeridos (CPM).</span>
                         </span>
                     </a>
+                    <a class="app-card" href="{% url 'catalogo-materiales' %}">
+                        <span class="app-icono">📚</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Catálogo de materiales</span>
+                            <span class="app-desc">Materiales e insumos: unidad, categoría, almacenamiento, código ERP y proveedor.</span>
+                        </span>
+                    </a>
                 </div>
 
                 <div class="etapa etapa--planificacion">
@@ -58,6 +65,13 @@
                         <span class="app-texto">
                             <span class="app-nombre">Gantt maestro</span>
                             <span class="app-desc">Etapas de todos los lotes: línea base contra reprogramación real.</span>
+                        </span>
+                    </a>
+                    <a class="app-card" href="{% url 'monitor-materiales' %}">
+                        <span class="app-icono">📦</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Monitor de materiales</span>
+                            <span class="app-desc">Qué material se necesita, cuánto y a qué hora, por día, según el forecast de los lotes.</span>
                         </span>
                     </a>
                     <a class="app-card" href="{% url 'tablero-semanal' %}">

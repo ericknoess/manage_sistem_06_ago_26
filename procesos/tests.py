@@ -1,13 +1,18 @@
 # procesos/tests.py
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from actividades.models import MaterialInsumo
 from roster.models import Cuadrilla, Operador, RolOperador
-from .models import ProcesoMaestro, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador
+from .models import (
+    ProcesoMaestro, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
+    MaterialOperacion, MaterialFase,
+)
 
 
 def local(*args):
@@ -165,3 +170,160 @@ class ProgramacionFasesTests(TestCase):
         self.assertEqual(datos['hora_inicio_programada'], '10:00:00')
         self.assertEqual(datos['hora_fin_programada'], '10:00:00')
         self.assertEqual(datos['duracion_estimada'], 72.0)
+
+
+class MaterialesTests(TestCase):
+    """
+    Receta:  T1 (2 h, ACTIVA) → T2 (24 h, INCUBACION, muestreo c/12 h)
+    T1 usa 2 L de medio con 12 h de anticipación; cada muestreo de T2 usa 1 kit.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.medio = MaterialInsumo.objects.create(id='MAT-01', nombre='Medio CHO', unidad_medida='L', categoria='MEDIO', condicion_almacenamiento='REFRIGERADO')
+        self.kit = MaterialInsumo.objects.create(id='MAT-02', nombre='Kit de muestreo', unidad_medida='kit', categoria='CONSUMIBLE')
+        self.proceso = ProcesoMaestro.objects.create(nombre='Receta con materiales')
+        self.t1 = OperacionProceso.objects.create(proceso=self.proceso, identificador_paso='T1', nombre='Preparación', orden=1, duracion_horas=2)
+        self.t2 = OperacionProceso.objects.create(
+            proceso=self.proceso, identificador_paso='T2', nombre='Incubación', orden=2, duracion_horas=24,
+            tipo_operacion='INCUBACION', frecuencia_muestreo_horas=12, duracion_muestreo_horas=0.5, predecesora=self.t1,
+        )
+        MaterialOperacion.objects.create(operacion=self.t1, material=self.medio, cantidad=Decimal('2'), anticipacion_horas=12)
+        MaterialOperacion.objects.create(operacion=self.t2, material=self.kit, cantidad=Decimal('1'), aplica_a='MUESTREO')
+
+    def crear_lote(self, codigo='L-M1', inicio='2026-11-02T08:00:00'):
+        respuesta = self.client.post('/api/lotes/', {
+            'identificador_lote': codigo, 'proceso_maestro': self.proceso.id, 'fecha_inicio_planeada': inicio,
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        return LoteProduccion.objects.get(identificador_lote=codigo)
+
+    def material_t1(self, lote):
+        return MaterialFase.objects.get(fase__lote=lote, fase__operacion_maestra=self.t1, material=self.medio)
+
+    def requerimientos(self, desde, hasta):
+        respuesta = self.client.get(f'/api/materiales-fase/requerimientos/?desde={desde}&hasta={hasta}')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        return respuesta.data
+
+    # --- Copia al instanciar el lote ------------------------------------------
+
+    def test_lote_copia_materiales_de_actividad_y_de_cada_muestreo(self):
+        lote = self.crear_lote()
+        mf = self.material_t1(lote)
+        self.assertEqual(mf.cantidad, Decimal('2'))
+        self.assertEqual(mf.cantidad_receta, Decimal('2'))
+        self.assertEqual(mf.anticipacion_horas, 12)
+
+        kits = MaterialFase.objects.filter(fase__lote=lote, material=self.kit)
+        self.assertEqual(kits.count(), 2)
+        self.assertTrue(all(k.fase.es_subtarea_muestreo for k in kits))
+        self.assertFalse(MaterialFase.objects.filter(fase__lote=lote, fase__operacion_maestra=self.t2, fase__es_subtarea_muestreo=False).exists())
+
+    def test_editar_la_receta_no_altera_lotes_existentes(self):
+        lote = self.crear_lote()
+        MaterialOperacion.objects.filter(operacion=self.t1).update(cantidad=Decimal('50'))
+        self.assertEqual(self.material_t1(lote).cantidad, Decimal('2'))
+
+    # --- Monitor por día y hora -----------------------------------------------
+
+    def test_requerimiento_se_adelanta_por_la_anticipacion(self):
+        self.crear_lote()
+        filas = self.requerimientos('2026-11-01', '2026-11-01')
+        self.assertEqual([f['material'] for f in filas], ['MAT-01'])
+        self.assertEqual(timezone.localtime(datetime.fromisoformat(filas[0]['momento_requerido'])), local(2026, 11, 1, 20, 0))
+        self.assertEqual(filas[0]['lote_codigo'], 'L-M1')
+        self.assertEqual(filas[0]['paso'], 'T1')
+
+        kits = self.requerimientos('2026-11-02', '2026-11-03')
+        self.assertEqual(len(kits), 2)
+        self.assertTrue(all(f['material'] == 'MAT-02' for f in kits))
+
+    def test_requerimiento_sigue_a_la_reprogramacion(self):
+        lote = self.crear_lote()
+        t1 = FaseLote.objects.get(lote=lote, operacion_maestra=self.t1)
+        respuesta = self.client.post(f'/api/fases-lote/{t1.id}/reprogramar/', {
+            'fecha_programada': '2026-11-04', 'hora_inicio_programada': '08:00', 'motivo_reprogramacion': 'INSUMOS',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(self.requerimientos('2026-11-01', '2026-11-01'), [])
+        self.assertEqual([f['material'] for f in self.requerimientos('2026-11-03', '2026-11-03')], ['MAT-01'])
+
+    def test_monitor_excluye_retirados_y_lotes_abortados(self):
+        lote = self.crear_lote()
+        self.client.post(f'/api/materiales-fase/{self.material_t1(lote).id}/retirar/', {'motivo': 'Se usará medio de otro lote'}, format='json')
+        self.assertEqual(self.requerimientos('2026-11-01', '2026-11-01'), [])
+
+        otro = self.crear_lote('L-M2')
+        self.client.post(f'/api/lotes/{otro.id}/abortar/', {'motivo_aborto': 'Contaminación del inóculo'}, format='json')
+        lotes = {f['lote_codigo'] for f in self.requerimientos('2026-11-01', '2026-11-03')}
+        self.assertEqual(lotes, {'L-M1'})
+
+    # --- Ajustes por lote (GxP) -----------------------------------------------
+
+    def test_ajuste_por_lote_exige_motivo_y_conserva_cantidad_de_receta(self):
+        lote = self.crear_lote()
+        mf = self.material_t1(lote)
+        url = f'/api/materiales-fase/{mf.id}/ajustar/'
+        self.assertEqual(self.client.post(url, {'cantidad': '3.5'}, format='json').status_code, 400)
+
+        respuesta = self.client.post(url, {'cantidad': '3.5', 'motivo': 'Volumen de trabajo mayor'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        mf.refresh_from_db()
+        self.assertEqual(mf.cantidad, Decimal('3.5'))
+        self.assertEqual(mf.cantidad_receta, Decimal('2'))
+        self.assertIsNotNone(mf.ajustado_en)
+
+    def test_no_se_ajusta_material_de_fase_completada(self):
+        lote = self.crear_lote()
+        mf = self.material_t1(lote)
+        FaseLote.objects.filter(id=mf.fase_id).update(estado='COMPLETADA')
+        respuesta = self.client.post(f'/api/materiales-fase/{mf.id}/ajustar/', {'cantidad': '5', 'motivo': 'Corrección'}, format='json')
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_agregar_material_extra_y_reactivar_retirado(self):
+        lote = self.crear_lote()
+        t1 = FaseLote.objects.get(lote=lote, operacion_maestra=self.t1)
+        respuesta = self.client.post('/api/materiales-fase/agregar/', {
+            'fase': t1.id, 'material': 'MAT-02', 'cantidad': '2', 'motivo': 'Muestra adicional de control',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.assertIsNone(respuesta.data['cantidad_receta'])
+
+        mf = self.material_t1(lote)
+        self.client.post(f'/api/materiales-fase/{mf.id}/retirar/', {'motivo': 'No se requiere'}, format='json')
+        respuesta = self.client.post('/api/materiales-fase/agregar/', {
+            'fase': t1.id, 'material': 'MAT-01', 'cantidad': '1', 'motivo': 'Se vuelve a requerir',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.assertEqual(MaterialFase.objects.filter(fase=t1, material=self.medio).count(), 1)
+
+    # --- Receta y catálogo ----------------------------------------------------
+
+    def test_operacion_guarda_materiales_con_cantidad(self):
+        respuesta = self.client.patch(f'/api/operaciones-proceso/{self.t1.id}/', {
+            'materiales': [{'material': 'MAT-02', 'cantidad': '4', 'anticipacion_horas': 2}],
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(list(self.t1.materiales.values_list('material_id', 'cantidad')), [('MAT-02', Decimal('4'))])
+
+    def test_materiales_por_muestreo_solo_en_incubaciones_con_muestreo(self):
+        respuesta = self.client.patch(f'/api/operaciones-proceso/{self.t1.id}/', {
+            'materiales': [{'material': 'MAT-02', 'cantidad': '1', 'aplica_a': 'MUESTREO'}],
+        }, format='json')
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_clonar_receta_copia_materiales(self):
+        respuesta = self.client.post(f'/api/procesos-maestros/{self.proceso.id}/clonar/', {'nuevo_nombre': 'Copia'}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        copia = MaterialOperacion.objects.filter(operacion__proceso_id=respuesta.data['nuevo_id'])
+        self.assertEqual(sorted(copia.values_list('material_id', 'aplica_a')), [('MAT-01', 'ACTIVIDAD'), ('MAT-02', 'MUESTREO')])
+
+    def test_catalogo_busca_y_no_permite_borrar(self):
+        datos = self.client.get('/api/materiales/?q=cho').data
+        self.assertEqual([m['id'] for m in datos], ['MAT-01'])
+        self.assertEqual(datos[0]['usos_en_recetas'], 1)
+        self.assertEqual(self.client.delete('/api/materiales/MAT-01/').status_code, 405)
+        respuesta = self.client.patch('/api/materiales/MAT-01/', {'id': 'MAT-99'}, format='json')
+        self.assertEqual(respuesta.status_code, 400)
+

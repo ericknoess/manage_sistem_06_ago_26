@@ -1,6 +1,8 @@
 # procesos/views.py
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
+
 from django.db import transaction
 from django.db.models import RestrictedError
 from django.utils import timezone
@@ -10,16 +12,20 @@ from rest_framework.response import Response
  
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
-    LoteProduccion, FaseLote, AsignacionFaseOperador
+    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase
 )
+from actividades.models import MaterialInsumo
 from roster.models import Operador
 from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
-    LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer
+    LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer,
+    MaterialFaseSerializer, RequerimientoMaterialSerializer
 )
 from .services import (
     CPMCalculatorService, validar_disponibilidad_personal_fase, construir_fases_lote,
-    validar_inicio_contra_predecesora, propagar_programacion, buscar_conflicto_operador
+    validar_inicio_contra_predecesora, propagar_programacion, buscar_conflicto_operador,
+    generar_materiales_lote, ajustar_material_fase, agregar_material_fase, retirar_material_fase,
+    requerimientos_materiales, ErrorMaterialFase
 )
 
 
@@ -28,7 +34,7 @@ from .services import (
 # ==============================================================================
 
 class ProcesoMaestroViewSet(viewsets.ModelViewSet):
-    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales_requeridos', 'etapas').all().order_by('-created_at')
+    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
     serializer_class = ProcesoMaestroSerializer
 
     @action(detail=True, methods=['get'], url_path='cpm-analisis')
@@ -96,7 +102,11 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
                 personal_requerido=op.personal_requerido,
                 tipo_equipo_requerido=op.tipo_equipo_requerido
             )
-            nueva_op.materiales_requeridos.set(op.materiales_requeridos.all())
+            MaterialOperacion.objects.bulk_create([
+                MaterialOperacion(operacion=nueva_op, material_id=m.material_id, cantidad=m.cantidad,
+                                  anticipacion_horas=m.anticipacion_horas, aplica_a=m.aplica_a)
+                for m in op.materiales.all()
+            ])
             for req in op.requerimientos_rol.all():
                 RequerimientoPersonalFase.objects.create(operacion=nueva_op, rol=req.rol, cantidad=req.cantidad)
             mapa_ops[op.id] = nueva_op
@@ -118,7 +128,7 @@ class EtapaProcesoViewSet(viewsets.ModelViewSet):
 
 
 class OperacionProcesoViewSet(viewsets.ModelViewSet):
-    queryset = OperacionProceso.objects.prefetch_related('materiales_requeridos').all().order_by('proceso', 'orden', 'id')
+    queryset = OperacionProceso.objects.prefetch_related('materiales__material').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
 
     def destroy(self, request, *args, **kwargs):
@@ -166,7 +176,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados').order_by('-created_at')
+        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material').order_by('-created_at')
 
     serializer_class = LoteProduccionSerializer
 
@@ -176,6 +186,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         lote = serializer.save()
         FaseLote.objects.bulk_create(construir_fases_lote(lote))
+        generar_materiales_lote(lote)
         headers = self.get_success_headers(serializer.data)
         response_serializer = self.get_serializer(lote)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -216,14 +227,14 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
 
 class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     """
-    Las fases se crean al instanciar el lote y no se borran. Por PATCH solo se editan equipos y materiales
+    Las fases se crean al instanciar el lote y no se borran. Por PATCH solo se editan equipos
     (el serializer marca el resto como solo lectura); estado y horarios cambian únicamente vía
     `cambiar-estado` y `reprogramar`, que aplican las reglas GxP.
     """
     serializer_class = FaseLoteSerializer
 
     def get_queryset(self):
-        return FaseLote.objects.select_related('operacion_maestra', 'lote').filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
+        return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related('materiales__material').filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
     @transaction.atomic
@@ -360,6 +371,99 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
         if asignacion.fase_lote.estado != 'PENDIENTE':
             return Response({"error": f"Violación GxP: No se puede retirar al operador de una fase en estado {asignacion.fase_lote.estado}."}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
+
+
+def _decimal(valor):
+    try:
+        return Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _horas(valor):
+    if valor in (None, ''):
+        return None
+    try:
+        horas = float(valor)
+    except (TypeError, ValueError):
+        raise ErrorMaterialFase("La anticipación debe ser un número de horas.")
+    if horas < 0:
+        raise ErrorMaterialFase("La anticipación no puede ser negativa.")
+    return horas
+
+
+class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Materiales de las fases de lote. Se generan al instanciar el lote; los cambios pasan por
+    `agregar`, `ajustar` y `retirar`, que exigen motivo (trazabilidad GxP). Filtro: ?fase=<id>.
+    `requerimientos` alimenta el monitor de materiales por día y hora.
+    """
+    serializer_class = MaterialFaseSerializer
+
+    def get_queryset(self):
+        qs = MaterialFase.objects.select_related('material', 'fase').order_by('fase', 'material__nombre')
+        if self.request.query_params.get('fase'):
+            qs = qs.filter(fase_id=self.request.query_params['fase'])
+        return qs
+
+    def _error(self, mensaje):
+        return Response({"error": mensaje}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='agregar')
+    @transaction.atomic
+    def agregar(self, request):
+        try:
+            fase = FaseLote.objects.select_related('lote').get(id=request.data.get('fase'))
+            material = MaterialInsumo.objects.get(id=request.data.get('material'))
+        except (FaseLote.DoesNotExist, MaterialInsumo.DoesNotExist, ValueError):
+            return self._error("La fase o el material no existen.")
+        try:
+            mf = agregar_material_fase(
+                fase, material, _decimal(request.data.get('cantidad')),
+                _horas(request.data.get('anticipacion_horas')), request.data.get('motivo'),
+            )
+        except ErrorMaterialFase as e:
+            return self._error(str(e))
+        return Response(self.get_serializer(mf).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='ajustar')
+    @transaction.atomic
+    def ajustar(self, request, pk=None):
+        mf = self.get_object()
+        try:
+            ajustar_material_fase(
+                mf, _decimal(request.data.get('cantidad')),
+                _horas(request.data.get('anticipacion_horas')), request.data.get('motivo'),
+            )
+        except ErrorMaterialFase as e:
+            return self._error(str(e))
+        return Response(self.get_serializer(mf).data)
+
+    @action(detail=True, methods=['post'], url_path='retirar')
+    @transaction.atomic
+    def retirar(self, request, pk=None):
+        mf = self.get_object()
+        try:
+            retirar_material_fase(mf, request.data.get('motivo'))
+        except ErrorMaterialFase as e:
+            return self._error(str(e))
+        return Response(self.get_serializer(mf).data)
+
+    @action(detail=False, methods=['get'], url_path='requerimientos')
+    def requerimientos(self, request):
+        """?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (ambos días incluidos, en hora local)."""
+        try:
+            desde = datetime.strptime(request.query_params.get('desde', ''), '%Y-%m-%d').date()
+            hasta = datetime.strptime(request.query_params.get('hasta', ''), '%Y-%m-%d').date()
+        except ValueError:
+            return self._error("Indique 'desde' y 'hasta' con formato YYYY-MM-DD.")
+        if hasta < desde or (hasta - desde).days > 62:
+            return self._error("El rango debe ser válido y de máximo 62 días.")
+
+        inicio = timezone.make_aware(datetime.combine(desde, time.min))
+        fin = timezone.make_aware(datetime.combine(hasta + timedelta(days=1), time.min))
+        filas = requerimientos_materiales(inicio, fin)
+        return Response(RequerimientoMaterialSerializer(filas, many=True).data)
 
 
 # ==============================================================================

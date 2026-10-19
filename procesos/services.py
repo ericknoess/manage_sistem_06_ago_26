@@ -3,9 +3,12 @@
 from datetime import date, timedelta
 
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Max
 from roster.models import TurnoDia, Operador
-from .models import OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador
+from .models import (
+    OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador,
+    MaterialOperacion, MaterialFase,
+)
 
 
 class CPMCalculatorService:
@@ -357,3 +360,116 @@ def buscar_conflicto_operador(operador_id, fase):
         'fase_lote', 'fase_lote__operacion_maestra'
     ).first()
 
+
+
+# ==============================================================================
+# MATERIALES: COPIA POR LOTE, AJUSTES GxP Y REQUERIMIENTOS POR DÍA Y HORA
+# ==============================================================================
+
+class ErrorMaterialFase(Exception):
+    """Regla de negocio violada al modificar los materiales de una fase."""
+
+
+def generar_materiales_lote(lote):
+    """
+    Copia los materiales de la receta a las fases ya guardadas del lote: los de la actividad
+    a la fase principal y los marcados `MUESTREO` a cada subtarea de muestreo.
+    """
+    por_operacion = {}
+    for mo in MaterialOperacion.objects.filter(operacion__proceso=lote.proceso_maestro_id):
+        por_operacion.setdefault(mo.operacion_id, []).append(mo)
+
+    nuevos = []
+    for fase in lote.fases.all():
+        aplica = 'MUESTREO' if fase.es_subtarea_muestreo else 'ACTIVIDAD'
+        for mo in por_operacion.get(fase.operacion_maestra_id, []):
+            if mo.aplica_a == aplica:
+                nuevos.append(MaterialFase(
+                    fase=fase, material_id=mo.material_id, cantidad=mo.cantidad,
+                    cantidad_receta=mo.cantidad, anticipacion_horas=mo.anticipacion_horas,
+                ))
+    MaterialFase.objects.bulk_create(nuevos)
+    return len(nuevos)
+
+
+def _validar_fase_editable(fase):
+    if fase.lote.estado in ('COMPLETADO', 'ABORTADO'):
+        raise ErrorMaterialFase(f"El lote está {fase.lote.get_estado_display().lower()}; sus materiales ya no se modifican.")
+    if fase.estado in ('COMPLETADA', 'OMITIDA'):
+        raise ErrorMaterialFase(f"La fase está {fase.get_estado_display().lower()}; sus materiales ya no se modifican.")
+
+
+def _validar_motivo(motivo):
+    motivo = (motivo or '').strip()
+    if len(motivo) < 5:
+        raise ErrorMaterialFase("Indique el motivo del cambio (mínimo 5 caracteres) para la trazabilidad GxP.")
+    return motivo
+
+
+def _validar_cantidad(cantidad):
+    if cantidad is None or cantidad <= 0:
+        raise ErrorMaterialFase("La cantidad debe ser mayor que cero.")
+
+
+def ajustar_material_fase(material_fase, cantidad, anticipacion_horas, motivo):
+    """Cambia cantidad y/o anticipación de un material del lote, conservando la cantidad de receta."""
+    _validar_fase_editable(material_fase.fase)
+    _validar_cantidad(cantidad)
+    material_fase.cantidad = cantidad
+    if anticipacion_horas is not None:
+        material_fase.anticipacion_horas = anticipacion_horas
+    material_fase.activo = True
+    material_fase.motivo_ajuste = _validar_motivo(motivo)
+    material_fase.ajustado_en = timezone.now()
+    material_fase.save()
+    return material_fase
+
+
+def agregar_material_fase(fase, material, cantidad, anticipacion_horas, motivo):
+    """Agrega a la fase un material que no venía en la receta (o reactiva uno retirado)."""
+    _validar_fase_editable(fase)
+    _validar_cantidad(cantidad)
+    motivo = _validar_motivo(motivo)
+    if not material.activo:
+        raise ErrorMaterialFase(f"El material [{material.id}] está inactivo en el catálogo.")
+
+    existente = MaterialFase.objects.filter(fase=fase, material=material).first()
+    if existente and existente.activo:
+        raise ErrorMaterialFase(f"[{material.id}] ya está en la fase; ajuste su cantidad en lugar de agregarlo.")
+    if existente:
+        return ajustar_material_fase(existente, cantidad, anticipacion_horas, motivo)
+    return MaterialFase.objects.create(
+        fase=fase, material=material, cantidad=cantidad, anticipacion_horas=anticipacion_horas or 0,
+        motivo_ajuste=motivo, ajustado_en=timezone.now(),
+    )
+
+
+def retirar_material_fase(material_fase, motivo):
+    """Baja lógica: el material deja de requerirse, pero el registro y su motivo se conservan."""
+    _validar_fase_editable(material_fase.fase)
+    material_fase.motivo_ajuste = _validar_motivo(motivo)
+    material_fase.activo = False
+    material_fase.ajustado_en = timezone.now()
+    material_fase.save()
+    return material_fase
+
+
+def requerimientos_materiales(desde, hasta):
+    """
+    Materiales vigentes cuyo momento requerido (inicio programado de la fase menos la anticipación)
+    cae en [desde, hasta). Sigue al forecast: si la fase se reprograma, el requerimiento se mueve.
+    Excluye lotes abortados o archivados y fases completadas u omitidas.
+    """
+    base = MaterialFase.objects.filter(
+        activo=True, fase__inicio_programado__isnull=False, fase__lote__archivado=False,
+    ).exclude(fase__lote__estado='ABORTADO').exclude(fase__estado__in=['COMPLETADA', 'OMITIDA'])
+
+    # La anticipación adelanta el requerimiento: se amplía la ventana de búsqueda por el máximo
+    margen = timedelta(hours=base.aggregate(m=Max('anticipacion_horas'))['m'] or 0)
+    candidatos = base.filter(
+        fase__inicio_programado__gte=desde, fase__inicio_programado__lt=hasta + margen,
+    ).select_related('material', 'fase__lote', 'fase__operacion_maestra')
+
+    filas = [mf for mf in candidatos if desde <= mf.momento_requerido < hasta]
+    filas.sort(key=lambda mf: (mf.momento_requerido, mf.material.nombre))
+    return filas

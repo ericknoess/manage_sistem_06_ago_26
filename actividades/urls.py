@@ -18,5 +18,8 @@ urlpatterns = [
     # Vista HTML del Tablero Operativo Semanal
     # Usamos TemplateView para renderizar directamente el template, 
     # asumiendo que tu archivo se encuentra en 'actividades/index.html'
+    # Catálogo maestro de materiales (alta, edición, búsqueda y baja lógica)
+    path('materiales/catalogo/', TemplateView.as_view(template_name='actividades/catalogo_materiales.html'), name='catalogo-materiales'),
+
     path('tablero/', TemplateView.as_view(template_name='actividades/index.html'), name='tablero-semanal'),
 ]

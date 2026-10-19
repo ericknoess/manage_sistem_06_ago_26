@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Materiales - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
+    <link rel="stylesheet" href="{% static 'procesos/css/monitor_materiales.css' %}">
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📦 Monitor de Materiales</h2>
+            <p>Qué material se necesita, cuánto y a qué hora, según el forecast vigente de los lotes (incluye la anticipación de cada material).</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'catalogo-materiales' %}" class="btn-secundario">📚 Catálogo de materiales</a>
+            <a href="{% url 'planificacion-semanal' %}" class="btn-secundario">📅 Planificación (ajustes por lote)</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Periodo y filtros">
+        <div class="grupo-periodo">
+            <button class="btn-nav" onclick="moverPeriodo(-1)" title="Periodo anterior">◀</button>
+            <button class="btn-nav" onclick="irAHoy()">Hoy</button>
+            <button class="btn-nav" onclick="moverPeriodo(1)" title="Periodo siguiente">▶</button>
+            <input type="date" id="inputFechaInicio" onchange="cambiarFechaInicio(this.value)" title="Primer día del periodo">
+            <div class="segmentado" role="group" aria-label="Duración del periodo">
+                <button data-dias="1" onclick="cambiarDuracion(1)">Día</button>
+                <button data-dias="3" onclick="cambiarDuracion(3)">3 días</button>
+                <button data-dias="7" onclick="cambiarDuracion(7)">Semana</button>
+            </div>
+            <span id="etiquetaPeriodo" class="etiqueta-periodo"></span>
+        </div>
+        <div class="grupo-filtros">
+            <input type="search" id="filtroTexto" placeholder="🔎 Material, código, lote o actividad…" oninput="renderizar()">
+            <select id="filtroCategoria" onchange="renderizar()"><option value="">Todas las categorías</option></select>
+            <select id="filtroAlmacenamiento" onchange="renderizar()"><option value="">Todo almacenamiento</option></select>
+        </div>
+    </section>
+
+    <section class="indicadores" id="indicadores" aria-label="Resumen del periodo"></section>
+
+    <main class="contenido">
+        <section class="panel">
+            <div class="panel-titulo">⏰ Requerimientos por día y hora</div>
+            <div class="linea-tiempo" id="lineaTiempo">
+                <div class="estado-vacio">Cargando requerimientos…</div>
+            </div>
+        </section>
+
+        <aside class="panel">
+            <div class="panel-titulo">Σ Totales del periodo por material</div>
+            <div class="totales" id="totales"></div>
+        </aside>
+    </main>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/materiales.js' %}"></script>
+    <script src="{% static 'procesos/js/monitor_materiales.js' %}"></script>
+</body>
+</html>

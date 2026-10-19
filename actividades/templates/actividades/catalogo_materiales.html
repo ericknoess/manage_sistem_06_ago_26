@@ -1,0 +1,119 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Materiales - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
+    <link rel="stylesheet" href="{% static 'actividades/css/catalogo_materiales.css' %}">
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📚 Catálogo de Materiales e Insumos</h2>
+            <p>Datos maestros para las recetas: unidad de medida, categoría, almacenamiento y referencias de ERP. Los materiales no se borran: se desactivan.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'monitor-materiales' %}" class="btn-secundario">📦 Monitor de materiales</a>
+            <a href="{% url 'procesos-index' %}" class="btn-secundario">🧫 Diseñador de procesos</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Búsqueda y filtros">
+        <div class="grupo-filtros">
+            <input type="search" id="filtroTexto" placeholder="🔎 Código, nombre, categoría, ERP o proveedor…" oninput="renderizarTabla()" autofocus>
+            <select id="filtroCategoria" onchange="renderizarTabla()"><option value="">Todas las categorías</option></select>
+            <select id="filtroAlmacenamiento" onchange="renderizarTabla()"><option value="">Todo almacenamiento</option></select>
+            <select id="filtroEstado" onchange="renderizarTabla()">
+                <option value="activos">Solo activos</option>
+                <option value="inactivos">Solo inactivos</option>
+                <option value="todos">Todos</option>
+            </select>
+            <span id="conteo" class="conteo"></span>
+        </div>
+        <button class="btn-primario" onclick="abrirModalMaterial()">➕ Nuevo material</button>
+    </section>
+
+    <main class="panel">
+        <div class="tabla-contenedor">
+            <table class="tabla-catalogo">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Unidad</th>
+                        <th>Almacenamiento</th>
+                        <th>Código ERP</th>
+                        <th>Proveedor</th>
+                        <th title="Requiere control estricto de lote">Control lote</th>
+                        <th title="Operaciones de recetas que lo usan">Recetas</th>
+                        <th>Estado</th>
+                        <th class="col-acciones">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoTabla">
+                    <tr><td colspan="11" class="estado-vacio">Cargando catálogo…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- MODAL ALTA / EDICIÓN DE MATERIAL -->
+    <div class="modal-overlay" id="modalMaterial" style="display: none;">
+        <form class="modal-content" id="formMaterial" onsubmit="guardarMaterial(event)">
+            <div class="modal-header">
+                <h3 id="modalMaterialTitulo">➕ Nuevo material</h3>
+            </div>
+            <div class="formulario">
+                <label class="campo">
+                    <span>Código *</span>
+                    <input type="text" id="campoId" maxlength="50" required placeholder="MAT-07">
+                    <small id="ayudaCodigo">Único y permanente: lo referencian recetas y lotes.</small>
+                </label>
+                <label class="campo campo--ancho">
+                    <span>Nombre *</span>
+                    <input type="text" id="campoNombre" maxlength="150" required placeholder="Medio de cultivo CHO-K1">
+                </label>
+                <label class="campo">
+                    <span>Categoría</span>
+                    <select id="campoCategoria"></select>
+                </label>
+                <label class="campo">
+                    <span>Unidad de medida</span>
+                    <select id="campoUnidad"></select>
+                </label>
+                <label class="campo">
+                    <span>Almacenamiento</span>
+                    <select id="campoAlmacenamiento"></select>
+                </label>
+                <label class="campo">
+                    <span>Código ERP / SAP</span>
+                    <input type="text" id="campoErp" maxlength="50" placeholder="100045872">
+                </label>
+                <label class="campo campo--ancho">
+                    <span>Proveedor</span>
+                    <input type="text" id="campoProveedor" maxlength="150" placeholder="Thermo Fisher Scientific">
+                </label>
+                <label class="campo campo--check">
+                    <input type="checkbox" id="campoStockControlado" checked>
+                    <span>Requiere control estricto de lote</span>
+                </label>
+            </div>
+            <div id="errorMaterial" class="error-formulario" hidden></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secundario" onclick="cerrarModalMaterial()">Cancelar</button>
+                <button type="submit" class="btn-primario">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/materiales.js' %}"></script>
+    <script src="{% static 'actividades/js/catalogo_materiales.js' %}"></script>
+</body>
+</html>

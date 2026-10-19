@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planificación y Asignación - MES Upstream GxP</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/tablero-semanal.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/planificacion.css' %}">
 </head>
@@ -90,7 +91,30 @@
         </div>
     </div>
 
+    <!-- MODAL DE MATERIAL DEL LOTE (agregar / ajustar / retirar con motivo GxP) -->
+    <div class="modal-overlay" id="modalMaterialFase" style="display: none;">
+        <div class="modal-content modal-material-fase">
+            <div class="modal-header">
+                <h3 id="materialFaseTitulo">🧪 Material del lote</h3>
+            </div>
+            <div id="materialFaseResumen" class="material-fase-resumen"></div>
+            <div id="materialFaseCampos" class="material-fase-campos">
+                <div class="form-group"><label>Cantidad (<span id="materialFaseUnidad"></span>)</label><input type="number" id="inputMaterialFaseCantidad" class="form-control" min="0.001" step="any"></div>
+                <div class="form-group"><label>Anticipación (h antes del inicio)</label><input type="number" id="inputMaterialFaseAnticipacion" class="form-control" min="0" step="0.5"></div>
+            </div>
+            <div class="form-group">
+                <label>Motivo del cambio (GxP)</label>
+                <textarea id="inputMaterialFaseMotivo" class="form-control" rows="2" placeholder="Ej. Volumen de trabajo ajustado por densidad celular"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="cerrarModalMaterialFase()">Cancelar</button>
+                <button class="btn-primary" id="btnConfirmarMaterialFase" onclick="confirmarMaterialFase()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/materiales.js' %}"></script>
     <script src="{% static 'procesos/js/planificacion.js' %}"></script>
 </body>
 </html>

@@ -20,10 +20,44 @@ class MaterialInsumo(models.Model):
     """
     Catálogo maestro de materias primas, medios de cultivo y consumibles.
     """
+    CATEGORIA_CHOICES = [
+        ('MEDIO', 'Medio de cultivo'),
+        ('SOLUCION', 'Solución / buffer'),
+        ('REACTIVO', 'Reactivo / suplemento'),
+        ('SINGLE_USE', 'Single-use (bolsas, filtros, tubería)'),
+        ('CONSUMIBLE', 'Consumible de laboratorio'),
+        ('LIMPIEZA', 'Limpieza / sanitización'),
+        ('OTRO', 'Otro'),
+    ]
+    UNIDAD_CHOICES = [
+        ('L', 'L'),
+        ('mL', 'mL'),
+        ('kg', 'kg'),
+        ('g', 'g'),
+        ('mg', 'mg'),
+        ('pza', 'pza'),
+        ('kit', 'kit'),
+        ('caja', 'caja'),
+    ]
+    ALMACENAMIENTO_CHOICES = [
+        ('AMBIENTE', 'Ambiente (15–25 °C)'),
+        ('REFRIGERADO', 'Refrigerado (2–8 °C)'),
+        ('CONGELADO', 'Congelado (-20 °C)'),
+        ('ULTRACONGELADO', 'Ultracongelado (-80 °C)'),
+    ]
+
     id = models.CharField(max_length=50, primary_key=True, help_text="Código único del material (Ej: MAT-01)")
     nombre = models.CharField(max_length=150, help_text="Nombre del material o insumo")
+    categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='OTRO')
+    unidad_medida = models.CharField(max_length=10, choices=UNIDAD_CHOICES, default='pza', help_text="Unidad en la que se expresan las cantidades requeridas")
+    codigo_erp = models.CharField(max_length=50, blank=True, default='', help_text="Código del material en ERP/SAP")
+    proveedor = models.CharField(max_length=150, blank=True, default='')
+    condicion_almacenamiento = models.CharField(max_length=20, choices=ALMACENAMIENTO_CHOICES, default='AMBIENTE')
     stock_controlado = models.BooleanField(default=True, help_text="Indica si requiere control estricto de lote")
     activo = models.BooleanField(default=True, help_text="Disponible para uso en recetas")
+
+    class Meta:
+        ordering = ['nombre']
 
     def __str__(self):
         return f"[{self.id}] {self.nombre}"

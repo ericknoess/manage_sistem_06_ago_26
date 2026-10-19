@@ -109,12 +109,6 @@ class OperacionProceso(models.Model):
         default='N/A', 
         help_text="Categoría o tipo de equipo requerido"
     )
-    materiales_requeridos = models.ManyToManyField(
-        MaterialInsumo, 
-        blank=True, 
-        related_name='operaciones_proceso',
-        help_text="Insumos o materiales consumibles necesarios"
-    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -157,6 +151,33 @@ class RequerimientoPersonalFase(models.Model):
 
     def __str__(self):
         return f"{self.cantidad}x {self.rol.nombre} para [{self.operacion.identificador_paso}]"
+
+
+class MaterialOperacion(models.Model):
+    """
+    Material que consume una operación de la receta, con su cantidad y con cuántas horas antes
+    del inicio de la actividad debe estar disponible (descongelar, atemperar, preparar).
+    """
+    APLICA_A_CHOICES = [
+        ('ACTIVIDAD', 'Actividad principal'),
+        ('MUESTREO', 'Cada evento de muestreo'),
+    ]
+
+    operacion = models.ForeignKey(OperacionProceso, on_delete=models.CASCADE, related_name='materiales')
+    material = models.ForeignKey(MaterialInsumo, on_delete=models.PROTECT, related_name='usos_en_operaciones')
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, help_text="Cantidad en la unidad de medida del material")
+    anticipacion_horas = models.FloatField(default=0, help_text="Horas antes del inicio de la actividad en que se requiere")
+    aplica_a = models.CharField(max_length=10, choices=APLICA_A_CHOICES, default='ACTIVIDAD')
+
+    class Meta:
+        verbose_name = "Material de Operación"
+        verbose_name_plural = "Materiales de Operación"
+        constraints = [
+            models.UniqueConstraint(fields=['operacion', 'material', 'aplica_a'], name='unique_material_por_operacion'),
+        ]
+
+    def __str__(self):
+        return f"{self.cantidad} {self.material.unidad_medida} {self.material.nombre} para [{self.operacion.identificador_paso}]"
 
 
 class LoteProduccion(models.Model):
@@ -226,7 +247,6 @@ class FaseLote(models.Model):
     notas_reprogramacion = models.TextField(null=True, blank=True)
 
     equipos_asignados = models.ManyToManyField(Equipo, blank=True, related_name='fases_asignadas')
-    materiales_asignados = models.ManyToManyField(MaterialInsumo, blank=True, related_name='fases_asignadas')
 
     fecha_inicio_real = models.DateTimeField(null=True, blank=True)
     fecha_fin_real = models.DateTimeField(null=True, blank=True)
@@ -246,6 +266,40 @@ class FaseLote(models.Model):
         op = self.operacion_maestra
         horas = op.duracion_muestreo_horas if self.es_subtarea_muestreo else op.duracion_horas
         return timedelta(hours=horas or 0)
+
+
+class MaterialFase(models.Model):
+    """
+    Requerimiento de material de una fase de lote. Se copia de la receta al instanciar el lote
+    para que editar la receta después no altere el registro; los ajustes por lote guardan motivo
+    y los retiros son bajas lógicas (`activo=False`).
+    """
+    fase = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='materiales')
+    material = models.ForeignKey(MaterialInsumo, on_delete=models.PROTECT, related_name='requerimientos_lote')
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    cantidad_receta = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Cantidad original de la receta; vacía si se agregó en el lote")
+    anticipacion_horas = models.FloatField(default=0)
+    activo = models.BooleanField(default=True)
+    motivo_ajuste = models.TextField(blank=True, default='')
+    ajustado_en = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Material de Fase"
+        verbose_name_plural = "Materiales de Fase"
+        constraints = [
+            models.UniqueConstraint(fields=['fase', 'material'], name='unique_material_por_fase'),
+        ]
+
+    def __str__(self):
+        return f"{self.cantidad} {self.material.unidad_medida} {self.material.nombre} | {self.fase}"
+
+    @property
+    def momento_requerido(self):
+        """Fecha-hora en que el material debe estar disponible; sigue al forecast de la fase."""
+        if not self.fase.inicio_programado:
+            return None
+        return self.fase.inicio_programado - timedelta(hours=self.anticipacion_horas or 0)
 
 
 class AsignacionFaseOperador(models.Model):

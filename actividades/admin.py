@@ -11,9 +11,9 @@ class EquipoAdmin(admin.ModelAdmin):
 
 @admin.register(MaterialInsumo)
 class MaterialInsumoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre', 'stock_controlado', 'activo')
-    search_fields = ('id', 'nombre')
-    list_filter = ('stock_controlado', 'activo')
+    list_display = ('id', 'nombre', 'categoria', 'unidad_medida', 'condicion_almacenamiento', 'codigo_erp', 'activo')
+    search_fields = ('id', 'nombre', 'codigo_erp', 'proveedor')
+    list_filter = ('categoria', 'condicion_almacenamiento', 'stock_controlado', 'activo')
 
 @admin.register(ActividadSemanal)
 class ActividadSemanalAdmin(admin.ModelAdmin):

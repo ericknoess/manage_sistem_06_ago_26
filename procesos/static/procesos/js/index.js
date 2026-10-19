@@ -7,6 +7,10 @@ let procesoSeleccionado = null;
 let mostrandoArchivados = false;
 let ultimoDataCPM = null; 
 
+// Materiales que se están editando en cada modal: [{ material, cantidad, anticipacion_horas, aplica_a }]
+const materialesBuilder = { crear: [], editar: [] };
+let buscadoresMaterialesListos = false;
+
 // GESTIÓN DEL NIVEL DE ZOOM (px por hora) - CONFIGURACIÓN CON 6px/h
 let zoomActual = 'normal';
 const ZOOM_CONFIG = {
@@ -27,7 +31,7 @@ async function cargarCatalogosGlobales() {
         materialesGlobales = await resMat.json();
         rolesGlobales = await resRoles.json();
 
-        renderizarCatalogoMateriales();
+        inicializarBuscadoresMateriales();
         renderizarListaProcesos();
 
         if (document.getElementById('rolesBuilderCrear').children.length === 0) {
@@ -51,12 +55,112 @@ async function cargarCatalogosGlobales() {
     }
 }
 
-function renderizarCatalogoMateriales() {
-    const select = document.getElementById('selectMaterialesReq');
-    select.innerHTML = '';
-    materialesGlobales.forEach(m => {
-        select.innerHTML += `<option value="${m.id}">${m.nombre}</option>`;
+// --- MATERIALES DE LA ACTIVIDAD ---------------------------------------------
+
+function inicializarBuscadoresMateriales() {
+    if (buscadoresMaterialesListos) return;
+    buscadoresMaterialesListos = true;
+    ['crear', 'editar'].forEach(modo => {
+        const sufijo = modo === 'crear' ? 'Crear' : 'Editar';
+        crearSelectorMateriales(document.getElementById(`buscadorMateriales${sufijo}`), {
+            enLinea: true,
+            obtenerMateriales: () => materialesGlobales,
+            excluir: () => new Set(materialesBuilder[modo].map(m => m.material)),
+            alSeleccionar: (material) => {
+                materialesBuilder[modo].push({ material: material.id, cantidad: 1, anticipacion_horas: 0, aplica_a: 'ACTIVIDAD' });
+                renderizarMaterialesBuilder(modo);
+                // Lleva el foco a la cantidad recién agregada para capturarla de inmediato
+                const filas = document.querySelectorAll(`#materialesBuilder${sufijo} .input-material-cantidad`);
+                filas[filas.length - 1]?.select();
+            },
+        });
     });
+}
+
+async function recargarCatalogoMateriales() {
+    try {
+        const res = await fetch('/api/materiales/');
+        materialesGlobales = await res.json();
+        renderizarMaterialesBuilder('crear');
+        renderizarMaterialesBuilder('editar');
+    } catch (err) {
+        alert("No se pudo recargar el catálogo de materiales.");
+    }
+}
+
+function esIncubacionConMuestreo(modo) {
+    const tipo = document.getElementById(modo === 'crear' ? 'selectTipoTarea' : 'editOpTipo').value;
+    const frec = parseInt(document.getElementById(modo === 'crear' ? 'inputFrecMuestreo' : 'editOpFrecMuestreo').value) || 0;
+    return tipo === 'INCUBACION' && frec > 0;
+}
+
+function renderizarMaterialesBuilder(modo) {
+    const contenedor = document.getElementById(modo === 'crear' ? 'materialesBuilderCrear' : 'materialesBuilderEditar');
+    const filas = materialesBuilder[modo];
+    const conMuestreo = esIncubacionConMuestreo(modo);
+    if (!conMuestreo) filas.forEach(f => f.aplica_a = 'ACTIVIDAD');
+
+    if (!filas.length) {
+        contenedor.innerHTML = `<div class="tabla-materiales__vacio">Sin materiales. Búscalos arriba para agregarlos.</div>`;
+        return;
+    }
+
+    contenedor.innerHTML = `
+        <table class="tabla-materiales">
+            <thead><tr>
+                <th>Material</th>
+                <th style="width: 120px;">Cantidad</th>
+                <th style="width: 95px;" title="Horas antes del inicio de la actividad en que debe estar disponible">Anticipación (h)</th>
+                ${conMuestreo ? '<th style="width: 120px;">Se usa en</th>' : ''}
+                <th style="width: 32px;"></th>
+            </tr></thead>
+            <tbody>
+                ${filas.map((f, i) => {
+                    const mat = materialesGlobales.find(m => m.id === f.material) || { id: f.material, nombre: f.material };
+                    const aviso = mat.activo === false ? '<div class="material-inactivo">⚠️ Inactivo en el catálogo</div>' : '';
+                    return `<tr>
+                        <td><strong>${escaparHtml(mat.nombre)}</strong><br><span style="color: var(--text-muted);">${escaparHtml(mat.id)} · ${iconoAlmacenamiento(mat.condicion_almacenamiento)} ${escaparHtml(mat.categoria_display || '')}</span>${aviso}</td>
+                        <td><div class="celda-cantidad">
+                            <input type="number" class="input-material-cantidad" min="0.001" step="any" value="${f.cantidad}"
+                                   oninput="materialesBuilder['${modo}'][${i}].cantidad = this.value">
+                            <span>${escaparHtml(mat.unidad_medida || '')}</span>
+                        </div></td>
+                        <td><input type="number" min="0" step="0.5" value="${f.anticipacion_horas}"
+                                   oninput="materialesBuilder['${modo}'][${i}].anticipacion_horas = this.value"></td>
+                        ${conMuestreo ? `<td><select onchange="materialesBuilder['${modo}'][${i}].aplica_a = this.value">
+                            <option value="ACTIVIDAD" ${f.aplica_a === 'ACTIVIDAD' ? 'selected' : ''}>Actividad</option>
+                            <option value="MUESTREO" ${f.aplica_a === 'MUESTREO' ? 'selected' : ''}>Cada muestreo</option>
+                        </select></td>` : ''}
+                        <td><button type="button" class="btn-icon delete" title="Quitar material" onclick="quitarMaterialBuilder('${modo}', ${i})">🗑️</button></td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function quitarMaterialBuilder(modo, indice) {
+    materialesBuilder[modo].splice(indice, 1);
+    renderizarMaterialesBuilder(modo);
+}
+
+// Devuelve los materiales listos para la API, o null (con aviso) si alguna cantidad no es válida.
+function obtenerMaterialesDesdeBuilder(modo) {
+    const materiales = [];
+    for (const f of materialesBuilder[modo]) {
+        const cantidad = parseFloat(f.cantidad);
+        const anticipacion = parseFloat(f.anticipacion_horas) || 0;
+        if (!(cantidad > 0)) {
+            alert(`La cantidad de [${f.material}] debe ser mayor que cero.`);
+            return null;
+        }
+        if (anticipacion < 0) {
+            alert(`La anticipación de [${f.material}] no puede ser negativa.`);
+            return null;
+        }
+        materiales.push({ material: f.material, cantidad: cantidad.toString(), anticipacion_horas: anticipacion, aplica_a: f.aplica_a });
+    }
+    return materiales;
 }
 
 function abrirModalNuevaOperacion() {
@@ -71,6 +175,7 @@ function abrirModalNuevaOperacion() {
     document.getElementById('selectPredecesora').value = '';
     document.getElementById('rolesBuilderCrear').innerHTML = '';
     agregarFilaRolBuilder('crear');
+    materialesBuilder.crear = [];
 
     toggleIncubacionFields(false);
     document.getElementById('modalNuevaOperacion').style.display = 'flex';
@@ -193,6 +298,7 @@ function toggleIncubacionFields(isEdit = false) {
         opsMuestreoInput.value = 0;
         opsMuestreoInput.setAttribute('readonly', 'readonly');
     }
+    renderizarMaterialesBuilder(isEdit ? 'editar' : 'crear');
 }
 
 function toggleVistaArchivados() {
@@ -484,6 +590,12 @@ function renderizarCPMConHolguras(cpmData) {
                 badgesRolesHtml = `<span class="tag-resource">👥 Ops: ${t.personal_requerido}</span>`;
             }
 
+            const chipsMateriales = (opOriginal.materiales || []).map(m => {
+                const sufijo = m.aplica_a === 'MUESTREO' ? ' /muestreo' : '';
+                const titulo = `${m.material_nombre}${m.anticipacion_horas ? ` · ${m.anticipacion_horas} h antes` : ''}`;
+                return `<span class="chip-material" title="${escaparHtml(titulo)}">🧪 ${formatearCantidad(m.cantidad, m.unidad_medida)} ${escaparHtml(m.material_nombre)}${sufijo}</span>`;
+            }).join('');
+
             const safeName = t.nombre.replace(/'/g, "\\'");
 
             tr.innerHTML = `
@@ -494,6 +606,7 @@ function renderizarCPMConHolguras(cpmData) {
                 <td>
                     ${badgesRolesHtml}
                     <span class="tag-resource">🏗️ ${t.tipo_equipo_requerido}</span>
+                    ${chipsMateriales ? `<div>${chipsMateriales}</div>` : ''}
                 </td>
                 <td>${t.es}h ➔ ${t.ef}h</td>
                 <td>
@@ -873,9 +986,10 @@ async function crearOperacionAPI() {
     const tipo_equipo_requerido = document.getElementById('selectTipoEquipoReq').value;
 
     const requerimientos_rol = obtenerRolesDesdeBuilder('crear');
-    const materiales_requeridos = Array.from(document.getElementById('selectMaterialesReq').selectedOptions).map(o => o.value);
 
     if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
+    const materiales = obtenerMaterialesDesdeBuilder('crear');
+    if (!materiales) return;
 
     const res = await fetch('/api/operaciones-proceso/', {
         method: 'POST',
@@ -895,7 +1009,7 @@ async function crearOperacionAPI() {
             desfase_horas,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             tipo_equipo_requerido,
-            materiales_requeridos,
+            materiales,
             requerimientos_rol
         })
     });
@@ -953,6 +1067,10 @@ function abrirModalEditarOperacion(id) {
         agregarFilaRolBuilder('editar');
     }
 
+    materialesBuilder.editar = (op.materiales || []).map(m => ({
+        material: m.material, cantidad: Number(m.cantidad), anticipacion_horas: m.anticipacion_horas, aplica_a: m.aplica_a,
+    }));
+
     toggleIncubacionFields(true);
     document.getElementById('modalEditarOperacion').style.display = 'flex';
 }
@@ -989,6 +1107,8 @@ async function guardarEdicionOperacionAPI() {
     const requerimientos_rol = obtenerRolesDesdeBuilder('editar');
 
     if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
+    const materiales = obtenerMaterialesDesdeBuilder('editar');
+    if (!materiales) return;
 
     const res = await fetch(`/api/operaciones-proceso/${id}/`, {
         method: 'PATCH',
@@ -1007,7 +1127,8 @@ async function guardarEdicionOperacionAPI() {
             desfase_horas,
             tipo_equipo_requerido,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
-            requerimientos_rol
+            requerimientos_rol,
+            materiales
         })
     });
 

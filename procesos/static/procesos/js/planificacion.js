@@ -390,17 +390,9 @@ function renderPanelDetalle(faseId) {
         .filter(eq => !equiposAsignadosIds.includes(eq.id))
         .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`).join('');
 
-    // 3. Materiales Asignados
-    const materialesAsignadosIds = fase.materiales_asignados || [];
-    const materialesChips = materialesAsignadosIds.map(matId => {
-        const mat = materialesGlobales.find(m => m.id === matId);
-        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'material', '${matId}', 'remover')">✕</span>`;
-        return `<span class="resource-chip mat">🧪 ${mat ? mat.nombre : matId} ${btnRemover}</span>`;
-    }).join('');
-
-    const materialesOpts = materialesGlobales
-        .filter(mat => !materialesAsignadosIds.includes(mat.id))
-        .map(mat => `<option value="${mat.id}">${mat.nombre}</option>`).join('');
+    // 3. Materiales del lote (copiados de la receta; ajustes y retiros con motivo GxP)
+    const materialesEditables = !['EN_PROGRESO', 'COMPLETADA', 'OMITIDA'].includes(fase.estado);
+    const materialesHtml = renderMaterialesFase(fase, materialesEditables);
 
     let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
     const botonAjustarHtml = estaIniciada 
@@ -433,8 +425,8 @@ function renderPanelDetalle(faseId) {
 
             <div class="resource-section">
                 <div class="resource-title">MATERIALES E INSUMOS:</div>
-                <div class="resource-tags-container">${materialesChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
-                ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'material', this.value, 'agregar')"><option value="" disabled selected>+ Agregar material...</option>${materialesOpts}</select>`}
+                ${materialesHtml}
+                ${materialesEditables ? '<div id="buscadorMaterialFase" class="buscador-material-fase"></div>' : ''}
             </div>
         </div>
     `;
@@ -467,6 +459,114 @@ function renderPanelDetalle(faseId) {
         });
     }
     panel.innerHTML = html;
+
+    if (materialesEditables) {
+        crearSelectorMateriales(document.getElementById('buscadorMaterialFase'), {
+            enLinea: true,
+            placeholder: '➕ Agregar material extra a esta fase…',
+            obtenerMateriales: () => materialesGlobales,
+            excluir: () => new Set((fase.materiales || []).filter(m => m.activo).map(m => m.material)),
+            alSeleccionar: (material) => abrirModalMaterialFase('agregar', fase.id, { material }),
+        });
+    }
+}
+
+function renderMaterialesFase(fase, editable) {
+    const materiales = fase.materiales || [];
+    const vigentes = materiales.filter(m => m.activo);
+    const retirados = materiales.filter(m => !m.activo);
+    if (!materiales.length) return '<div class="materiales-fase-vacio">Esta actividad no requiere materiales.</div>';
+
+    const filas = vigentes.map(m => {
+        const momento = m.momento_requerido ? new Date(m.momento_requerido) : null;
+        const cuando = momento
+            ? `${momento.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} ${momento.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+            : 'sin fecha';
+        const anticipacion = m.anticipacion_horas ? ` · ${m.anticipacion_horas} h antes` : '';
+        const ajuste = m.ajustado
+            ? `<span class="material-fase-ajuste" title="${escaparHtml(m.motivo_ajuste)}">${m.cantidad_receta === null ? 'agregado en el lote' : `receta: ${formatearCantidad(m.cantidad_receta, m.unidad_medida)}`}</span>`
+            : '';
+        const acciones = editable ? `
+            <button class="btn-icon" title="Ajustar cantidad o anticipación" onclick="abrirModalMaterialFase('ajustar', ${fase.id}, { id: ${m.id} })">✏️</button>
+            <button class="btn-icon" title="Retirar de esta fase" onclick="abrirModalMaterialFase('retirar', ${fase.id}, { id: ${m.id} })">✕</button>` : '';
+        return `
+            <div class="material-fase">
+                <div class="material-fase__info">
+                    <div><strong>${formatearCantidad(m.cantidad, m.unidad_medida)}</strong> ${escaparHtml(m.material_nombre)} ${iconoAlmacenamiento(m.condicion_almacenamiento)}</div>
+                    <div class="material-fase__meta">⏰ ${cuando}${anticipacion} ${ajuste}</div>
+                </div>
+                <div class="material-fase__acciones">${acciones}</div>
+            </div>`;
+    }).join('');
+
+    const chipsRetirados = retirados.map(m =>
+        `<span class="chip-material chip-material--retirado" title="Retirado: ${escaparHtml(m.motivo_ajuste)}">${escaparHtml(m.material_nombre)}</span>`
+    ).join('');
+
+    return `${filas || '<div class="materiales-fase-vacio">Todos los materiales fueron retirados.</div>'}
+        ${chipsRetirados ? `<div class="materiales-fase-retirados">Retirados: ${chipsRetirados}</div>` : ''}`;
+}
+
+// --- MODAL DE MATERIAL DEL LOTE (agregar / ajustar / retirar) --------------
+let materialFaseEnEdicion = null;
+
+function abrirModalMaterialFase(modo, faseId, { id = null, material = null }) {
+    const fase = fasesGlobales.find(f => f.id === faseId);
+    const actual = id ? (fase.materiales || []).find(m => m.id === id) : null;
+    const nombre = actual ? actual.material_nombre : material.nombre;
+    const unidad = actual ? actual.unidad_medida : material.unidad_medida;
+    materialFaseEnEdicion = { modo, faseId, id, material: material ? material.id : actual.material };
+
+    const titulos = { agregar: '➕ Agregar material a la fase', ajustar: '✏️ Ajustar material del lote', retirar: '✕ Retirar material de la fase' };
+    document.getElementById('materialFaseTitulo').innerText = titulos[modo];
+    document.getElementById('materialFaseResumen').innerHTML = `
+        <strong>${escaparHtml(nombre)}</strong><br>
+        <span>[${escaparHtml(fase.operacion_id_paso)}] ${escaparHtml(fase.operacion_nombre)} · Lote ${escaparHtml(fase.lote_codigo)}</span>
+        ${actual && actual.cantidad_receta !== null ? `<br><span>Cantidad de receta: ${formatearCantidad(actual.cantidad_receta, unidad)}</span>` : ''}`;
+    document.getElementById('materialFaseCampos').style.display = modo === 'retirar' ? 'none' : 'flex';
+    document.getElementById('materialFaseUnidad').innerText = unidad || '';
+    document.getElementById('inputMaterialFaseCantidad').value = actual ? Number(actual.cantidad) : 1;
+    document.getElementById('inputMaterialFaseAnticipacion').value = actual ? actual.anticipacion_horas : 0;
+    document.getElementById('inputMaterialFaseMotivo').value = '';
+    document.getElementById('btnConfirmarMaterialFase').innerText = modo === 'retirar' ? 'Retirar' : 'Guardar';
+    document.getElementById('modalMaterialFase').style.display = 'flex';
+    document.getElementById(modo === 'retirar' ? 'inputMaterialFaseMotivo' : 'inputMaterialFaseCantidad').focus();
+}
+
+function cerrarModalMaterialFase() {
+    document.getElementById('modalMaterialFase').style.display = 'none';
+    materialFaseEnEdicion = null;
+}
+
+async function confirmarMaterialFase() {
+    if (!materialFaseEnEdicion) return;
+    const { modo, faseId, id, material } = materialFaseEnEdicion;
+    const motivo = document.getElementById('inputMaterialFaseMotivo').value.trim();
+    const datos = {
+        motivo,
+        cantidad: document.getElementById('inputMaterialFaseCantidad').value,
+        anticipacion_horas: document.getElementById('inputMaterialFaseAnticipacion').value,
+    };
+    if (motivo.length < 5) return alert("Indique el motivo del cambio (mínimo 5 caracteres).");
+
+    const url = modo === 'agregar' ? '/api/materiales-fase/agregar/' : `/api/materiales-fase/${id}/${modo}/`;
+    if (modo === 'agregar') Object.assign(datos, { fase: faseId, material });
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify(datos),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || JSON.stringify(err));
+        }
+        cerrarModalMaterialFase();
+        await cargarDatosPlanificacion();
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
 }
 
 // --- FUNCIONES DE REPROGRAMACIÓN Y RECURSOS ---
@@ -526,21 +626,17 @@ async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
     if (!fase) return;
 
     let nuevosEquipos = [...(fase.equipos_asignados || [])];
-    let nuevosMateriales = [...(fase.materiales_asignados || [])];
 
     if (tipo === 'equipo') {
         if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
         if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
-    } else if (tipo === 'material') {
-        if (accion === 'agregar' && !nuevosMateriales.includes(recursoId)) nuevosMateriales.push(recursoId);
-        if (accion === 'remover') nuevosMateriales = nuevosMateriales.filter(id => id !== recursoId);
     }
 
     try {
         const response = await fetch(`/api/fases-lote/${faseId}/`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ equipos_asignados: nuevosEquipos, materiales_asignados: nuevosMateriales })
+            body: JSON.stringify({ equipos_asignados: nuevosEquipos })
         });
 
         if (!response.ok) throw new Error('Error al actualizar recursos');
