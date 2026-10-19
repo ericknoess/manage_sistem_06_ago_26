@@ -17,7 +17,7 @@ class MaterialInsumoSerializer(serializers.ModelSerializer):
 class OperadorSimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Operador
-        fields = ['id', 'nombre', 'foto', 'nivel_expertiz']
+        fields = ['id', 'nombre', 'foto', 'rol']
 
 class ActividadSemanalSerializer(serializers.ModelSerializer):
     # Campos detallados para lectura
