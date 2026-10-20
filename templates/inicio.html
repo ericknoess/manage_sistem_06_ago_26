@@ -7,6 +7,9 @@
     <title>Inicio - MES Bioprocesos Upstream</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/inicio.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
 <body>
 
@@ -16,7 +19,10 @@
             <h1>Centro de Control de Operaciones</h1>
             <p class="inicio-subtitulo">Elige una aplicación. Desde cualquiera de ellas puedes volver aquí con el botón <strong>Menú principal</strong>.</p>
         </div>
-        <div class="inicio-fecha">{% now "l j \d\e F \d\e Y" %}</div>
+        <div class="inicio-lateral">
+            <div class="inicio-fecha">{% now "l j \d\e F \d\e Y" %}</div>
+            <div data-sesion></div>
+        </div>
     </header>
 
     <section class="inicio-indicadores" aria-label="Resumen de planta">

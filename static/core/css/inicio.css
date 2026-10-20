@@ -171,3 +171,7 @@ body {
 @media (max-width: 900px) {
     .flujo, .grupos-secundarios { grid-template-columns: 1fr; }
 }
+
+/* Fecha y usuario conectado, alineados a la derecha del encabezado */
+.inicio-lateral { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+@media (max-width: 700px) { .inicio-lateral { align-items: flex-start; } }

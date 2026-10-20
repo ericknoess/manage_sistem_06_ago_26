@@ -53,11 +53,11 @@ function renderizarLotes() {
 
         let actionButtonHtml = '';
         if (lote.estado === 'PLANEADO') {
-            actionButtonHtml = `<button class="btn-icon" style="color: var(--danger);" title="Eliminar Lote Planificado" onclick="eliminarLoteAPI(${lote.id}, event)">🗑️</button>`;
+            actionButtonHtml = `<button class="btn-icon" data-permiso="abortar_lote" style="color: var(--danger);" title="Eliminar Lote Planificado" onclick="eliminarLoteAPI(${lote.id}, event)">🗑️</button>`;
         } else if (lote.estado === 'EN_PROGRESO' || lote.estado === 'DESVIACION') {
-            actionButtonHtml = `<button class="btn-icon" style="color: var(--warning);" title="Abortar Lote" onclick="abrirModalAbortar(${lote.id}, event)">🛑</button>`;
+            actionButtonHtml = `<button class="btn-icon" data-permiso="abortar_lote" style="color: var(--warning);" title="Abortar Lote" onclick="abrirModalAbortar(${lote.id}, event)">🛑</button>`;
         } else if (lote.estado === 'COMPLETADO') {
-            actionButtonHtml = `<button class="btn-icon" style="color: var(--success);" title="Archivar Lote" onclick="archivarLoteAPI(${lote.id}, event)">📦</button>`;
+            actionButtonHtml = `<button class="btn-icon" data-permiso="abortar_lote" style="color: var(--success);" title="Archivar Lote" onclick="archivarLoteAPI(${lote.id}, event)">📦</button>`;
         }
 
         card.innerHTML = `
@@ -223,17 +223,17 @@ async function renderizarDetalleLote() {
                 } else {
                     let btnReprogramar = estaIniciada
                         ? `<button class="btn-icon" title="Bloqueo GxP: Tarea iniciada en planta. No se puede reprogramar." disabled>🔒</button>`
-                        : `<button class="btn-icon" title="Reprogramar Tarea (Ajustar Forecast)" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${fase.hora_inicio_programada}')">⏱️</button>`;
+                        : `<button class="btn-icon" data-permiso="reprogramar_fase" title="Reprogramar Tarea (Ajustar Forecast)" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${fase.hora_inicio_programada}')">⏱️</button>`;
 
                     // [NUEVO] Bloqueo de Asignación Manual para Tareas Pasivas
                     let btnAsignar = esPasiva 
                         ? `<button class="btn-icon" disabled title="Bloqueo GxP: Fase puramente mecanizada/pasiva.">🚫</button>`
-                        : `<button class="btn-icon" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>`;
+                        : `<button class="btn-icon" data-permiso="asignar_personal" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>`;
 
                     accionesHtml = `
                         ${btnReprogramar}
                         ${btnAsignar}
-                        <button class="btn-icon" title="Forzar Estado (Supervisor)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
+                        <button class="btn-icon" data-permiso="ejecutar_fase" title="Forzar Estado (Supervisor)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
                     `;
                 }
 

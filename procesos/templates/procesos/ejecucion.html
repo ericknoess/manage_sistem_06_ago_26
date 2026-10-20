@@ -7,6 +7,9 @@
     <title>Ejecución de Lotes (eBR) - Piso de Planta</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/ejecucion.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
 <body>
 
@@ -18,7 +21,7 @@
         </div>
         <div style="display: flex; gap: 0.5rem;">
             <a href="/procesos/" class="btn-secondary">⬅️ Volver a Diseño CPM</a>
-            <button class="btn-action" onclick="abrirModalInstanciarLote()">➕ Instanciar Lote</button>
+            <button class="btn-action" data-permiso="instanciar_lote" onclick="abrirModalInstanciarLote()">➕ Instanciar Lote</button>
         </div>
     </div>
 

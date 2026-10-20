@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
     <link rel="stylesheet" href="{% static 'actividades/css/catalogo_materiales.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
 <body>
 
@@ -35,7 +38,7 @@
             </select>
             <span id="conteo" class="conteo"></span>
         </div>
-        <button class="btn-primario" onclick="abrirModalMaterial()">➕ Nuevo material</button>
+        <button class="btn-primario" data-permiso="gestionar_catalogos" onclick="abrirModalMaterial()">➕ Nuevo material</button>
     </section>
 
     <main class="panel">

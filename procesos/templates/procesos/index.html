@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/index.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
 <body>
 
@@ -30,7 +33,7 @@
                 <span>📁 Bioprocesos / Plantillas</span>
                 <div style="display: flex; gap: 4px;">
                     <button class="btn-secondary btn-sm" id="btnToggleArchivados" onclick="toggleVistaArchivados()" title="Ver plantillas archivadas">📦 Archivados</button>
-                    <button class="btn-primary btn-sm" onclick="abrirModalNuevoProceso()">➕ Nuevo</button>
+                    <button class="btn-primary btn-sm" data-permiso="editar_receta" onclick="abrirModalNuevoProceso()">➕ Nuevo</button>
                 </div>
             </div>
             <div class="process-list-container" id="listaProcesos">
@@ -41,7 +44,7 @@
         <div class="panel-box">
             <div class="panel-header" id="tituloProcesoActivo" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>⚡ Mapeo Operacional ISA-88: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
-                <button class="btn-secondary btn-sm" id="btnEditarNombreProc" style="display: none;" onclick="abrirModalEditarProceso()" title="Cambiar nombre de la receta">✏️ Renombrar</button>
+                <button class="btn-secondary btn-sm" data-permiso="editar_receta" id="btnEditarNombreProc" style="display: none;" onclick="abrirModalEditarProceso()" title="Cambiar nombre de la receta">✏️ Renombrar</button>
             </div>
 
             <div class="task-editor-body" id="editorTareas" style="display: none;">
@@ -68,8 +71,8 @@
                     <h3 style="margin: 0; font-size: 0.9rem; color: var(--text); font-weight: bold;">Estructura de Fases y Actividades</h3>
                     <div style="display: flex; gap: 0.5rem;">
                         <button class="btn-secondary btn-sm" style="font-weight: bold; border: 1px solid var(--accent); color: var(--accent);" onclick="abrirGanttPantallaCompleta()">📊 Ver Gantt Completo</button>
-                        <button class="btn-secondary btn-sm" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa</button>
-                        <button class="btn-primary btn-sm" onclick="abrirModalNuevaOperacion()">⚙️ + Añadir Actividad</button>
+                        <button class="btn-secondary btn-sm" data-permiso="editar_receta" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa</button>
+                        <button class="btn-primary btn-sm" data-permiso="editar_receta" onclick="abrirModalNuevaOperacion()">⚙️ + Añadir Actividad</button>
                     </div>
                 </div>
 
@@ -426,7 +429,7 @@
             </div>
             <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
                 <button class="btn-secondary" onclick="cerrarModalEditarOperacion()">Cancelar</button>
-                <button class="btn-primary" onclick="guardarEdicionOperacionAPI()">Guardar Cambios</button>
+                <button class="btn-primary" data-permiso="editar_receta" onclick="guardarEdicionOperacionAPI()">Guardar Cambios</button>
             </div>
         </div>
     </div>

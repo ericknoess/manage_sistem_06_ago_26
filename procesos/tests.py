@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -13,6 +14,12 @@ from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
     MaterialOperacion, MaterialFase,
 )
+
+
+def usuario_con_rol(nombre, rol):
+    usuario = User.objects.create_user(nombre, password='clave-de-prueba')
+    usuario.groups.add(Group.objects.get(name=rol))
+    return usuario
 
 
 def local(*args):
@@ -27,6 +34,7 @@ class ProgramacionFasesTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.client.force_authenticate(usuario_con_rol('admin-pruebas', 'Administrador'))
         self.proceso = ProcesoMaestro.objects.create(nombre='Proceso de prueba')
         crear = lambda paso, horas, orden, pred=None, dep='FS', desfase=0: OperacionProceso.objects.create(
             proceso=self.proceso, identificador_paso=paso, nombre=f'Operación {paso}', orden=orden,
@@ -190,6 +198,7 @@ class MaterialesTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.client.force_authenticate(usuario_con_rol('admin-pruebas', 'Administrador'))
         self.medio = MaterialInsumo.objects.create(id='MAT-01', nombre='Medio CHO', unidad_medida='L', categoria='MEDIO', condicion_almacenamiento='REFRIGERADO')
         self.kit = MaterialInsumo.objects.create(id='MAT-02', nombre='Kit de muestreo', unidad_medida='kit', categoria='CONSUMIBLE')
         self.proceso = ProcesoMaestro.objects.create(nombre='Receta con materiales')

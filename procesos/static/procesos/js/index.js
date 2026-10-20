@@ -358,6 +358,7 @@ function renderizarListaProcesos() {
             cloneBtn.className = 'btn-icon clone';
             cloneBtn.title = 'Clonar / Duplicar Receta Maestra';
             cloneBtn.innerHTML = '📑';
+            cloneBtn.dataset.permiso = 'editar_receta';
             cloneBtn.onclick = (e) => {
                 e.stopPropagation();
                 abrirModalClonarProceso(p.id, p.nombre);
@@ -368,6 +369,7 @@ function renderizarListaProcesos() {
             archiveBtn.className = 'btn-icon archive';
             archiveBtn.title = 'Archivar / Retirar Plantilla Maestra';
             archiveBtn.innerHTML = '📦';
+            archiveBtn.dataset.permiso = 'archivar_receta';
             archiveBtn.onclick = (e) => {
                 e.stopPropagation();
                 archivarProcesoAPI(p.id, p.nombre);
@@ -378,6 +380,7 @@ function renderizarListaProcesos() {
             restoreBtn.className = 'btn-icon restore';
             restoreBtn.title = 'Restaurar Plantilla Maestra a Activa';
             restoreBtn.innerHTML = '🔄';
+            restoreBtn.dataset.permiso = 'archivar_receta';
             restoreBtn.onclick = (e) => {
                 e.stopPropagation();
                 desarchivarProcesoAPI(p.id, p.nombre);
@@ -424,6 +427,8 @@ async function seleccionarProceso(id) {
 let filaArrastrada = null;
 
 function handleDragStart(e) {
+    // Reordenar cambia la receta: solo para quien puede editarla
+    if (!tienePermiso('editar_receta')) { e.preventDefault(); return; }
     filaArrastrada = this;
     e.dataTransfer.effectAllowed = 'move';
     this.classList.add('dragging');
@@ -622,8 +627,8 @@ function renderizarCPMConHolguras(cpmData) {
                 </td>
                 <td style="text-align: center; white-space: nowrap;">
                     <button class="btn-icon validate" title="Auditoría GxP de Personal" onclick="abrirModalValidacion(${t.id}, '${safeName}')">🔍</button>
-                    <button class="btn-icon edit" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id})">✏️</button>
-                    <button class="btn-icon delete" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${safeName}')">🗑️</button>
+                    <button class="btn-icon edit" data-permiso="editar_receta" title="Editar Operación" onclick="abrirModalEditarOperacion(${t.id})">✏️</button>
+                    <button class="btn-icon delete" data-permiso="editar_receta" title="Eliminar Operación" onclick="eliminarOperacionAPI(${t.id}, '${safeName}')">🗑️</button>
                 </td>
             `;
             tbody.appendChild(tr);

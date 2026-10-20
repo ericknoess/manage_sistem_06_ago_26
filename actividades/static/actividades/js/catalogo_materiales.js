@@ -62,10 +62,10 @@ function renderizarTabla() {
             <td>${m.usos_en_recetas || '<span class="sin-dato">0</span>'}</td>
             <td><span class="estado ${m.activo ? 'estado--activo' : 'estado--inactivo'}">${m.activo ? 'Activo' : 'Inactivo'}</span></td>
             <td class="col-acciones">
-                <button class="btn-icono" title="Editar" onclick="abrirModalMaterial('${escaparHtml(m.id)}')">✏️</button>
+                <button class="btn-icono" data-permiso="gestionar_catalogos" title="Editar" onclick="abrirModalMaterial('${escaparHtml(m.id)}')">✏️</button>
                 ${m.activo
-                    ? `<button class="btn-icono" title="Desactivar (baja lógica)" onclick="cambiarEstado('${escaparHtml(m.id)}', false)">⏸️</button>`
-                    : `<button class="btn-icono" title="Reactivar" onclick="cambiarEstado('${escaparHtml(m.id)}', true)">▶️</button>`}
+                    ? `<button class="btn-icono" data-permiso="gestionar_catalogos" title="Desactivar (baja lógica)" onclick="cambiarEstado('${escaparHtml(m.id)}', false)">⏸️</button>`
+                    : `<button class="btn-icono" data-permiso="gestionar_catalogos" title="Reactivar" onclick="cambiarEstado('${escaparHtml(m.id)}', true)">▶️</button>`}
             </td>
         </tr>`).join('');
 }

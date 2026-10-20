@@ -12,6 +12,9 @@
     
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'roster/css/index.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
 <!-- CORRECCIÓN UX/UI: Cambiamos min-h-screen por h-screen para forzar límites estrictos en el viewport -->
 <body class="bg-slate-900 text-slate-200 h-screen font-sans no-select overflow-hidden flex flex-col">
@@ -27,16 +30,16 @@
             
             <div class="flex items-center gap-4 flex-wrap">
                 <div class="flex gap-2">
-                    <button id="btnOpenCuadrillaModal" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
+                    <button id="btnOpenCuadrillaModal" data-permiso="gestionar_roster" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>+ Cuadrilla</span>
                     </button>
-                    <button id="btnOpenOperadorModal" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
+                    <button id="btnOpenOperadorModal" data-permiso="gestionar_roster" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>+ Operador</span>
                     </button>
-                    <button id="btn-mover-cuadrilla" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <button id="btn-mover-cuadrilla" data-permiso="gestionar_roster" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded shadow transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                         <span>Mover a cuadrilla</span> <span id="selected-counter" class="badge bg-slate-900 text-cyan-400 px-1.5 py-0.5 rounded text-[10px] ms-1">0</span>
                     </button>
-                    <button id="btnOpenCargaMasivaModal" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
+                    <button id="btnOpenCargaMasivaModal" data-permiso="gestionar_roster" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1">
                         <span>⚡ Carga Masiva</span>
                     </button>
                     <a href="/roster/bisemanal/" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded shadow transition-colors flex items-center gap-1" style="text-decoration: none;">
@@ -330,10 +333,10 @@
                 <div id="incidenciaFeedback" class="p-2 rounded text-xs text-center hidden"></div>
 
                 <div class="flex justify-between items-center pt-4 border-t border-slate-800">
-                    <button type="button" id="btnDeleteIncidencia" class="px-3 py-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 text-[11px] font-bold rounded border border-red-900 hidden transition-colors">Eliminar Registro</button>
+                    <button type="button" id="btnDeleteIncidencia" data-permiso="gestionar_roster" class="px-3 py-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 text-[11px] font-bold rounded border border-red-900 hidden transition-colors">Eliminar Registro</button>
                     <div class="flex justify-end gap-2 w-full">
                         <button type="button" id="btnCloseIncidenciaModal2" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded transition-colors">Cancelar</button>
-                        <button type="submit" id="btnSubmitIncidencia" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors">Guardar Registro</button>
+                        <button type="submit" id="btnSubmitIncidencia" data-permiso="gestionar_roster" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded shadow transition-colors">Guardar Registro</button>
                     </div>
                 </div>
             </form>

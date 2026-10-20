@@ -74,6 +74,8 @@ async function handleLogin(e) {
 }
 
 function handleLogout() {
+    // Cierra también la sesión del operador en el servidor
+    fetch('/api/mobile/logout/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } }).catch(() => {});
     localStorage.removeItem('ebr_session');
     session = null;
     document.getElementById('taskListContainer').innerHTML = '';
@@ -197,7 +199,13 @@ async function cambiarEstadoFase(faseId, nuevoEstado) {
             });
         } else {
             const errorData = await res.json();
-            alert("⚠️ Bloqueo GxP:\n\n" + (errorData.error || "No se puede procesar la solicitud."));
+            if (res.status === 401 || (res.status === 403 && !errorData.error)) {
+                // Sesión vencida o la tarea no es suya: el servidor lo explica en "detail"
+                alert("🔒 " + (errorData.detail || "Tu sesión expiró. Vuelve a ingresar."));
+                if (!errorData.detail || errorData.detail.includes('sesión')) handleLogout();
+            } else {
+                alert("⚠️ Bloqueo GxP:\n\n" + (errorData.error || "No se puede procesar la solicitud."));
+            }
             ocultarLoader();
         }
     } catch (err) {

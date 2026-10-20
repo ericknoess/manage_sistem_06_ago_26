@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión - MES Bioprocesos Upstream</title>
+    <link rel="stylesheet" href="{% static 'usuarios/css/login.css' %}">
+</head>
+<body>
+    <main class="login-tarjeta">
+        <p class="login-eyebrow">Bioprocesos · Upstream · GxP</p>
+        <h1>Centro de Control de Operaciones</h1>
+        <p class="login-subtitulo">Ingresa con tu usuario para planear, asignar y dar seguimiento a los lotes.</p>
+
+        {% if form.errors %}
+        <div class="login-error" role="alert">Usuario o contraseña incorrectos, o la cuenta está desactivada.</div>
+        {% elif next and request.GET.next %}
+        <div class="login-aviso">Inicia sesión para continuar. Si estabas trabajando, tu sesión expiró por inactividad.</div>
+        {% endif %}
+
+        <form method="post" class="login-formulario" autocomplete="off">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            <label class="campo">
+                <span>Usuario</span>
+                <input type="text" name="username" value="{{ form.username.value|default_if_none:'' }}" required autofocus autocapitalize="none">
+            </label>
+            <label class="campo">
+                <span>Contraseña</span>
+                <input type="password" name="password" required>
+            </label>
+            <button type="submit" class="btn-entrar">Iniciar sesión</button>
+        </form>
+
+        <p class="login-pie">
+            ¿Eres operador de piso? Usa la <a href="{% url 'mobile-dashboard' %}">terminal del operador</a> con tu número de empleado y PIN.
+        </p>
+    </main>
+</body>
+</html>

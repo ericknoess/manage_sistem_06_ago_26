@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'roster',
     'actividades',  # <-- NUEVA APLICACIÓN REGISTRADA
     'procesos',
+    'usuarios',
 ]
 
 MIDDLEWARE = [
@@ -54,6 +55,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'usuarios.middleware.LoginRequeridoMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -135,3 +137,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+
+
+# --- Usuarios y sesión -------------------------------------------------------
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'inicio'
+
+# La sesión se cierra tras 30 min sin actividad (cada petición renueva el plazo).
+SESSION_COOKIE_AGE = 30 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+
+# API: todo pide sesión; las escrituras exigen el permiso de negocio de cada acción (usuarios/permisos.py).
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['usuarios.permisos.SesionAutenticacion'],
+    'DEFAULT_PERMISSION_CLASSES': ['usuarios.permisos.PermisoPorAccion'],
+}

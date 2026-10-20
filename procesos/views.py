@@ -6,9 +6,12 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import RestrictedError
 from django.utils import timezone
-from rest_framework import mixins, viewsets, status
+from rest_framework import mixins, permissions, viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+
+from usuarios.permisos import PermisoFaseLote, SOLO_SESION, operador_de_sesion
  
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
@@ -36,6 +39,8 @@ from .services import (
 class ProcesoMaestroViewSet(viewsets.ModelViewSet):
     queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
     serializer_class = ProcesoMaestroSerializer
+    permiso_escritura = 'editar_receta'
+    permisos_por_accion = {'archivar': 'archivar_receta', 'desarchivar': 'archivar_receta'}
 
     @action(detail=True, methods=['get'], url_path='cpm-analisis')
     def cpm_analisis(self, request, pk=None):
@@ -125,11 +130,14 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
 class EtapaProcesoViewSet(viewsets.ModelViewSet):
     queryset = EtapaProceso.objects.all().order_by('proceso', 'orden')
     serializer_class = EtapaProcesoSerializer
+    permiso_escritura = 'editar_receta'
 
 
 class OperacionProcesoViewSet(viewsets.ModelViewSet):
     queryset = OperacionProceso.objects.prefetch_related('materiales__material').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
+    permiso_escritura = 'editar_receta'
+    permisos_por_accion = {'validar_disponibilidad': SOLO_SESION}  # POST de solo consulta
 
     def destroy(self, request, *args, **kwargs):
         try:
@@ -179,6 +187,10 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material').order_by('-created_at')
 
     serializer_class = LoteProduccionSerializer
+    permisos_por_accion = {
+        'create': 'instanciar_lote',
+        'destroy': 'abortar_lote', 'archivar': 'abortar_lote', 'abortar': 'abortar_lote',
+    }
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -232,6 +244,12 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
     `cambiar-estado` y `reprogramar`, que aplican las reglas GxP.
     """
     serializer_class = FaseLoteSerializer
+    permission_classes = [PermisoFaseLote]
+    permisos_por_accion = {
+        'update': 'asignar_personal', 'partial_update': 'asignar_personal',  # PATCH solo cambia equipos
+        'reprogramar': 'reprogramar_fase',
+        'cambiar_estado': 'ejecutar_fase',
+    }
 
     def get_queryset(self):
         return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related('materiales__material').filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
@@ -340,6 +358,7 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
     queryset = AsignacionFaseOperador.objects.select_related('operador', 'rol_ejercido').all()
     serializer_class = AsignacionFaseOperadorSerializer
+    permiso_escritura = 'asignar_personal'
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -399,6 +418,7 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
     `requerimientos` alimenta el monitor de materiales por día y hora.
     """
     serializer_class = MaterialFaseSerializer
+    permiso_escritura = 'ajustar_material_lote'
 
     def get_queryset(self):
         qs = MaterialFase.objects.select_related('material', 'fase').order_by('fase', 'material__nombre')
@@ -471,6 +491,10 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 # ==============================================================================
 
 class MobileeBRViewSet(viewsets.ViewSet):
+    # El operador entra con número de empleado y PIN; su identidad queda en la sesión del servidor
+    # (no en lo que mande el navegador) y PermisoFaseLote la usa para validar sus tareas.
+    permission_classes = [permissions.AllowAny]
+
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):
         codigo = request.data.get('codigo_empleado')
@@ -484,14 +508,24 @@ class MobileeBRViewSet(viewsets.ViewSet):
             return Response({"error": "Credenciales inválidas o usuario inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
             
         if operador.pin_acceso != str(pin): return Response({"error": "Credenciales inválidas."}, status=status.HTTP_401_UNAUTHORIZED)
-            
+
+        request.session.cycle_key()  # evita fijación de sesión
+        request.session['operador_id'] = operador.id
         return Response({
             "operador_id": operador.id, "codigo_empleado": operador.codigo_empleado, "nombre": operador.nombre,
             "rol": operador.rol.nombre if operador.rol else "Operativo Base", "cuadrilla": operador.cuadrilla.nombre
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['post'], url_path='logout')
+    def logout(self, request):
+        request.session.pop('operador_id', None)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=['get'], url_path='tareas-pendientes')
     def tareas_pendientes(self, request, pk=None):
+        operador_sesion = operador_de_sesion(request)
+        if not request.user.is_authenticated and not (operador_sesion and str(operador_sesion.id) == str(pk)):
+            raise PermissionDenied("Tu sesión expiró. Vuelve a ingresar con tu número de empleado y PIN.")
         try:
             operador = Operador.objects.get(id=pk, activo=True)
         except Operador.DoesNotExist:

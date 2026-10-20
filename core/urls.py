@@ -12,6 +12,7 @@ urlpatterns = [
     path('', InicioView.as_view(), name='inicio'),
 
     path('admin/', admin.site.urls),
+    path('', include('usuarios.urls')),
     path('roster/', include('roster.urls')),
     path('api/', include('roster.api_urls')),
     

@@ -13,6 +13,7 @@ class EquipoViewSet(viewsets.ModelViewSet):
     """
     queryset = Equipo.objects.all()
     serializer_class = EquipoSerializer
+    permiso_escritura = 'gestionar_catalogos'
 
 
 class MaterialInsumoViewSet(viewsets.ModelViewSet):
@@ -23,6 +24,7 @@ class MaterialInsumoViewSet(viewsets.ModelViewSet):
     """
     http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
     serializer_class = MaterialInsumoSerializer
+    permiso_escritura = 'gestionar_catalogos'
 
     def get_queryset(self):
         qs = MaterialInsumo.objects.annotate(usos_en_recetas=Count('usos_en_operaciones')).order_by('nombre')

@@ -1,6 +1,7 @@
 # procesos/urls.py
 
 from django.urls import path, include
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
 from .views import (
@@ -45,7 +46,8 @@ urlpatterns = [
     path('gantt/', TemplateView.as_view(template_name='procesos/gantt.html'), name='gantt-lotes'),
     
     # [NUEVO] Ruta visual exclusiva para la PWA/Tablet del Operador
-    path('mobile/', TemplateView.as_view(template_name='procesos/mobile_dashboard.html'), name='mobile-dashboard'),
+    # ensure_csrf_cookie: la terminal no tiene login de Django y necesita el token para firmar tareas
+    path('mobile/', ensure_csrf_cookie(TemplateView.as_view(template_name='procesos/mobile_dashboard.html')), name='mobile-dashboard'),
     
     # Monitor de materiales requeridos por día y hora
     path('materiales/', TemplateView.as_view(template_name='procesos/monitor_materiales.html'), name='monitor-materiales'),

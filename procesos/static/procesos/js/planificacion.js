@@ -357,7 +357,7 @@ function renderPanelDetalle(faseId) {
     const headcountReq = fase.personal_requerido || 1;
 
     const operadoresChips = operadoresAsignados.map(a => {
-        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="removerAsignacionOperador(${a.id})">✕</span>`;
+        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" data-permiso="asignar_personal" onclick="removerAsignacionOperador(${a.id})">✕</span>`;
         const opData = operadoresGlobales.find(o => o.id === a.operador);
         let advertenciaUI = '';
         let extraClass = '';
@@ -382,7 +382,7 @@ function renderPanelDetalle(faseId) {
     const equiposAsignadosIds = fase.equipos_asignados || [];
     const equiposChips = equiposAsignadosIds.map(eqId => {
         const eq = equiposGlobales.find(e => e.id === eqId);
-        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span>`;
+        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" data-permiso="asignar_personal" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span>`;
         return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} ${btnRemover}</span>`;
     }).join('');
 
@@ -397,7 +397,7 @@ function renderPanelDetalle(faseId) {
     let horaInicioTxt = fase.hora_inicio_programada ? fase.hora_inicio_programada.substring(0,5) : '00:00';
     const botonAjustarHtml = estaIniciada 
         ? `<button class="btn-icon" title="Bloqueado" disabled>🔒</button>` 
-        : `<button class="btn-icon" title="Reprogramar" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>`;
+        : `<button class="btn-icon" data-permiso="reprogramar_fase" title="Reprogramar" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>`;
 
     let html = `
         ${bannerLock}
@@ -420,13 +420,13 @@ function renderPanelDetalle(faseId) {
             <div class="resource-section">
                 <div class="resource-title">EQUIPOS ASIGNADOS:</div>
                 <div class="resource-tags-container">${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
-                ${estaIniciada ? '' : `<select class="select-resource" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')"><option value="" disabled selected>+ Agregar equipo...</option>${equiposOpts}</select>`}
+                ${estaIniciada ? '' : `<select class="select-resource" data-permiso="asignar_personal" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')"><option value="" disabled selected>+ Agregar equipo...</option>${equiposOpts}</select>`}
             </div>
 
             <div class="resource-section">
                 <div class="resource-title">MATERIALES E INSUMOS:</div>
                 ${materialesHtml}
-                ${materialesEditables ? '<div id="buscadorMaterialFase" class="buscador-material-fase"></div>' : ''}
+                ${materialesEditables ? '<div id="buscadorMaterialFase" class="buscador-material-fase" data-permiso="ajustar_material_lote"></div>' : ''}
             </div>
         </div>
     `;
@@ -453,7 +453,7 @@ function renderPanelDetalle(faseId) {
                             <div class="op-status-text">Turno: <strong>${tDia.codigo_turno}</strong></div>
                         </div>
                     </div>
-                    <button class="btn-assign" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
+                    <button class="btn-assign" data-permiso="asignar_personal" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
                 </div>
             `;
         });
@@ -487,8 +487,8 @@ function renderMaterialesFase(fase, editable) {
             ? `<span class="material-fase-ajuste" title="${escaparHtml(m.motivo_ajuste)}">${m.cantidad_receta === null ? 'agregado en el lote' : `receta: ${formatearCantidad(m.cantidad_receta, m.unidad_medida)}`}</span>`
             : '';
         const acciones = editable ? `
-            <button class="btn-icon" title="Ajustar cantidad o anticipación" onclick="abrirModalMaterialFase('ajustar', ${fase.id}, { id: ${m.id} })">✏️</button>
-            <button class="btn-icon" title="Retirar de esta fase" onclick="abrirModalMaterialFase('retirar', ${fase.id}, { id: ${m.id} })">✕</button>` : '';
+            <button class="btn-icon" data-permiso="ajustar_material_lote" title="Ajustar cantidad o anticipación" onclick="abrirModalMaterialFase('ajustar', ${fase.id}, { id: ${m.id} })">✏️</button>
+            <button class="btn-icon" data-permiso="ajustar_material_lote" title="Retirar de esta fase" onclick="abrirModalMaterialFase('retirar', ${fase.id}, { id: ${m.id} })">✕</button>` : '';
         return `
             <div class="material-fase">
                 <div class="material-fase__info">

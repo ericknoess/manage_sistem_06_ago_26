@@ -1,0 +1,62 @@
+/* static/core/css/sesion.css — Chip de usuario y control de acciones por rol (ver static/core/js/sesion.js) */
+
+/* Lo que exige permiso queda oculto hasta confirmar que el rol lo tiene */
+[data-permiso]:not(.permitido) { display: none !important; }
+
+.sesion-fila { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.sesion-fila .btn-inicio { margin-bottom: 0; }
+/* Si el botón llevaba separación hacia abajo, ahora la lleva la fila */
+.sesion-fila:has(.btn-inicio--arriba) { margin-bottom: 0.6rem; }
+
+.sesion-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 100%;
+    padding: 0.25rem 0.3rem 0.25rem 0.75rem;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.75);
+    color: #f8fafc;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.74rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.sesion-chip__usuario { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.sesion-chip__rol { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; }
+.sesion-chip__salir { margin: 0; }
+.sesion-chip__salir button {
+    padding: 0.2rem 0.65rem;
+    border: 1px solid #475569;
+    border-radius: 999px;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.sesion-chip__salir button:hover { border-color: #ef4444; color: #fca5a5; }
+
+.sesion-chip--flotante { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 2000; }
+
+.sesion-aviso {
+    position: fixed;
+    left: 50%;
+    bottom: 1.25rem;
+    z-index: 3000;
+    max-width: min(520px, calc(100vw - 2rem));
+    padding: 0.7rem 1rem;
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    border-radius: 8px;
+    background: #1e293b;
+    color: #fcd34d;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.8rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.sesion-aviso.visible { opacity: 1; transform: translate(-50%, 0); }

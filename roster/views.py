@@ -46,7 +46,7 @@ class RolOperadorViewSet(viewsets.ModelViewSet):
     """
     queryset = RolOperador.objects.all().order_by('nombre')
     serializer_class = RolOperadorSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -62,7 +62,7 @@ class TipoTurnoViewSet(viewsets.ModelViewSet):
 
     queryset = TipoTurno.objects.all().order_by('codigo')
     serializer_class = TipoTurnoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def get_queryset(self):
         queryset = TipoTurno.objects.all().order_by('codigo')
@@ -78,7 +78,7 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
 
     queryset = Cuadrilla.objects.all().order_by('identificador')
     serializer_class = CuadrillaSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def list(self, request, *args, **kwargs):
         try:
@@ -118,7 +118,7 @@ class OperadorViewSet(viewsets.ModelViewSet):
     queryset = Operador.objects.all().order_by('nombre')
     serializer_class = OperadorSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -138,7 +138,7 @@ class SecuenciaRolViewSet(viewsets.ModelViewSet):
         SecuenciaRol.objects.all().prefetch_related('detalles').order_by('-creado_en')
     )
     serializer_class = SecuenciaRolSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
 
 class TurnoDiaViewSet(viewsets.ModelViewSet):
@@ -146,7 +146,7 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
 
     queryset = TurnoDia.objects.all()
     serializer_class = TurnoDiaSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def get_queryset(self):
         """
@@ -373,7 +373,7 @@ class IncidenciaTurnoViewSet(viewsets.ModelViewSet):
     """
     queryset = IncidenciaTurno.objects.all().select_related('turno_dia__operador')
     serializer_class = IncidenciaTurnoSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permiso_escritura = 'gestionar_roster'
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -386,7 +386,7 @@ class IncidenciaTurnoViewSet(viewsets.ModelViewSet):
 class MoverColaboradoresAPIView(APIView):
     """Endpoint API REST para la reasignación atómica de colaboradores."""
 
-    permission_classes = [permissions.IsAuthenticated]
+    permiso_escritura = 'gestionar_roster'
 
     def post(self, request, *args, **kwargs):
         serializer = MoverColaboradoresSerializer(
@@ -453,4 +453,5 @@ class MoverColaboradoresAPIView(APIView):
 class UserRegistrationViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
+    # Los datos de usuarios solo los ve y cambia quien administra usuarios (staff de Django)
     permission_classes = [permissions.IsAdminUser]
