@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitácora de Auditoría - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/auditoria.css' %}">
+    <link rel="stylesheet" href="{% static 'auditoria/css/bitacora.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📜 Bitácora de Auditoría (Audit Trail GxP)</h2>
+            <p>Quién hizo qué, cuándo, por qué y qué valores cambiaron. Los registros no se pueden editar ni borrar.</p>
+        </div>
+        <button type="button" class="btn-secundario" onclick="exportarCsv()" title="Descargar lo filtrado en CSV">⬇️ Exportar CSV</button>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Filtros">
+        <div class="grupo-filtros">
+            <label>Desde <input type="date" id="filtroDesde"></label>
+            <label>Hasta <input type="date" id="filtroHasta"></label>
+            <select id="filtroCategoria"><option value="">Todas las categorías</option></select>
+            <input type="search" id="filtroTexto" placeholder="🔎 Usuario, lote, descripción o motivo…">
+            <button type="button" class="btn-primario" onclick="buscar()">Buscar</button>
+            <span id="conteo" class="conteo"></span>
+        </div>
+    </section>
+
+    <main class="panel">
+        <div class="tabla-contenedor">
+            <table class="tabla-bitacora">
+                <thead>
+                    <tr>
+                        <th>Fecha y hora</th>
+                        <th>Quién</th>
+                        <th>Categoría</th>
+                        <th>Qué pasó</th>
+                        <th>Lote</th>
+                        <th>Motivo</th>
+                        <th>Cambios (antes → después)</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoBitacora">
+                    <tr><td colspan="7" class="estado-vacio">Cargando…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script src="{% static 'core/js/auditoria.js' %}"></script>
+    <script src="{% static 'auditoria/js/bitacora.js' %}"></script>
+</body>
+</html>

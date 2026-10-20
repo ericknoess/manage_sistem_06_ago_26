@@ -11,6 +11,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from auditoria.mixins import AuditoriaMixin
+from auditoria.services import diferencias, registrar
 from usuarios.permisos import PermisoFaseLote, SOLO_SESION, operador_de_sesion
  
 from .models import (
@@ -36,7 +38,9 @@ from .services import (
 # 1. VIEWSETS MAESTROS (DISEÑO Y PLANIFICACIÓN)
 # ==============================================================================
 
-class ProcesoMaestroViewSet(viewsets.ModelViewSet):
+class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'RECETA', 'receta'
+    auditoria_excluir = ('etapas', 'operaciones')
     queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
     serializer_class = ProcesoMaestroSerializer
     permiso_escritura = 'editar_receta'
@@ -59,6 +63,7 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
         proceso = self.get_object()
         proceso.activo = False
         proceso.save()
+        registrar(request, 'RECETA', 'ARCHIVAR', f"Receta archivada: {proceso.nombre}", objeto=proceso, cambios={'activo': [True, False]})
         return Response({
             "mensaje": f"La plantilla '{proceso.nombre}' ha sido archivada. Se conservará para el historial de lotes, pero ya no se podrán instanciar nuevos."
         }, status=status.HTTP_200_OK)
@@ -70,6 +75,7 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
             return Response({"error": "La plantilla ya se encuentra activa."}, status=status.HTTP_400_BAD_REQUEST)
         proceso.activo = True
         proceso.save()
+        registrar(request, 'RECETA', 'RESTAURAR', f"Receta restaurada: {proceso.nombre}", objeto=proceso, cambios={'activo': [False, True]})
         return Response({"mensaje": f"La plantilla '{proceso.nombre}' ha sido restaurada exitosamente y está lista para uso."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='clonar')
@@ -124,16 +130,20 @@ class ProcesoMaestroViewSet(viewsets.ModelViewSet):
                     nueva_op_actual.predecesora = nueva_op_predecesora
                     nueva_op_actual.save()
 
+        registrar(request, 'RECETA', 'CLONAR', f"Receta '{original.nombre}' clonada como '{nuevo_nombre}'", objeto=nuevo_proceso,
+                  cambios={'origen': [None, original.nombre], 'actividades': [None, len(mapa_ops)]})
         return Response({"mensaje": f"Plantilla clonada exitosamente como '{nuevo_nombre}'.", "nuevo_id": nuevo_proceso.id}, status=status.HTTP_201_CREATED)
 
 
-class EtapaProcesoViewSet(viewsets.ModelViewSet):
+class EtapaProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'RECETA', 'etapa'
     queryset = EtapaProceso.objects.all().order_by('proceso', 'orden')
     serializer_class = EtapaProcesoSerializer
     permiso_escritura = 'editar_receta'
 
 
-class OperacionProcesoViewSet(viewsets.ModelViewSet):
+class OperacionProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'RECETA', 'actividad'
     queryset = OperacionProceso.objects.prefetch_related('materiales__material').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
     permiso_escritura = 'editar_receta'
@@ -165,13 +175,19 @@ class OperacionProcesoViewSet(viewsets.ModelViewSet):
         ids_ordenados = request.data.get('operaciones_ordenadas', [])
         if not isinstance(ids_ordenados, list) or not ids_ordenados:
             return Response({"error": "Se requiere una lista válida 'operaciones_ordenadas' con los IDs de las actividades."}, status=status.HTTP_400_BAD_REQUEST)
+        cambios = {}
         for index, op_id in enumerate(ids_ordenados):
             try:
                 operacion = OperacionProceso.objects.get(id=op_id)
-                operacion.orden = index + 1
-                operacion.save(update_fields=['orden'])
             except OperacionProceso.DoesNotExist:
                 return Response({"error": f"La operación con ID {op_id} no existe."}, status=status.HTTP_404_NOT_FOUND)
+            if operacion.orden != index + 1:
+                cambios[f"[{operacion.identificador_paso}] {operacion.nombre}"] = [operacion.orden, index + 1]
+                operacion.orden = index + 1
+                operacion.save(update_fields=['orden'])
+        if cambios:
+            registrar(request, 'RECETA', 'REORDENAR', f"Reordenamiento de actividades de la receta {operacion.proceso.nombre}",
+                      objeto=operacion.proceso, cambios=cambios)
         return Response({"mensaje": "Secuencia de operaciones actualizada correctamente."}, status=status.HTTP_200_OK)
 
 
@@ -199,6 +215,12 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lote = serializer.save()
         FaseLote.objects.bulk_create(construir_fases_lote(lote))
         generar_materiales_lote(lote)
+        registrar(request, 'LOTE', 'CREAR', f"Lote {lote.identificador_lote} instanciado con la receta {lote.proceso_maestro.nombre}",
+                  objeto=lote, lote=lote, cambios={
+                      'receta': [None, lote.proceso_maestro.nombre],
+                      'inicio_planeado': [None, timezone.localtime(lote.fecha_inicio_planeada).strftime('%Y-%m-%d %H:%M')],
+                      'fases': [None, lote.fases.count()],
+                  })
         headers = self.get_success_headers(serializer.data)
         response_serializer = self.get_serializer(lote)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -207,7 +229,10 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lote = self.get_object()
         if lote.estado != 'PLANEADO':
             return Response({"error": f"Violación GxP (Data Integrity): No se puede eliminar el Lote '{lote.identificador_lote}' porque su estado actual es '{lote.estado}'."}, status=status.HTTP_403_FORBIDDEN)
+        codigo, lote_id = lote.identificador_lote, lote.pk
         self.perform_destroy(lote)
+        registrar(request, 'LOTE', 'ELIMINAR', f"Lote planeado {codigo} eliminado", objeto_tipo='loteproduccion',
+                  objeto_id=lote_id, lote_codigo=codigo)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'], url_path='archivar')
@@ -216,6 +241,8 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         if lote.estado != 'COMPLETADO': return Response({"error": "Solo se pueden archivar lotes COMPLETADOS."}, status=status.HTTP_400_BAD_REQUEST)
         lote.archivado = True
         lote.save()
+        registrar(request, 'LOTE', 'ARCHIVAR', f"Lote {lote.identificador_lote} archivado", objeto=lote, lote=lote,
+                  cambios={'archivado': [False, True]})
         return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido archivado."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='abortar')
@@ -225,9 +252,12 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         if lote.estado in ['COMPLETADO', 'ABORTADO']: return Response({"error": f"No es posible abortar un lote en estado: {lote.estado}."}, status=status.HTTP_400_BAD_REQUEST)
         motivo = request.data.get('motivo_aborto')
         if not motivo or len(motivo.strip()) < 10: return Response({"error": "Debe proporcionar un motivo detallado (mínimo 10 caracteres)."}, status=status.HTTP_400_BAD_REQUEST)
+        estado_anterior = lote.estado
         lote.estado = 'ABORTADO'
         lote.motivo_aborto = motivo
         lote.save()
+        registrar(request, 'LOTE', 'ABORTAR', f"Lote {lote.identificador_lote} abortado", objeto=lote, lote=lote,
+                  motivo=motivo, cambios={'estado': [estado_anterior, 'ABORTADO']})
         tiempo_actual = timezone.now()
         fases_activas = lote.fases.exclude(estado__in=['COMPLETADA', 'OMITIDA'])
         for fase in fases_activas:
@@ -237,7 +267,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido abortado."}, status=status.HTTP_200_OK)
 
 
-class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     """
     Las fases se crean al instanciar el lote y no se borran. Por PATCH solo se editan equipos
     (el serializer marca el resto como solo lectura); estado y horarios cambian únicamente vía
@@ -245,6 +275,11 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
     """
     serializer_class = FaseLoteSerializer
     permission_classes = [PermisoFaseLote]
+    auditoria_categoria, auditoria_nombre = 'FASE', 'equipos de la fase'
+    auditoria_campos = ('equipos_asignados',)
+
+    def _auditoria_contexto(self, instancia):
+        return {'fase': instancia}
     permisos_por_accion = {
         'update': 'asignar_personal', 'partial_update': 'asignar_personal',  # PATCH solo cambia equipos
         'reprogramar': 'reprogramar_fase',
@@ -269,6 +304,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
 
         tiempo_actual = timezone.now()
         ejecutar_auto_ajuste = False
+        estado_anterior = fase.estado
+        lote_estado_anterior = fase.lote.estado
 
         if nuevo_estado == 'EN_PROGRESO' and fase.estado == 'PENDIENTE':
             fase.fecha_inicio_real = tiempo_actual
@@ -301,11 +338,26 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
             lote.estado = 'EN_PROGRESO'
             lote.save()
 
+        textos = {'EN_PROGRESO': 'iniciada', 'COMPLETADA': 'completada', 'PENDIENTE': 'regresada a pendiente', 'OMITIDA': 'omitida'}
+        cambios = {'estado': [estado_anterior, nuevo_estado]}
+        if fases_actualizadas_count:
+            cambios['sucesoras_reajustadas'] = [None, fases_actualizadas_count]
+        registrar(request, 'FASE', f"FASE_{nuevo_estado}", f"Fase {textos.get(nuevo_estado, nuevo_estado)}: {self._nombre_fase(fase)}",
+                  objeto=fase, fase=fase, cambios=cambios)
+        if lote.estado != lote_estado_anterior:
+            registrar(request, 'LOTE', f"LOTE_{lote.estado}", f"Lote {lote.identificador_lote} pasa a {lote.get_estado_display()}",
+                      objeto=lote, lote=lote, cambios={'estado': [lote_estado_anterior, lote.estado]})
+
         response_data = self.get_serializer(fase).data
         if ejecutar_auto_ajuste and fases_actualizadas_count > 0:
             response_data['mensaje_cascada'] = f"Se auto-ajustaron {fases_actualizadas_count} tareas posteriores."
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _nombre_fase(fase):
+        nombre = fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo and fase.nombre_tarea_dinamica else fase.operacion_maestra.nombre
+        return f"[{fase.operacion_maestra.identificador_paso}] {nombre} · lote {fase.lote.identificador_lote}"
 
     @action(detail=True, methods=['post'], url_path='reprogramar')
     @transaction.atomic
@@ -334,6 +386,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
         if error_dependencia:
             return Response({"error": error_dependencia}, status=status.HTTP_400_BAD_REQUEST)
 
+        formato = '%Y-%m-%d %H:%M'
+        inicio_anterior = timezone.localtime(fase_origen.inicio_programado).strftime(formato) if fase_origen.inicio_programado else None
         fase_origen.inicio_programado = nuevo_inicio
         fase_origen.fin_programado = nuevo_inicio + fase_origen.duracion_planeada
         fase_origen.motivo_reprogramacion = motivo
@@ -347,13 +401,27 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
             nota_muestreo="(Auto-Ajuste) Muestreo alineado solidariamente.",
         )
 
+        registrar(request, 'FASE', 'REPROGRAMAR', f"Fase reprogramada: {self._nombre_fase(fase_origen)}",
+                  objeto=fase_origen, fase=fase_origen, motivo=f"{fase_origen.get_motivo_reprogramacion_display()}. {notas}".strip(' .'),
+                  cambios={'inicio_programado': [inicio_anterior, timezone.localtime(nuevo_inicio).strftime(formato)],
+                           'sucesoras_reajustadas': [None, fases_actualizadas - 1]})
+
         return Response({
             "mensaje": f"Ajuste completado. El sistema auto-alineó estrictamente {fases_actualizadas - 1} tareas sucesoras evitando cualquier traslape (Snapping).",
             "fase": self.get_serializer(fase_origen).data
         }, status=status.HTTP_200_OK)
 
 
-class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
+class AsignacionFaseOperadorViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'ASIGNACION', 'asignación'
+
+    def _auditoria_contexto(self, instancia):
+        return {'fase': instancia.fase_lote}
+
+    def _auditoria_datos(self, instancia):
+        return {'operador': instancia.operador.nombre, 'rol': instancia.rol_ejercido.nombre if instancia.rol_ejercido_id else None,
+                'fase': FaseLoteViewSet._nombre_fase(instancia.fase_lote)}
+
     # Sin PUT/PATCH: cambiar una asignación saltaría la validación de cruces; se elimina y se crea de nuevo
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
     queryset = AsignacionFaseOperador.objects.select_related('operador', 'rol_ejercido').all()
@@ -390,6 +458,11 @@ class AsignacionFaseOperadorViewSet(viewsets.ModelViewSet):
         if asignacion.fase_lote.estado != 'PENDIENTE':
             return Response({"error": f"Violación GxP: No se puede retirar al operador de una fase en estado {asignacion.fase_lote.estado}."}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
+
+
+def _cantidad(mf):
+    """Cantidad legible para la bitácora: 2.000 L → '2 L'."""
+    return f"{format(mf.cantidad.normalize(), 'f')} {mf.unidad_medida}"
 
 
 def _decimal(valor):
@@ -444,12 +517,17 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             )
         except ErrorMaterialFase as e:
             return self._error(str(e))
+        registrar(request, 'MATERIAL_LOTE', 'AGREGAR', f"Material {material.id} agregado a {FaseLoteViewSet._nombre_fase(fase)}",
+                  objeto=mf, fase=fase, motivo=request.data.get('motivo', ''),
+                  cambios={'material': [None, material.nombre], 'cantidad': [None, _cantidad(mf)],
+                           'anticipacion_horas': [None, mf.anticipacion_horas]})
         return Response(self.get_serializer(mf).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='ajustar')
     @transaction.atomic
     def ajustar(self, request, pk=None):
         mf = self.get_object()
+        antes = {'cantidad': _cantidad(mf), 'anticipacion_horas': mf.anticipacion_horas}
         try:
             ajustar_material_fase(
                 mf, _decimal(request.data.get('cantidad')),
@@ -457,6 +535,9 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             )
         except ErrorMaterialFase as e:
             return self._error(str(e))
+        registrar(request, 'MATERIAL_LOTE', 'AJUSTAR', f"Material {mf.material_id} ajustado en {FaseLoteViewSet._nombre_fase(mf.fase)}",
+                  objeto=mf, fase=mf.fase, motivo=request.data.get('motivo', ''),
+                  cambios=diferencias(antes, {'cantidad': _cantidad(mf), 'anticipacion_horas': mf.anticipacion_horas}))
         return Response(self.get_serializer(mf).data)
 
     @action(detail=True, methods=['post'], url_path='retirar')
@@ -467,6 +548,8 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             retirar_material_fase(mf, request.data.get('motivo'))
         except ErrorMaterialFase as e:
             return self._error(str(e))
+        registrar(request, 'MATERIAL_LOTE', 'RETIRAR', f"Material {mf.material_id} retirado de {FaseLoteViewSet._nombre_fase(mf.fase)}",
+                  objeto=mf, fase=mf.fase, motivo=request.data.get('motivo', ''), cambios={'activo': [True, False]})
         return Response(self.get_serializer(mf).data)
 
     @action(detail=False, methods=['get'], url_path='requerimientos')
@@ -505,12 +588,18 @@ class MobileeBRViewSet(viewsets.ViewSet):
         try:
             operador = Operador.objects.get(codigo_empleado=codigo, activo=True)
         except Operador.DoesNotExist:
+            registrar(request, 'SESION', 'PIN_FALLIDO', f"Intento fallido en la terminal con el número de empleado '{codigo}'",
+                      actor=f"Terminal: {codigo}")
             return Response({"error": "Credenciales inválidas o usuario inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
-            
-        if operador.pin_acceso != str(pin): return Response({"error": "Credenciales inválidas."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if operador.pin_acceso != str(pin):
+            registrar(request, 'SESION', 'PIN_FALLIDO', f"PIN incorrecto en la terminal para {operador.nombre} ({codigo})",
+                      objeto=operador, actor=f"Terminal: {codigo}")
+            return Response({"error": "Credenciales inválidas."}, status=status.HTTP_401_UNAUTHORIZED)
 
         request.session.cycle_key()  # evita fijación de sesión
         request.session['operador_id'] = operador.id
+        registrar(request, 'SESION', 'PIN_LOGIN', f"Ingreso a la terminal de {operador.nombre} ({codigo})", objeto=operador)
         return Response({
             "operador_id": operador.id, "codigo_empleado": operador.codigo_empleado, "nombre": operador.nombre,
             "rol": operador.rol.nombre if operador.rol else "Operativo Base", "cuadrilla": operador.cuadrilla.nombre
@@ -518,6 +607,8 @@ class MobileeBRViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], url_path='logout')
     def logout(self, request):
+        if operador_de_sesion(request):
+            registrar(request, 'SESION', 'PIN_LOGOUT', "Salida de la terminal del operador", objeto=operador_de_sesion(request))
         request.session.pop('operador_id', None)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

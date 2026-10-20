@@ -2,12 +2,15 @@
 
 from django.db.models import Count, Q
 from rest_framework import viewsets
+
+from auditoria.mixins import AuditoriaMixin
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Equipo, MaterialInsumo, ActividadSemanal
 from .serializers import EquipoSerializer, MaterialInsumoSerializer, ActividadSemanalSerializer
 
-class EquipoViewSet(viewsets.ModelViewSet):
+class EquipoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'CATALOGO', 'equipo'
     """
     API endpoint para gestionar el catálogo maestro de equipos críticos.
     """
@@ -16,7 +19,9 @@ class EquipoViewSet(viewsets.ModelViewSet):
     permiso_escritura = 'gestionar_catalogos'
 
 
-class MaterialInsumoViewSet(viewsets.ModelViewSet):
+class MaterialInsumoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    auditoria_categoria, auditoria_nombre = 'CATALOGO', 'material'
+    auditoria_excluir = ('usos_en_recetas',)
     """
     API endpoint para gestionar el catálogo maestro de materiales e insumos.
     Filtros: ?q= (código, nombre, código ERP o proveedor), ?categoria=, ?activo=true|false.

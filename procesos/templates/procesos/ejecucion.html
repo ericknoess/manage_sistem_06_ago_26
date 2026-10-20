@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ejecución de Lotes (eBR) - Piso de Planta</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/auditoria.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/ejecucion.css' %}">
     <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
     <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
@@ -76,6 +77,18 @@
                 <button class="btn-secondary" onclick="cerrarModalInstanciarLote()">Cancelar</button>
                 <button class="btn-action" onclick="crearLoteAPI()">Instanciar Lote</button>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTORIAL DEL LOTE (bitácora de auditoría) -->
+    <div class="modal-overlay" id="modalHistorialLote" style="display: none;" onclick="if (event.target === this) cerrarHistorialLote()">
+        <div class="modal-content modal-historial">
+            <div class="modal-header">
+                <h3 id="tituloHistorialLote">📜 Historial del lote</h3>
+                <button class="btn-secondary" onclick="cerrarHistorialLote()">Cerrar</button>
+            </div>
+            <p class="historial-ayuda">Todo lo que se ha hecho con el lote y sus fases, del más reciente al más antiguo.</p>
+            <div id="contenidoHistorialLote" class="historial-contenido"></div>
         </div>
     </div>
 
@@ -180,6 +193,7 @@
     </div>
 
     <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/auditoria.js' %}"></script>
     <script src="{% static 'procesos/js/ejecucion.js' %}"></script>
 </body>
 </html>

@@ -33,17 +33,20 @@ from .serializers import (
     IncidenciaTurnoSerializer,
 )
 from .services import aplicar_carga_masiva, expandir_secuencia
+from auditoria.mixins import AuditoriaMixin
+from auditoria.services import registrar
 
 
 class RosterDashboardView(TemplateView):
     template_name = 'roster/index.html'
 
 
-class RolOperadorViewSet(viewsets.ModelViewSet):
+class RolOperadorViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """
     ViewSet para la gestión y consulta del catálogo maestro de Roles y Competencias (Skills).
     Permite listar roles activos para el planificador CPM y administración de personal.
     """
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'rol de operador'
     queryset = RolOperador.objects.all().order_by('nombre')
     serializer_class = RolOperadorSerializer
     permiso_escritura = 'gestionar_roster'
@@ -57,8 +60,9 @@ class RolOperadorViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class TipoTurnoViewSet(viewsets.ModelViewSet):
+class TipoTurnoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """ViewSet para la gestión del catálogo maestro de Tipos de Turno y sus propiedades visuales HEX."""
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'tipo de turno'
 
     queryset = TipoTurno.objects.all().order_by('codigo')
     serializer_class = TipoTurnoSerializer
@@ -73,8 +77,10 @@ class TipoTurnoViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class CuadrillaViewSet(viewsets.ModelViewSet):
+class CuadrillaViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """ViewSet para la gestión de Cuadrillas y filtrado jerárquico de operadores y turnos por mes/año."""
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'cuadrilla'
+    auditoria_excluir = ('operadores',)
 
     queryset = Cuadrilla.objects.all().order_by('identificador')
     serializer_class = CuadrillaSerializer
@@ -112,8 +118,10 @@ class CuadrillaViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class OperadorViewSet(viewsets.ModelViewSet):
+class OperadorViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """ViewSet para la gestión de operadores con soporte para archivos multimedia (fotos) y filtrado por estado activo."""
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'operador'
+    auditoria_excluir = ('turnos',)
 
     queryset = Operador.objects.all().order_by('nombre')
     serializer_class = OperadorSerializer
@@ -131,8 +139,9 @@ class OperadorViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class SecuenciaRolViewSet(viewsets.ModelViewSet):
+class SecuenciaRolViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """ViewSet para la gestión de Secuencias de Rol y sus patrones de turnos."""
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'secuencia de rol'
 
     queryset = (
         SecuenciaRol.objects.all().prefetch_related('detalles').order_by('-creado_en')
@@ -141,8 +150,10 @@ class SecuenciaRolViewSet(viewsets.ModelViewSet):
     permiso_escritura = 'gestionar_roster'
 
 
-class TurnoDiaViewSet(viewsets.ModelViewSet):
+class TurnoDiaViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """ViewSet para el registro individual (upsert por celda), mutación de turnos diarios y operaciones masivas (GxP Ready)."""
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'turno'
+    auditoria_campos = ('operador', 'fecha', 'codigo_turno')
 
     queryset = TurnoDia.objects.all()
     serializer_class = TurnoDiaSerializer
@@ -181,9 +192,14 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
                 )
 
             operador = get_object_or_404(Operador, id=operador_id)
+            previo = TurnoDia.objects.filter(operador=operador, fecha=fecha).select_related('tipo_turno').first()
+            codigo_previo = previo.tipo_turno.codigo if previo and previo.tipo_turno_id else None
 
             if not codigo_turno or str(codigo_turno).strip() == '':
                 TurnoDia.objects.filter(operador=operador, fecha=fecha).delete()
+                if codigo_previo:
+                    registrar(request, 'ROSTER', 'ELIMINAR', f"Turno limpiado: {operador.nombre} {fecha}",
+                              objeto=operador, cambios={'turno': [codigo_previo, None]})
                 return Response(
                     {'status': 'success', 'mensaje': 'Turno limpiado correctamente.'},
                     status=status.HTTP_200_OK,
@@ -207,6 +223,9 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
                     fecha=fecha,
                     defaults={'tipo_turno': tipo_turno},
                 )
+                if codigo_previo != tipo_turno.codigo:
+                    registrar(request, 'ROSTER', 'CREAR' if created else 'EDITAR', f"Turno {tipo_turno.codigo}: {operador.nombre} {fecha}",
+                              objeto=turno_obj, cambios={'turno': [codigo_previo, tipo_turno.codigo]})
 
             serializer = self.get_serializer(turno_obj)
             return Response(
@@ -357,6 +376,10 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        registrar(request, 'ROSTER', 'CARGA_MASIVA',
+                  f"Carga masiva de la secuencia {secuencia} a {len(operadores)} colaborador(es), {fecha_inicio} a {fecha_fin}",
+                  objeto=secuencia, cambios={'operadores': [None, [o.nombre for o in operadores]],
+                                             'estrategia': [None, estrategia], 'registros': [None, registros_creados]})
         return Response(
             {
                 'status': 'success',
@@ -367,10 +390,11 @@ class TurnoDiaViewSet(viewsets.ModelViewSet):
         )
 
 
-class IncidenciaTurnoViewSet(viewsets.ModelViewSet):
+class IncidenciaTurnoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     """
     ViewSet exclusivo para gestionar las incidencias y notas operacionales asociadas a un Turno.
     """
+    auditoria_categoria, auditoria_nombre = 'ROSTER', 'incidencia'
     queryset = IncidenciaTurno.objects.all().select_related('turno_dia__operador')
     serializer_class = IncidenciaTurnoSerializer
     permiso_escritura = 'gestionar_roster'
@@ -428,6 +452,11 @@ class MoverColaboradoresAPIView(APIView):
                         'nombre': operador.nombre,
                         'nueva_cuadrilla': cuadrilla_destino.nombre,
                     })
+
+                registrar(request, 'ROSTER', 'MOVER_CUADRILLA',
+                          f"{len(updated_operators)} colaborador(es) movidos de {cuadrilla_origen.nombre} a {cuadrilla_destino.nombre}",
+                          objeto=cuadrilla_destino, cambios={'cuadrilla': [cuadrilla_origen.nombre, cuadrilla_destino.nombre],
+                                                             'operadores': [None, [o['nombre'] for o in updated_operators]]})
 
             return Response(
                 {

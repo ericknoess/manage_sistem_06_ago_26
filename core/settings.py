@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'actividades',  # <-- NUEVA APLICACIÓN REGISTRADA
     'procesos',
     'usuarios',
+    'auditoria',
 ]
 
 MIDDLEWARE = [

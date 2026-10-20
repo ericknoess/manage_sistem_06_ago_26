@@ -100,7 +100,10 @@ async function renderizarDetalleLote() {
     let headerBadge = loteSeleccionado.estado === 'PLANEADO' ? 'status-planeado' : (loteSeleccionado.estado === 'COMPLETADO' ? 'status-completado' : 'status-progreso');
     headerTitle.innerHTML = `
         <span>⚡ eBR - Lote: <strong style="color: var(--text);">${loteSeleccionado.identificador_lote}</strong></span>
-        <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
+        <span class="encabezado-lote-acciones">
+            <button class="btn-secondary btn-historial" onclick="abrirHistorialLote()" title="Quién hizo qué con este lote">📜 Historial</button>
+            <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
+        </span>
     `;
 
     let fechaPlaneadaTxt = loteSeleccionado.fecha_inicio_planeada ? new Date(loteSeleccionado.fecha_inicio_planeada).toLocaleString() : '-';
@@ -425,3 +428,23 @@ async function ejecutarReprogramacionAPI() {
 }
 
 cargarCatalogos();
+
+
+// --- Historial del lote (bitácora de auditoría) ---
+async function abrirHistorialLote() {
+    if (!loteSeleccionado) return;
+    document.getElementById('tituloHistorialLote').textContent = `📜 Historial del lote ${loteSeleccionado.identificador_lote}`;
+    const contenedor = document.getElementById('contenidoHistorialLote');
+    contenedor.innerHTML = '<div class="aud-vacio">Cargando…</div>';
+    document.getElementById('modalHistorialLote').style.display = 'flex';
+    try {
+        const datos = await cargarHistorialAuditoria({ lote: loteSeleccionado.id, limite: 500 });
+        renderizarHistorialAuditoria(contenedor, datos.resultados, { vacio: 'Este lote todavía no tiene movimientos registrados (la bitácora empezó con la fase 2 de usuarios).' });
+    } catch (e) {
+        contenedor.innerHTML = `<div class="aud-vacio">${e.message}</div>`;
+    }
+}
+
+function cerrarHistorialLote() {
+    document.getElementById('modalHistorialLote').style.display = 'none';
+}

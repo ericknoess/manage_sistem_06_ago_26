@@ -15,7 +15,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Servidor: `python manage.py runserver`
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
 - Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow); el `venv/` del proyecto no tiene Pillow
-- Pruebas: `python manage.py test usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
+- Pruebas: `python manage.py test auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
@@ -40,7 +40,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   `permiso_escritura` o `permisos_por_accion`; un ViewSet nuevo sin esa declaración queda de solo lectura.
   `/api/sesion/` da usuario, roles y permisos; `static/core/js/sesion.js` (incluido en el `<head>` de cada pantalla) pinta el usuario,
   agrega el CSRF a `fetch` y oculta todo elemento con `data-permiso="codigo"` que el rol no tenga.
-- Pantallas: /login/, / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
+- `auditoria/`: bitácora GxP (`RegistroAuditoria`): quién (usuario u operador con PIN), qué, cuándo, IP, motivo y
+  `cambios` {campo: [antes, después]}. Solo se agrega: el modelo impide editar/borrar y la API es de solo lectura.
+  Se escribe con `auditoria.services.registrar(request, categoria, accion, descripcion, ...)` en cada acción especial y,
+  para altas/cambios/bajas de ViewSets, con `AuditoriaMixin` (`auditoria_categoria`, `auditoria_nombre`). Nunca guarda PIN ni contraseñas.
+  Pantalla /auditoria/; historial por lote (Piso de planta) y por fase (Planificación) con `static/core/js/auditoria.js`.
+- Pantallas: /login/, /auditoria/ (bitácora), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales)
 
 ## Convenciones
@@ -50,6 +55,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Frontend sin frameworks: JS puro + Tailwind. CSS y JS en `static/<app>/{css,js}/<pantalla>.*`, nunca inline; lo compartido en `static/core/`.
 - Toda pantalla nueva debe incluir el enlace `.btn-inicio` hacia `{% url 'inicio' %}` y `core/css/sesion.css` + `core/js/sesion.js` en el `<head>`.
 - Todo botón que modifique datos lleva `data-permiso="<permiso>"`, y su endpoint declara ese mismo permiso.
+- Toda acción que modifique datos queda en la bitácora: ViewSet con `AuditoriaMixin` o `registrar(...)` en el `@action`.
 
 ## Reglas
 - Trazabilidad GxP: preferir baja lógica (`activo=False`, `archivado`) sobre borrado físico.

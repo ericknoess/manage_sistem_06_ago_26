@@ -428,6 +428,11 @@ function renderPanelDetalle(faseId) {
                 ${materialesHtml}
                 ${materialesEditables ? '<div id="buscadorMaterialFase" class="buscador-material-fase" data-permiso="ajustar_material_lote"></div>' : ''}
             </div>
+
+            <details class="resource-section historial-fase" ontoggle="if (this.open) cargarHistorialFase(${fase.id})">
+                <summary class="resource-title">📜 HISTORIAL DE LA FASE</summary>
+                <div id="historialFase" class="historial-fase__contenido"><div class="aud-vacio">Cargando…</div></div>
+            </details>
         </div>
     `;
 
@@ -663,3 +668,16 @@ async function removerAsignacionOperador(asigId) {
 
 actualizarMecanismoTiempo();
 cargarDatosPlanificacion();
+
+
+// --- Historial de la fase (bitácora de auditoría): se carga al abrir la sección ---
+async function cargarHistorialFase(faseId) {
+    const contenedor = document.getElementById('historialFase');
+    if (!contenedor) return;
+    try {
+        const datos = await cargarHistorialAuditoria({ fase: faseId, limite: 50 });
+        renderizarHistorialAuditoria(contenedor, datos.resultados, { vacio: 'Sin cambios registrados en esta fase.' });
+    } catch (e) {
+        contenedor.innerHTML = `<div class="aud-vacio">${e.message}</div>`;
+    }
+}

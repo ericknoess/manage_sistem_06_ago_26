@@ -214,3 +214,11 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 }
 .badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
 .badge-headcount { font-size: 0.62rem; color: #94a3b8; }
+
+/* Historial de la fase (bitácora de auditoría) */
+.historial-fase summary { cursor: pointer; list-style: none; }
+.historial-fase summary::-webkit-details-marker { display: none; }
+.historial-fase summary::after { content: ' ▸'; }
+.historial-fase[open] summary::after { content: ' ▾'; }
+.historial-fase__contenido { margin-top: 0.4rem; max-height: 260px; overflow-y: auto; }
+.historial-fase .aud-evento { font-size: 0.68rem; padding: 0.4rem 0.5rem; }
