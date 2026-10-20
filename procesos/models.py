@@ -277,6 +277,8 @@ class MaterialFase(models.Model):
     fase = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='materiales')
     material = models.ForeignKey(MaterialInsumo, on_delete=models.PROTECT, related_name='requerimientos_lote')
     cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    # Copia de la unidad del catálogo al crear el registro: cambiarla después en el catálogo no altera el lote
+    unidad_medida = models.CharField(max_length=10)
     cantidad_receta = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, help_text="Cantidad original de la receta; vacía si se agregó en el lote")
     anticipacion_horas = models.FloatField(default=0)
     activo = models.BooleanField(default=True)

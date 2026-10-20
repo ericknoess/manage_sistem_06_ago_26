@@ -215,12 +215,14 @@ function tarjetaRequerimiento(r) {
 }
 
 function renderizarTotales(filas) {
+    // Clave material + unidad: si la unidad cambió en el catálogo, los lotes anteriores conservan la suya
     const porMaterial = new Map();
     filas.forEach(r => {
-        if (!porMaterial.has(r.material)) {
-            porMaterial.set(r.material, { ...r, total: 0, eventos: 0, porDia: new Map() });
+        const clave = `${r.material}|${r.unidad_medida}`;
+        if (!porMaterial.has(clave)) {
+            porMaterial.set(clave, { ...r, total: 0, eventos: 0, porDia: new Map() });
         }
-        const t = porMaterial.get(r.material);
+        const t = porMaterial.get(clave);
         t.total += Number(r.cantidad);
         t.eventos += 1;
         const dia = claveDia(new Date(r.momento_requerido));

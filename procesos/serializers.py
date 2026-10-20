@@ -177,7 +177,6 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
 
 class MaterialFaseSerializer(serializers.ModelSerializer):
     material_nombre = serializers.CharField(source='material.nombre', read_only=True)
-    unidad_medida = serializers.CharField(source='material.unidad_medida', read_only=True)
     categoria = serializers.CharField(source='material.categoria', read_only=True)
     condicion_almacenamiento = serializers.CharField(source='material.condicion_almacenamiento', read_only=True)
     momento_requerido = serializers.DateTimeField(read_only=True)

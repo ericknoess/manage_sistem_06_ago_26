@@ -376,7 +376,7 @@ def generar_materiales_lote(lote):
     a la fase principal y los marcados `MUESTREO` a cada subtarea de muestreo.
     """
     por_operacion = {}
-    for mo in MaterialOperacion.objects.filter(operacion__proceso=lote.proceso_maestro_id):
+    for mo in MaterialOperacion.objects.filter(operacion__proceso=lote.proceso_maestro_id).select_related('material'):
         por_operacion.setdefault(mo.operacion_id, []).append(mo)
 
     nuevos = []
@@ -385,7 +385,7 @@ def generar_materiales_lote(lote):
         for mo in por_operacion.get(fase.operacion_maestra_id, []):
             if mo.aplica_a == aplica:
                 nuevos.append(MaterialFase(
-                    fase=fase, material_id=mo.material_id, cantidad=mo.cantidad,
+                    fase=fase, material_id=mo.material_id, cantidad=mo.cantidad, unidad_medida=mo.material.unidad_medida,
                     cantidad_receta=mo.cantidad, anticipacion_horas=mo.anticipacion_horas,
                 ))
     MaterialFase.objects.bulk_create(nuevos)
@@ -437,9 +437,12 @@ def agregar_material_fase(fase, material, cantidad, anticipacion_horas, motivo):
     if existente and existente.activo:
         raise ErrorMaterialFase(f"[{material.id}] ya está en la fase; ajuste su cantidad en lugar de agregarlo.")
     if existente:
+        # Al reactivarlo, la nueva cantidad se captura en la unidad vigente del catálogo
+        existente.unidad_medida = material.unidad_medida
         return ajustar_material_fase(existente, cantidad, anticipacion_horas, motivo)
     return MaterialFase.objects.create(
-        fase=fase, material=material, cantidad=cantidad, anticipacion_horas=anticipacion_horas or 0,
+        fase=fase, material=material, cantidad=cantidad, unidad_medida=material.unidad_medida,
+        anticipacion_horas=anticipacion_horas or 0,
         motivo_ajuste=motivo, ajustado_en=timezone.now(),
     )
 

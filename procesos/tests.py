@@ -225,6 +225,16 @@ class MaterialesTests(TestCase):
         MaterialOperacion.objects.filter(operacion=self.t1).update(cantidad=Decimal('50'))
         self.assertEqual(self.material_t1(lote).cantidad, Decimal('2'))
 
+    def test_cambiar_unidad_en_catalogo_no_altera_lotes_existentes(self):
+        lote = self.crear_lote()
+        self.client.patch('/api/materiales/MAT-01/', {'unidad_medida': 'mL'}, format='json')
+        mf = self.material_t1(lote)
+        self.assertEqual(mf.unidad_medida, 'L')
+        self.assertEqual(self.client.get(f'/api/materiales-fase/{mf.id}/').data['unidad_medida'], 'L')
+
+        nuevo = self.crear_lote('L-M2')
+        self.assertEqual(self.material_t1(nuevo).unidad_medida, 'mL')
+
     # --- Monitor por día y hora -----------------------------------------------
 
     def test_requerimiento_se_adelanta_por_la_anticipacion(self):
