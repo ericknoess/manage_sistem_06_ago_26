@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 from actividades.models import MaterialInsumo
 from roster.models import Cuadrilla, Operador, RolOperador
 from .models import (
-    ProcesoMaestro, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
+    ProcesoMaestro, EtapaProceso, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
     MaterialOperacion, MaterialFase,
 )
 
@@ -170,6 +170,16 @@ class ProgramacionFasesTests(TestCase):
         self.assertEqual(datos['hora_inicio_programada'], '10:00:00')
         self.assertEqual(datos['hora_fin_programada'], '10:00:00')
         self.assertEqual(datos['duracion_estimada'], 72.0)
+
+
+    def test_api_expone_etapa_id_para_agrupar_en_gantt(self):
+        etapa = EtapaProceso.objects.create(proceso=self.proceso, nombre='PO1', orden=1)
+        OperacionProceso.objects.filter(pk=self.t2.pk).update(etapa=etapa)
+        lote = self.crear_lote()
+        con_etapa = self.client.get(f'/api/fases-lote/{self.fase(lote, self.t2).id}/').data
+        sin_etapa = self.client.get(f'/api/fases-lote/{self.fase(lote, self.t1).id}/').data
+        self.assertEqual((con_etapa['etapa_id'], con_etapa['etapa_nombre']), (etapa.id, 'PO1'))
+        self.assertIsNone(sin_etapa['etapa_id'])
 
 
 class MaterialesTests(TestCase):

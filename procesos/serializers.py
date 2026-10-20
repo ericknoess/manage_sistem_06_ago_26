@@ -226,6 +226,8 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     
     etapa_nombre = serializers.CharField(source='operacion_maestra.etapa.nombre', read_only=True, default='Actividades Sueltas (Sin Etapa)')
     etapa_orden = serializers.IntegerField(source='operacion_maestra.etapa.orden', read_only=True, default=999999)
+    # null cuando la actividad no tiene etapa en la receta (el Gantt lo usa para agrupar)
+    etapa_id = serializers.IntegerField(source='operacion_maestra.etapa_id', read_only=True)
     
     lote_codigo = serializers.CharField(source='lote.identificador_lote', read_only=True)
     personal_requerido = serializers.IntegerField(source='operacion_maestra.personal_requerido', read_only=True)
@@ -250,7 +252,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'lote', 'lote_codigo', 'operacion_maestra', 'operacion_nombre', 'operacion_id_paso',
             'tipo_operacion', # <-- Añadido explícitamente a los fields
-            'etapa_nombre', 'etapa_orden',
+            'etapa_id', 'etapa_nombre', 'etapa_orden',
             'estado', 
             'inicio_programado', 'fin_programado', 'inicio_base_cpm', 'fin_base_cpm',
             'fecha_programada', 'hora_inicio_programada', 'hora_fin_programada',

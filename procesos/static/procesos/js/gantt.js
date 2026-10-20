@@ -21,14 +21,24 @@ async function initGantt() {
 function procesarYRenderizar(lotes) {
     const lotesProcesados = lotes.map(lote => {
         const etapasDict = {};
+        // Si la receta no tiene ninguna etapa, cada actividad es una fila; si solo faltan algunas, van juntas al final.
+        const sinEtapas = lote.fases.length > 0 && !lote.fases.some(f => f.etapa_id);
 
         lote.fases.forEach(f => {
-            const eNombre = f.etapa_nombre || 'Sin Etapa';
-            const eOrden = f.etapa_orden || 999;
-            if (!etapasDict[eNombre]) {
-                etapasDict[eNombre] = { nombre: eNombre, orden: eOrden, fases: [] };
+            let clave, nombre, orden, tipo;
+            if (f.etapa_id) {
+                clave = `e${f.etapa_id}`; nombre = f.etapa_nombre; orden = f.etapa_orden; tipo = 'etapa';
+            } else if (sinEtapas) {
+                // Los muestreos se suman a la barra de su actividad
+                clave = `o${f.operacion_maestra}`; nombre = f.operacion_nombre; orden = 0; tipo = 'actividad';
+            } else {
+                clave = 'sin-etapa'; nombre = 'Sin etapa asignada'; orden = Number.MAX_SAFE_INTEGER; tipo = 'sin-etapa';
             }
-            etapasDict[eNombre].fases.push(f);
+            if (!etapasDict[clave]) {
+                etapasDict[clave] = { nombre, orden, tipo, fases: [] };
+            }
+            if (tipo === 'actividad' && !f.es_subtarea_muestreo) etapasDict[clave].nombre = f.operacion_nombre;
+            etapasDict[clave].fases.push(f);
         });
 
         const etapasArray = Object.values(etapasDict).map(etapa => {
@@ -64,8 +74,10 @@ function procesarYRenderizar(lotes) {
             return { ...etapa, baseStart, baseEnd, progStart, progEnd, delayHours };
         });
 
-        etapasArray.sort((a, b) => a.orden - b.orden);
-        return { ...lote, etapasSummary: etapasArray };
+        // Mismo orden de etapa (o filas por actividad): primero lo que empieza antes
+        const inicio = e => (e.baseStart || e.progStart || new Date(8.64e15)).getTime();
+        etapasArray.sort((a, b) => (a.orden - b.orden) || (inicio(a) - inicio(b)));
+        return { ...lote, sinEtapas, etapasSummary: etapasArray };
     });
 
     if (!globalMinDate) globalMinDate = new Date();
@@ -116,11 +128,15 @@ function procesarYRenderizar(lotes) {
 
     lotesProcesados.forEach(lote => {
         let badgeLote = lote.estado === 'COMPLETADO' ? 'success' : 'info';
-        sidebarHtml += `<div class="lote-group-header">📦 ${lote.identificador_lote} <span style="font-size:0.6rem; color:var(--${badgeLote}); border:1px solid; border-radius:3px; padding:1px 3px; float:right;">${lote.estado}</span></div>`;
+        const avisoSinEtapas = lote.sinEtapas
+            ? ` <span class="aviso-sin-etapas" title="La receta no tiene etapas ISA-88: se muestra una fila por actividad. Defínelas en el Diseñador de procesos.">⚠️</span>`
+            : '';
+        sidebarHtml += `<div class="lote-group-header">📦 ${lote.identificador_lote}${avisoSinEtapas} <span style="font-size:0.6rem; color:var(--${badgeLote}); border:1px solid; border-radius:3px; padding:1px 3px; float:right;">${lote.estado}</span></div>`;
         rowsHtml += `<div class="lote-row-spacer"></div>`;
 
         lote.etapasSummary.forEach(etapa => {
-            sidebarHtml += `<div class="etapa-label" title="${etapa.nombre}">📁 ${etapa.nombre}</div>`;
+            const icono = { etapa: '📁', actividad: '▸', 'sin-etapa': '⚠️' }[etapa.tipo];
+            sidebarHtml += `<div class="etapa-label etapa-label--${etapa.tipo}" title="${etapa.nombre}">${icono} ${etapa.nombre}</div>`;
 
             let barsHtml = '';
             const getStyle = (startD, endD) => {
