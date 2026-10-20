@@ -47,10 +47,10 @@ class MaterialInsumoViewSet(viewsets.ModelViewSet):
         })
 
 
-class ActividadSemanalViewSet(viewsets.ModelViewSet):
+class ActividadSemanalViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API endpoint para la planificación, asignación de múltiples operadores 
-    y recursos en el tablero semanal de bioprocesos Upstream.
+    Histórico del tablero semanal retirado, solo lectura.
+    La asignación de operadores y materiales se hace en Planificación (FaseLote).
     """
     # Usamos prefetch_related para optimizar las consultas Many-to-Many y evitar errores de campos obsoletos
     queryset = ActividadSemanal.objects.prefetch_related(

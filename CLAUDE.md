@@ -23,7 +23,8 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - `templates/inicio.html` + `static/core/`: página central y recursos compartidos (base.css, utils.js)
 - `roster/`: cuadrillas, operadores, roles, tipos de turno, turnos diarios, incidencias,
   secuencias de rotación y carga masiva (`roster/services.py`)
-- `actividades/`: catálogos de Equipos y Materiales, tablero semanal (legado)
+- `actividades/`: catálogos de Equipos y Materiales. `ActividadSemanal` es el histórico del
+  tablero semanal retirado (solo lectura; `/tablero/` redirige a Planificación, único lugar para asignar personal)
 - `procesos/`: ProcesoMaestro → EtapaProceso → OperacionProceso; lotes, fases y asignaciones.
   Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
   Los horarios de `FaseLote` son fecha-hora completas (`inicio_programado`/`fin_programado`, `inicio_base_cpm`/`fin_base_cpm`);

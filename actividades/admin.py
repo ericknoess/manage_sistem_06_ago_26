@@ -23,6 +23,16 @@ class ActividadSemanalAdmin(admin.ModelAdmin):
     filter_horizontal = ('operadores_asignados', 'equipos', 'materiales')
     date_hierarchy = 'fecha'
 
+    # Tablero retirado: se conserva como histórico GxP, sin altas, cambios ni borrado.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     def get_operadores(self, obj):
         return ", ".join([op.nombre for op in obj.operadores_asignados.all()])
     get_operadores.short_description = 'Operadores Asignados'

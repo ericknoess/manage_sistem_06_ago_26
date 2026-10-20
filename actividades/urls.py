@@ -1,7 +1,7 @@
 # actividades/urls.py
 
 from django.urls import path, include
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 from rest_framework.routers import DefaultRouter
 from .views import EquipoViewSet, MaterialInsumoViewSet, ActividadSemanalViewSet
 
@@ -15,11 +15,9 @@ urlpatterns = [
     # Endpoints REST expuestos bajo /api/
     path('api/', include(router.urls)),
     
-    # Vista HTML del Tablero Operativo Semanal
-    # Usamos TemplateView para renderizar directamente el template, 
-    # asumiendo que tu archivo se encuentra en 'actividades/index.html'
     # Catálogo maestro de materiales (alta, edición, búsqueda y baja lógica)
     path('materiales/catalogo/', TemplateView.as_view(template_name='actividades/catalogo_materiales.html'), name='catalogo-materiales'),
 
-    path('tablero/', TemplateView.as_view(template_name='actividades/index.html'), name='tablero-semanal'),
+    # Tablero semanal retirado: la asignación se hace solo en Planificación. Se redirige para no romper marcadores.
+    path('tablero/', RedirectView.as_view(pattern_name='planificacion-semanal', permanent=False)),
 ]
