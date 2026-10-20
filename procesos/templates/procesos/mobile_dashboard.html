@@ -67,6 +67,26 @@
 
     </div>
 
+    <!-- Firma electrónica con PIN (21 CFR Part 11) al iniciar o completar una tarea -->
+    <div class="firma-pin-fondo" id="modalFirmaPin" hidden>
+        <form class="firma-pin" id="formFirmaPin" autocomplete="off">
+            <div class="firma-pin__titulo">✍️ Firma electrónica</div>
+            <div class="firma-pin__tarea" id="firmaPinTarea"></div>
+            <div class="firma-pin__significado"><span>Significado de tu firma</span><strong id="firmaPinSignificado"></strong></div>
+            <div class="firma-pin__firmante">Firmas como <strong id="firmaPinFirmante"></strong></div>
+            <label class="input-group">
+                <span>Confirma con tu PIN</span>
+                <input type="password" id="firmaPinInput" class="input-gxp" required pattern="[0-9]*" inputmode="numeric" placeholder="••••">
+            </label>
+            <div class="firma-pin__error" id="firmaPinError" hidden></div>
+            <p class="firma-pin__legal">Tu firma electrónica equivale a tu firma autógrafa y queda registrada con tu nombre, fecha y hora.</p>
+            <div class="firma-pin__botones">
+                <button type="button" class="btn-massive btn-secundario-pin" onclick="cerrarFirmaPin()">Cancelar</button>
+                <button type="submit" class="btn-massive btn-primary" id="firmaPinBoton">Firmar</button>
+            </div>
+        </form>
+    </div>
+
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'procesos/js/mobile_dashboard.js' %}"></script>
 </body>

@@ -4,7 +4,7 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 
-from .models import RegistroAuditoria
+from .models import FirmaElectronica, RegistroAuditoria
 
 # Nunca se guardan en la bitácora
 CAMPOS_SECRETOS = ('password', 'pin', 'token')
@@ -88,4 +88,13 @@ def registrar(request, categoria, accion, descripcion, *, objeto=None, objeto_ti
         objeto_tipo=objeto_tipo, objeto_id=str(objeto_id),
         lote=lote, lote_codigo=lote.identificador_lote if lote else lote_codigo, fase=fase,
         motivo=motivo or '', cambios=_valor_simple(cambios or {}),
+    )
+
+
+def firmar(registro, firmante):
+    """Liga la firma electrónica (de usuarios.firmas.verificar_firma) al registro de la bitácora."""
+    return FirmaElectronica.objects.create(
+        registro=registro, usuario=firmante['usuario'], operador=firmante['operador'],
+        nombre_firmante=firmante['nombre'][:150], significado=firmante['significado'][:200],
+        metodo=firmante['metodo'], comentario=firmante.get('comentario', ''),
     )

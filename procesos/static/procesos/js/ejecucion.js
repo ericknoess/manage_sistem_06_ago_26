@@ -302,22 +302,32 @@ async function crearLoteAPI() {
     } catch (err) { alert("Error de red."); }
 }
 
+function codigoLote(loteId) {
+    const lote = lotesGlobales.find(l => l.id === loteId);
+    return lote ? `Lote ${lote.identificador_lote}` : '';
+}
+
+// Las acciones críticas piden firma electrónica (static/core/js/firma.js)
 async function eliminarLoteAPI(loteId, event) {
     event.stopPropagation();
-    if (!confirm("⚠️ ¿Desea eliminar este Lote planificado?")) return;
-    try {
-        const res = await fetch(`/api/lotes/${loteId}/`, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
-        if (res.ok || res.status === 204) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
-    } catch (err) { alert("Error de red."); }
+    const r = await ejecutarConFirma({
+        accion: 'ELIMINAR_LOTE', titulo: '🗑️ Eliminar lote planeado', detalle: codigoLote(loteId),
+        url: `/api/lotes/${loteId}/`, metodo: 'DELETE',
+    });
+    if (!r) return;
+    if (r.ok) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
+    else alert(r.data.error || r.data.detail || 'No se pudo eliminar el lote.');
 }
 
 async function archivarLoteAPI(loteId, event) {
     event.stopPropagation();
-    if (!confirm("📦 ¿Desea archivar este Lote completado?")) return;
-    try {
-        const res = await fetch(`/api/lotes/${loteId}/archivar/`, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
-        if (res.ok) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
-    } catch (err) { alert("Error de red."); }
+    const r = await ejecutarConFirma({
+        accion: 'ARCHIVAR_LOTE', titulo: '📦 Archivar lote completado', detalle: codigoLote(loteId),
+        url: `/api/lotes/${loteId}/archivar/`,
+    });
+    if (!r) return;
+    if (r.ok) { limpiarSeleccionSiCorresponde(loteId); await cargarCatalogos(); }
+    else alert(r.data.error || r.data.detail || 'No se pudo archivar el lote.');
 }
 
 function abrirModalAbortar(loteId, event) {
@@ -331,14 +341,14 @@ async function ejecutarAbortarAPI() {
     const loteId = document.getElementById('abortarLoteId').value;
     const motivo = document.getElementById('textareaMotivoAborto').value.trim();
     if (motivo.length < 10) return alert("Violación GxP: El motivo debe contener al menos 10 caracteres.");
-    try {
-        const res = await fetch(`/api/lotes/${loteId}/abortar/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ motivo_aborto: motivo })
-        });
-        if (res.ok) { document.getElementById('modalAbortarLote').style.display = 'none'; limpiarSeleccionSiCorresponde(parseInt(loteId)); await cargarCatalogos(); }
-    } catch (err) { alert("Error de red."); }
+    document.getElementById('modalAbortarLote').style.display = 'none';
+    const r = await ejecutarConFirma({
+        accion: 'ABORTAR_LOTE', titulo: '🛑 Abortar lote de producción', detalle: `${codigoLote(parseInt(loteId))} · Motivo: ${motivo}`,
+        url: `/api/lotes/${loteId}/abortar/`, cuerpo: { motivo_aborto: motivo },
+    });
+    if (!r) { document.getElementById('modalAbortarLote').style.display = 'flex'; return; }
+    if (r.ok) { limpiarSeleccionSiCorresponde(parseInt(loteId)); await cargarCatalogos(); }
+    else alert(r.data.error || r.data.detail || 'No se pudo abortar el lote.');
 }
 
 function limpiarSeleccionSiCorresponde(loteId) {
@@ -352,15 +362,18 @@ function limpiarSeleccionSiCorresponde(loteId) {
 async function cambiarEstadoFase(faseId, estadoActual) {
     let siguienteEstado = estadoActual === 'PENDIENTE' ? 'EN_PROGRESO' : (estadoActual === 'EN_PROGRESO' ? 'COMPLETADA' : null);
     if (!siguienteEstado) return;
-    if (!confirm(`¿Forzar estado a [${siguienteEstado}]?`)) return;
-    try {
-        const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ estado: siguienteEstado })
-        });
-        if (res.ok) await cargarCatalogos();
-    } catch (err) { alert("Error de red."); }
+    const fase = loteSeleccionado ? loteSeleccionado.fases.find(f => f.id === faseId) : null;
+    const r = await ejecutarConFirma({
+        accion: `FASE_${siguienteEstado}`,
+        titulo: siguienteEstado === 'EN_PROGRESO' ? '▶ Iniciar fase' : '✔ Completar fase',
+        detalle: fase ? `[${fase.operacion_id_paso}] ${fase.operacion_nombre} · ${codigoLote(loteSeleccionado.id)}` : '',
+        url: `/api/fases-lote/${faseId}/cambiar-estado/`, cuerpo: { estado: siguienteEstado },
+    });
+    if (!r) return;
+    if (r.ok) {
+        if (r.data.mensaje_cascada) alert(r.data.mensaje_cascada);
+        await cargarCatalogos();
+    } else alert(r.data.error || r.data.detail || 'No se pudo cambiar el estado.');
 }
 
 async function abrirModalAsignacion(faseId) {

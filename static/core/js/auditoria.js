@@ -44,6 +44,15 @@ function formatearCambiosAuditoria(cambios) {
     return filas.length ? `<ul class="aud-cambios">${filas.join('')}</ul>` : '';
 }
 
+// Manifestación de la firma electrónica: nombre, significado, fecha y método (21 CFR Part 11)
+function formatearFirmaAuditoria(firma, motivo = '') {
+    if (!firma) return '';
+    const comentario = firma.comentario && firma.comentario !== motivo ? firma.comentario : '';
+    return `<div class="aud-firma" title="Firma electrónica">✍️ Firmado por <strong>${escaparAuditoria(firma.nombre_firmante)}</strong>
+        · «${escaparAuditoria(firma.significado)}» · ${fechaAuditoria(firma.fecha)} · ${escaparAuditoria(firma.metodo_display)}
+        ${comentario ? `<div class="aud-firma__comentario">${escaparAuditoria(comentario)}</div>` : ''}</div>`;
+}
+
 function fechaAuditoria(iso) {
     return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 }
@@ -65,6 +74,7 @@ function renderizarHistorialAuditoria(contenedor, registros, { vacio = 'Sin movi
             </div>
             ${r.motivo ? `<div class="aud-motivo">Motivo: ${escaparAuditoria(r.motivo)}</div>` : ''}
             ${formatearCambiosAuditoria(r.cambios)}
+            ${formatearFirmaAuditoria(r.firma, r.motivo)}
         </li>`).join('')}</ol>`;
 }
 

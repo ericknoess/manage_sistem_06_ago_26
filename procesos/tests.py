@@ -107,7 +107,7 @@ class ProgramacionFasesTests(TestCase):
         t1 = self.fase(lote, self.t1)
         AsignacionFaseOperador.objects.create(fase_lote=t1, operador=self.operador, rol_ejercido=self.rol)
         for estado in ('EN_PROGRESO', 'COMPLETADA'):
-            respuesta = self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': estado}, format='json')
+            respuesta = self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': estado, 'firma_password': 'clave-de-prueba'}, format='json')
             self.assertEqual(respuesta.status_code, 200, respuesta.data)
 
         t1.refresh_from_db()
@@ -134,7 +134,7 @@ class ProgramacionFasesTests(TestCase):
         lote = self.crear_lote()
         t1 = self.fase(lote, self.t1)
         asignacion = AsignacionFaseOperador.objects.create(fase_lote=t1, operador=self.operador, rol_ejercido=self.rol)
-        self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': 'EN_PROGRESO'}, format='json')
+        self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_password': 'clave-de-prueba'}, format='json')
 
         respuesta = self.client.delete(f'/api/asignaciones-operador/{asignacion.id}/')
         self.assertEqual(respuesta.status_code, 403)
@@ -284,7 +284,7 @@ class MaterialesTests(TestCase):
         self.assertEqual(self.requerimientos('2026-11-01', '2026-11-01'), [])
 
         otro = self.crear_lote('L-M2')
-        self.client.post(f'/api/lotes/{otro.id}/abortar/', {'motivo_aborto': 'Contaminación del inóculo'}, format='json')
+        self.client.post(f'/api/lotes/{otro.id}/abortar/', {'motivo_aborto': 'Contaminación del inóculo', 'firma_password': 'clave-de-prueba'}, format='json')
         lotes = {f['lote_codigo'] for f in self.requerimientos('2026-11-01', '2026-11-03')}
         self.assertEqual(lotes, {'L-M1'})
 

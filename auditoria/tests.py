@@ -56,7 +56,7 @@ class BitacoraTests(TestCase):
 
     def test_abortar_guarda_motivo_y_estado(self):
         lote, _ = self.crear_lote()
-        self.jefa.post(f'/api/lotes/{lote.id}/abortar/', {'motivo_aborto': 'Contaminación en el inóculo'}, format='json')
+        self.jefa.post(f'/api/lotes/{lote.id}/abortar/', {'motivo_aborto': 'Contaminación en el inóculo', 'firma_password': 'clave-de-prueba'}, format='json')
         registro = self.ultimo(accion='ABORTAR')
         self.assertEqual((registro.actor, registro.motivo), ('Laura', 'Contaminación en el inóculo'))
         self.assertEqual(registro.cambios['estado'], ['PLANEADO', 'ABORTADO'])
@@ -87,7 +87,7 @@ class BitacoraTests(TestCase):
         self.jefa.post('/api/asignaciones-operador/', {'fase_lote': fase.id, 'operador': self.operador.id, 'rol_ejercido': self.rol.id}, format='json')
         movil = APIClient()
         movil.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
-        movil.post(f'/api/fases-lote/{fase.id}/cambiar-estado/', {'estado': 'EN_PROGRESO'}, format='json')
+        movil.post(f'/api/fases-lote/{fase.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json')
         registro = self.ultimo(accion='FASE_EN_PROGRESO')
         self.assertEqual((registro.operador, registro.usuario), (self.operador, None))
         self.assertEqual(registro.actor, 'Ana (OP-1)')

@@ -2,19 +2,29 @@
 
 from rest_framework import serializers
 
-from .models import RegistroAuditoria
+from .models import FirmaElectronica, RegistroAuditoria
+
+
+class FirmaElectronicaSerializer(serializers.ModelSerializer):
+    metodo_display = serializers.CharField(source='get_metodo_display', read_only=True)
+
+    class Meta:
+        model = FirmaElectronica
+        fields = ['fecha', 'nombre_firmante', 'significado', 'metodo', 'metodo_display', 'comentario']
+        read_only_fields = fields
 
 
 class RegistroAuditoriaSerializer(serializers.ModelSerializer):
     categoria_display = serializers.CharField(source='get_categoria_display', read_only=True)
     fase_nombre = serializers.SerializerMethodField()
+    firma = FirmaElectronicaSerializer(read_only=True)
 
     class Meta:
         model = RegistroAuditoria
         fields = [
             'id', 'fecha', 'actor', 'roles', 'usuario', 'operador', 'ip',
             'categoria', 'categoria_display', 'accion', 'descripcion', 'objeto_tipo', 'objeto_id',
-            'lote', 'lote_codigo', 'fase', 'fase_nombre', 'motivo', 'cambios',
+            'lote', 'lote_codigo', 'fase', 'fase_nombre', 'motivo', 'cambios', 'firma',
         ]
         read_only_fields = fields
 

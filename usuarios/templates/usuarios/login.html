@@ -14,7 +14,7 @@
         <p class="login-subtitulo">Ingresa con tu usuario para planear, asignar y dar seguimiento a los lotes.</p>
 
         {% if form.errors %}
-        <div class="login-error" role="alert">Usuario o contraseña incorrectos, o la cuenta está desactivada.</div>
+        <div class="login-error" role="alert">{% for error in form.non_field_errors %}{{ error }}{% empty %}Revisa usuario y contraseña.{% endfor %}</div>
         {% elif next and request.GET.next %}
         <div class="login-aviso">Inicia sesión para continuar. Si estabas trabajando, tu sesión expiró por inactividad.</div>
         {% endif %}

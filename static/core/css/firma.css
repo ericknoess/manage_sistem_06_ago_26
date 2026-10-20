@@ -1,0 +1,71 @@
+/* static/core/css/firma.css — Modal de firma electrónica (ver static/core/js/firma.js) */
+
+.firma-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 2500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(4px);
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+.firma-modal {
+    width: 440px;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border: 1px solid #334155;
+    border-top: 3px solid #38bdf8;
+    border-radius: 10px;
+    background: #1e293b;
+    color: #f8fafc;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+}
+.firma-modal h3 { margin: 0; font-size: 1rem; color: #38bdf8; }
+
+.firma-accion { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.82rem; }
+.firma-accion span { font-size: 0.74rem; color: #94a3b8; }
+
+.firma-significado {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 6px;
+    background: rgba(56, 189, 248, 0.08);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e0f2fe;
+}
+.firma-significado span { display: block; margin-bottom: 0.15rem; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #7dd3fc; }
+
+.firma-firmante { font-size: 0.74rem; color: #94a3b8; }
+.firma-firmante strong { color: #f8fafc; }
+
+.firma-campo { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
+.firma-campo input, .firma-campo textarea {
+    padding: 0.5rem 0.6rem;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-family: inherit;
+    font-size: 0.85rem;
+    resize: vertical;
+}
+.firma-campo input { height: 38px; }
+.firma-campo input:focus, .firma-campo textarea:focus { outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15); }
+
+.firma-error { padding: 0.5rem 0.7rem; border: 1px solid rgba(239, 68, 68, 0.6); border-radius: 6px; background: rgba(239, 68, 68, 0.12); color: #fca5a5; font-size: 0.76rem; }
+.firma-error[hidden] { display: none; }
+.firma-legal { margin: 0; font-size: 0.66rem; line-height: 1.4; color: #64748b; }
+
+.firma-botones { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.firma-botones button { height: 36px; padding: 0 1rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+.firma-cancelar { border: 1px solid #475569; background: transparent; color: #cbd5e1; }
+.firma-firmar { border: none; background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); color: #ffffff; }
+.firma-firmar:disabled { opacity: 0.6; cursor: wait; }

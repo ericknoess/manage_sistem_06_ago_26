@@ -9,6 +9,8 @@ from .services import _ip, registrar
 
 @receiver(user_logged_in)
 def sesion_iniciada(sender, request, user, **kwargs):
+    from usuarios.firmas import reiniciar_intentos_usuario
+    reiniciar_intentos_usuario(user)
     registrar(request, 'SESION', 'LOGIN', f"Inicio de sesión de {user.get_username()}", objeto=user)
 
 
@@ -25,3 +27,9 @@ def sesion_fallida(sender, credentials, request=None, **kwargs):
         actor=usuario[:150] or 'Desconocido', ip=_ip(request), categoria='SESION', accion='LOGIN_FALLIDO',
         descripcion=f"Intento de inicio de sesión fallido para '{usuario}'",
     )
+    # Cuenta los intentos de un usuario existente; al llegar al máximo se bloquea
+    from django.contrib.auth import get_user_model
+    from usuarios.firmas import registrar_fallo_usuario
+    cuenta = get_user_model().objects.filter(username=usuario).first()
+    if cuenta is not None and cuenta.is_active:
+        registrar_fallo_usuario(cuenta, request, 'inicio de sesión')

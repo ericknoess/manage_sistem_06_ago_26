@@ -59,7 +59,7 @@ function renderizar() {
             <td class="col-fecha">${fechaAuditoria(r.fecha)}</td>
             <td><strong>${escaparAuditoria(r.actor)}</strong>${r.roles ? `<div class="sub">${escaparAuditoria(r.roles)}</div>` : ''}${r.ip ? `<div class="sub">IP ${escaparAuditoria(r.ip)}</div>` : ''}</td>
             <td><span class="chip-categoria chip-categoria--${r.categoria.toLowerCase()}">${ICONOS_AUDITORIA[r.categoria] || ''} ${escaparAuditoria(r.categoria_display)}</span></td>
-            <td>${escaparAuditoria(r.descripcion)}<div class="sub codigo">${escaparAuditoria(r.accion)}</div></td>
+            <td>${escaparAuditoria(r.descripcion)}<div class="sub codigo">${escaparAuditoria(r.accion)}</div>${formatearFirmaAuditoria(r.firma, r.motivo)}</td>
             <td class="col-lote">${escaparAuditoria(r.lote_codigo) || '<span class="sin-dato">—</span>'}${r.fase_nombre ? `<div class="sub">${escaparAuditoria(r.fase_nombre)}</div>` : ''}</td>
             <td class="col-motivo">${escaparAuditoria(r.motivo) || '<span class="sin-dato">—</span>'}</td>
             <td>${formatearCambiosAuditoria(r.cambios) || '<span class="sin-dato">—</span>'}</td>
@@ -71,8 +71,9 @@ function exportarCsv() {
     if (!registros.length) return;
     const celda = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const cambiosTexto = c => Object.entries(c || {}).map(([k, [a, d]]) => `${k}: ${valorAuditoria(a)} -> ${valorAuditoria(d)}`).join(' | ');
-    const filas = [['Fecha', 'Quién', 'Roles', 'IP', 'Categoría', 'Acción', 'Descripción', 'Lote', 'Fase', 'Motivo', 'Cambios']]
-        .concat(registros.map(r => [r.fecha, r.actor, r.roles, r.ip, r.categoria_display, r.accion, r.descripcion, r.lote_codigo, r.fase_nombre, r.motivo, cambiosTexto(r.cambios)]));
+    const firmaTexto = f => f ? `${f.nombre_firmante} | ${f.significado} | ${f.fecha} | ${f.metodo_display}${f.comentario ? ' | ' + f.comentario : ''}` : '';
+    const filas = [['Fecha', 'Quién', 'Roles', 'IP', 'Categoría', 'Acción', 'Descripción', 'Lote', 'Fase', 'Motivo', 'Cambios', 'Firma electrónica']]
+        .concat(registros.map(r => [r.fecha, r.actor, r.roles, r.ip, r.categoria_display, r.accion, r.descripcion, r.lote_codigo, r.fase_nombre, r.motivo, cambiosTexto(r.cambios), firmaTexto(r.firma)]));
     const csv = '﻿' + filas.map(f => f.map(celda).join(',')).join('\r\n');
     const enlace = document.createElement('a');
     enlace.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

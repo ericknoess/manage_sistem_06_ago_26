@@ -24,7 +24,7 @@ class RegistroAuditoriaViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RegistroAuditoriaSerializer
 
     def get_queryset(self):
-        qs = RegistroAuditoria.objects.select_related('fase__operacion_maestra')
+        qs = RegistroAuditoria.objects.select_related('fase__operacion_maestra', 'firma')
         p = self.request.query_params
         for campo in ('lote', 'fase', 'categoria', 'accion', 'usuario', 'operador'):
             if p.get(campo):

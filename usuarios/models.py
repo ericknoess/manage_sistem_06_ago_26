@@ -16,6 +16,10 @@ class Perfil(models.Model):
         help_text="Registro del roster de esta persona, si también aparece ahí (supervisores, jefaturas)."
     )
     puesto = models.CharField(max_length=120, blank=True)
+    # Bloqueo por intentos fallidos (login o firma electrónica). Solo un administrador desbloquea.
+    intentos_fallidos = models.PositiveSmallIntegerField(default=0)
+    bloqueado = models.BooleanField(default=False, help_text="Bloqueada por intentos fallidos; desbloquear desde la lista de usuarios.")
+    bloqueado_en = models.DateTimeField(null=True, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 

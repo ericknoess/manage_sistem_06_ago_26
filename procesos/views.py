@@ -12,8 +12,19 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from auditoria.mixins import AuditoriaMixin
-from auditoria.services import diferencias, registrar
+from auditoria.services import diferencias, firmar, registrar
+from usuarios.firmas import (
+    FirmaRechazada, registrar_fallo_pin, reiniciar_intentos_pin, verificar_firma, SIGNIFICADOS,
+)
 from usuarios.permisos import PermisoFaseLote, SOLO_SESION, operador_de_sesion
+
+
+def _firma_o_respuesta(request, accion):
+    """(firmante, None) si la firma es válida; (None, Response de error) si no."""
+    try:
+        return verificar_firma(request, accion), None
+    except FirmaRechazada as e:
+        return None, Response(e.como_respuesta(), status=e.estado_http)
  
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
@@ -229,20 +240,27 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lote = self.get_object()
         if lote.estado != 'PLANEADO':
             return Response({"error": f"Violación GxP (Data Integrity): No se puede eliminar el Lote '{lote.identificador_lote}' porque su estado actual es '{lote.estado}'."}, status=status.HTTP_403_FORBIDDEN)
+        firmante, error = _firma_o_respuesta(request, 'ELIMINAR_LOTE')
+        if error:
+            return error
         codigo, lote_id = lote.identificador_lote, lote.pk
         self.perform_destroy(lote)
-        registrar(request, 'LOTE', 'ELIMINAR', f"Lote planeado {codigo} eliminado", objeto_tipo='loteproduccion',
-                  objeto_id=lote_id, lote_codigo=codigo)
+        registro = registrar(request, 'LOTE', 'ELIMINAR', f"Lote planeado {codigo} eliminado", objeto_tipo='loteproduccion',
+                             objeto_id=lote_id, lote_codigo=codigo, motivo=firmante['comentario'])
+        firmar(registro, firmante)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'], url_path='archivar')
     def archivar(self, request, pk=None):
         lote = self.get_object()
         if lote.estado != 'COMPLETADO': return Response({"error": "Solo se pueden archivar lotes COMPLETADOS."}, status=status.HTTP_400_BAD_REQUEST)
+        firmante, error = _firma_o_respuesta(request, 'ARCHIVAR_LOTE')
+        if error:
+            return error
         lote.archivado = True
         lote.save()
-        registrar(request, 'LOTE', 'ARCHIVAR', f"Lote {lote.identificador_lote} archivado", objeto=lote, lote=lote,
-                  cambios={'archivado': [False, True]})
+        firmar(registrar(request, 'LOTE', 'ARCHIVAR', f"Lote {lote.identificador_lote} archivado", objeto=lote, lote=lote,
+                         motivo=firmante['comentario'], cambios={'archivado': [False, True]}), firmante)
         return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido archivado."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='abortar')
@@ -252,12 +270,15 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         if lote.estado in ['COMPLETADO', 'ABORTADO']: return Response({"error": f"No es posible abortar un lote en estado: {lote.estado}."}, status=status.HTTP_400_BAD_REQUEST)
         motivo = request.data.get('motivo_aborto')
         if not motivo or len(motivo.strip()) < 10: return Response({"error": "Debe proporcionar un motivo detallado (mínimo 10 caracteres)."}, status=status.HTTP_400_BAD_REQUEST)
+        firmante, error = _firma_o_respuesta(request, 'ABORTAR_LOTE')
+        if error:
+            return error
         estado_anterior = lote.estado
         lote.estado = 'ABORTADO'
         lote.motivo_aborto = motivo
         lote.save()
-        registrar(request, 'LOTE', 'ABORTAR', f"Lote {lote.identificador_lote} abortado", objeto=lote, lote=lote,
-                  motivo=motivo, cambios={'estado': [estado_anterior, 'ABORTADO']})
+        firmar(registrar(request, 'LOTE', 'ABORTAR', f"Lote {lote.identificador_lote} abortado", objeto=lote, lote=lote,
+                         motivo=motivo, cambios={'estado': [estado_anterior, 'ABORTADO']}), firmante)
         tiempo_actual = timezone.now()
         fases_activas = lote.fases.exclude(estado__in=['COMPLETADA', 'OMITIDA'])
         for fase in fases_activas:
@@ -301,6 +322,13 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         if nuevo_estado == 'COMPLETADA' and not fase.operadores_asignados.exists():
             if fase.operacion_maestra.tipo_operacion == 'ACTIVA' or fase.es_subtarea_muestreo:
                 return Response({"error": "No se puede completar sin asignar al menos un operador."}, status=status.HTTP_400_BAD_REQUEST)
+        if nuevo_estado == fase.estado:
+            return Response({"error": f"La fase ya está en estado {nuevo_estado}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Registro eBR: cada cambio de estado se firma (contraseña en web, PIN en la terminal)
+        firmante, error = _firma_o_respuesta(request, f"FASE_{nuevo_estado}")
+        if error:
+            return error
 
         tiempo_actual = timezone.now()
         ejecutar_auto_ajuste = False
@@ -342,8 +370,9 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         cambios = {'estado': [estado_anterior, nuevo_estado]}
         if fases_actualizadas_count:
             cambios['sucesoras_reajustadas'] = [None, fases_actualizadas_count]
-        registrar(request, 'FASE', f"FASE_{nuevo_estado}", f"Fase {textos.get(nuevo_estado, nuevo_estado)}: {self._nombre_fase(fase)}",
-                  objeto=fase, fase=fase, cambios=cambios)
+        registro = registrar(request, 'FASE', f"FASE_{nuevo_estado}", f"Fase {textos.get(nuevo_estado, nuevo_estado)}: {self._nombre_fase(fase)}",
+                             objeto=fase, fase=fase, cambios=cambios, motivo=firmante['comentario'])
+        firmar(registro, firmante)
         if lote.estado != lote_estado_anterior:
             registrar(request, 'LOTE', f"LOTE_{lote.estado}", f"Lote {lote.identificador_lote} pasa a {lote.get_estado_display()}",
                       objeto=lote, lote=lote, cambios={'estado': [lote_estado_anterior, lote.estado]})
@@ -592,15 +621,29 @@ class MobileeBRViewSet(viewsets.ViewSet):
                       actor=f"Terminal: {codigo}")
             return Response({"error": "Credenciales inválidas o usuario inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if operador.pin_bloqueado:
+            registrar(request, 'SESION', 'PIN_FALLIDO', f"Intento de ingreso con PIN bloqueado: {operador.nombre} ({codigo})",
+                      objeto=operador, actor=f"Terminal: {codigo}")
+            return Response({"error": "Tu PIN está bloqueado por intentos fallidos. Pide a tu supervisor o a un administrador que lo desbloquee."},
+                            status=status.HTTP_403_FORBIDDEN)
+
         if operador.pin_acceso != str(pin):
             registrar(request, 'SESION', 'PIN_FALLIDO', f"PIN incorrecto en la terminal para {operador.nombre} ({codigo})",
                       objeto=operador, actor=f"Terminal: {codigo}")
-            return Response({"error": "Credenciales inválidas."}, status=status.HTTP_401_UNAUTHORIZED)
+            restantes = registrar_fallo_pin(operador, request, 'ingreso a la terminal')
+            if restantes == 0:
+                return Response({"error": "PIN incorrecto. Tu PIN quedó bloqueado; pide a tu supervisor o a un administrador que lo desbloquee."},
+                                status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": f"Credenciales inválidas. Te quedan {restantes} intento(s) antes de bloquear el PIN."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        reiniciar_intentos_pin(operador)
 
         request.session.cycle_key()  # evita fijación de sesión
         request.session['operador_id'] = operador.id
         registrar(request, 'SESION', 'PIN_LOGIN', f"Ingreso a la terminal de {operador.nombre} ({codigo})", objeto=operador)
         return Response({
+            "firmas": SIGNIFICADOS,
             "operador_id": operador.id, "codigo_empleado": operador.codigo_empleado, "nombre": operador.nombre,
             "rol": operador.rol.nombre if operador.rol else "Operativo Base", "cuadrilla": operador.cuadrilla.nombre
         }, status=status.HTTP_200_OK)

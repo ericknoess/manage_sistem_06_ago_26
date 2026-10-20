@@ -142,6 +142,10 @@ class Operador(models.Model):
         help_text="Código numérico (4-6 dígitos) para la firma electrónica en la Tablet."
     )
     
+    # Bloqueo del PIN por intentos fallidos en la terminal (ingreso o firma). Solo un administrador desbloquea.
+    intentos_pin_fallidos = models.PositiveSmallIntegerField(default=0, verbose_name="Intentos fallidos de PIN")
+    pin_bloqueado = models.BooleanField(default=False, verbose_name="PIN bloqueado")
+
     activo = models.BooleanField(default=True, verbose_name="Activo en Operación")
     creado_en = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     actualizado_en = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")

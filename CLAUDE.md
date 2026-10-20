@@ -45,6 +45,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Se escribe con `auditoria.services.registrar(request, categoria, accion, descripcion, ...)` en cada acción especial y,
   para altas/cambios/bajas de ViewSets, con `AuditoriaMixin` (`auditoria_categoria`, `auditoria_nombre`). Nunca guarda PIN ni contraseñas.
   Pantalla /auditoria/; historial por lote (Piso de planta) y por fase (Planificación) con `static/core/js/auditoria.js`.
+- Firma electrónica (21 CFR Part 11), `usuarios/firmas.py`: abortar/eliminar/archivar lote y todo cambio de estado de fase
+  exigen volver a escribir la contraseña (`firma_password`) o, en /mobile/, el PIN (`firma_pin`); `verificar_firma(request, ACCION)`
+  antes de modificar y `auditoria.services.firmar(registro, firmante)` después liga la `FirmaElectronica` (nombre, fecha, significado)
+  al registro de la bitácora. Significados en `SIGNIFICADOS`. Front: `static/core/js/firma.js` (`ejecutarConFirma`).
+  5 intentos fallidos (login o firma) bloquean la cuenta (`Perfil.bloqueado`, `is_active=False`) o el PIN (`Operador.pin_bloqueado`);
+  se desbloquean con la acción del admin o `python manage.py desbloquear_usuario <usuario>`.
 - Pantallas: /login/, /auditoria/ (bitácora), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales)
 
@@ -56,6 +62,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Toda pantalla nueva debe incluir el enlace `.btn-inicio` hacia `{% url 'inicio' %}` y `core/css/sesion.css` + `core/js/sesion.js` en el `<head>`.
 - Todo botón que modifique datos lleva `data-permiso="<permiso>"`, y su endpoint declara ese mismo permiso.
 - Toda acción que modifique datos queda en la bitácora: ViewSet con `AuditoriaMixin` o `registrar(...)` en el `@action`.
+- Una acción crítica nueva (que cierre, anule o firme un registro de lote) se agrega a `SIGNIFICADOS` y se firma.
 
 ## Reglas
 - Trazabilidad GxP: preferir baja lógica (`activo=False`, `archivado`) sobre borrado físico.

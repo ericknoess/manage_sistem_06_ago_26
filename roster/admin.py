@@ -72,10 +72,22 @@ class OperadorAdmin(admin.ModelAdmin):
     Incluye filtros por cuadrilla, rol dinámico y estado activo para auditoría GxP.
     """
     # CORRECCIÓN: Se reemplaza 'nivel_expertiz' por 'rol'
-    list_display = ('id', 'codigo_empleado', 'nombre', 'cuadrilla', 'rol', 'activo')
-    list_filter = ('cuadrilla', 'activo', 'rol')
+    list_display = ('id', 'codigo_empleado', 'nombre', 'cuadrilla', 'rol', 'activo', 'pin_bloqueado')
+    list_filter = ('cuadrilla', 'activo', 'rol', 'pin_bloqueado')
     search_fields = ('nombre', 'codigo_empleado')
     list_editable = ('activo',)
+    readonly_fields = ('intentos_pin_fallidos', 'pin_bloqueado')
+    actions = ['desbloquear_pines']
+
+    @admin.action(description='Desbloquear PIN (intentos fallidos en la terminal)')
+    def desbloquear_pines(self, request, queryset):
+        from auditoria.services import registrar
+        from usuarios.firmas import desbloquear_pin
+        bloqueados = list(queryset.filter(pin_bloqueado=True))
+        for operador in bloqueados:
+            desbloquear_pin(operador)
+            registrar(request, 'SESION', 'PIN_DESBLOQUEADO', f"PIN de {operador.nombre} ({operador.codigo_empleado}) desbloqueado", objeto=operador)
+        self.message_user(request, f"{len(bloqueados)} PIN desbloqueado(s).")
 
 
 class IncidenciaTurnoInline(admin.StackedInline):

@@ -104,6 +104,7 @@ async function cargarTareasPendientes() {
 }
 
 function renderizarTareas(tareas) {
+    window.tareasActuales = tareas;  // para mostrar la tarea en el modal de firma
     const container = document.getElementById('taskListContainer');
     container.innerHTML = '';
 
@@ -168,48 +169,89 @@ function renderizarTareas(tareas) {
     });
 }
 
-// --- ACTUALIZACIÓN TRANSACCIONAL eBR ---
-async function cambiarEstadoFase(faseId, nuevoEstado) {
-    let accionTxt = nuevoEstado === 'EN_PROGRESO' ? 'iniciar' : 'completar';
-    if (!confirm(`¿Firma electrónicamente que desea ${accionTxt} esta actividad bajo las normas GxP?`)) return;
+// --- ACTUALIZACIÓN TRANSACCIONAL eBR (firmada con PIN) ---
+const SIGNIFICADOS_FIRMA = {
+    EN_PROGRESO: 'Inicio la ejecución de la fase',
+    COMPLETADA: 'Ejecución completada y verificada',
+};
+let firmaPendiente = null;
 
-    mostrarLoader("Registrando firma electrónica...");
+function cambiarEstadoFase(faseId, nuevoEstado) {
+    const tarea = (window.tareasActuales || []).find(t => t.fase_id === faseId);
+    const significados = (session && session.firmas) || {};
+    firmaPendiente = { faseId, nuevoEstado };
+    document.getElementById('firmaPinTarea').textContent = tarea
+        ? `${nuevoEstado === 'EN_PROGRESO' ? '▶ Iniciar' : '✔ Completar'}: [${tarea.identificador_paso}] ${tarea.tarea_nombre} · Lote ${tarea.lote_identificador}`
+        : '';
+    document.getElementById('firmaPinSignificado').textContent = `«${significados['FASE_' + nuevoEstado] || SIGNIFICADOS_FIRMA[nuevoEstado]}»`;
+    document.getElementById('firmaPinFirmante').textContent = session ? `${session.nombre} (${session.codigo_empleado})` : '';
+    document.getElementById('firmaPinError').hidden = true;
+    document.getElementById('firmaPinInput').value = '';
+    document.getElementById('modalFirmaPin').hidden = false;
+    document.getElementById('firmaPinInput').focus();
+}
+
+function cerrarFirmaPin() {
+    document.getElementById('modalFirmaPin').hidden = true;
+    firmaPendiente = null;
+}
+
+function mostrarErrorFirmaPin(texto) {
+    const caja = document.getElementById('firmaPinError');
+    caja.textContent = texto;
+    caja.hidden = false;
+    document.getElementById('firmaPinInput').value = '';
+    document.getElementById('firmaPinInput').focus();
+}
+
+async function enviarFirmaPin(evento) {
+    evento.preventDefault();
+    if (!firmaPendiente) return;
+    const { faseId, nuevoEstado } = firmaPendiente;
+    const boton = document.getElementById('firmaPinBoton');
+    boton.disabled = true;
 
     try {
         const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ estado: nuevoEstado })
+            body: JSON.stringify({ estado: nuevoEstado, firma_pin: document.getElementById('firmaPinInput').value })
         });
+        let data = {};
+        try { data = await res.json(); } catch (e) { /* sin cuerpo */ }
 
         if (res.ok) {
-            const data = await res.json();
+            cerrarFirmaPin();
             const card = document.getElementById(`task-card-${faseId}`);
-
-            // Animación de éxito
             gsap.to(card, {
-                x: -50, opacity: 0, height: 0, marginBottom: 0, padding: 0, duration: 0.3, 
+                x: -50, opacity: 0, height: 0, marginBottom: 0, padding: 0, duration: 0.3,
                 onComplete: () => {
-                    // [NUEVO] Si el backend inyectó el mensaje del Efecto Cascada, avisamos al operador
-                    if (data.mensaje_cascada) {
-                        alert("✨ Inteligencia Operativa MES:\n\n" + data.mensaje_cascada);
-                    }
+                    if (data.mensaje_cascada) alert("✨ Inteligencia Operativa MES:\n\n" + data.mensaje_cascada);
                     cargarTareasPendientes();
-                } 
+                }
             });
+        } else if (['FIRMA_INVALIDA', 'FIRMA_REQUERIDA'].includes(data.codigo)) {
+            mostrarErrorFirmaPin(data.error);
+        } else if (data.codigo === 'CUENTA_BLOQUEADA') {
+            cerrarFirmaPin();
+            alert("🔒 " + data.error);
+            handleLogout();
+        } else if (res.status === 401 || (res.status === 403 && !data.error)) {
+            // Sesión vencida o la tarea no es suya: el servidor lo explica en "detail"
+            cerrarFirmaPin();
+            alert("🔒 " + (data.detail || "Tu sesión expiró. Vuelve a ingresar."));
+            if (!data.detail || data.detail.includes('sesión')) handleLogout();
         } else {
-            const errorData = await res.json();
-            if (res.status === 401 || (res.status === 403 && !errorData.error)) {
-                // Sesión vencida o la tarea no es suya: el servidor lo explica en "detail"
-                alert("🔒 " + (errorData.detail || "Tu sesión expiró. Vuelve a ingresar."));
-                if (!errorData.detail || errorData.detail.includes('sesión')) handleLogout();
-            } else {
-                alert("⚠️ Bloqueo GxP:\n\n" + (errorData.error || "No se puede procesar la solicitud."));
-            }
-            ocultarLoader();
+            cerrarFirmaPin();
+            alert("⚠️ Bloqueo GxP:\n\n" + (data.error || "No se puede procesar la solicitud."));
         }
     } catch (err) {
-        alert("Error de red. Verifique la conexión WiFi de la Tablet.");
-        ocultarLoader();
+        mostrarErrorFirmaPin("Error de red. Verifique la conexión WiFi de la Tablet.");
+    } finally {
+        boton.disabled = false;
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('formFirmaPin').addEventListener('submit', enviarFirmaPin);
+});
