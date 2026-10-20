@@ -5,6 +5,14 @@ let procesosMaestrosGlobales = [];
 let loteSeleccionado = null;
 
 
+// Minutos de desviación en texto corto: 45m, 3h 20m, 14d 17h
+function formatearDesviacion(minutos) {
+    if (minutos < 60) return `${minutos}m`;
+    const horas = Math.floor(minutos / 60);
+    if (horas < 24) return `${horas}h ${minutos % 60}m`;
+    return `${Math.floor(horas / 24)}d ${horas % 24}h`;
+}
+
 async function cargarCatalogos() {
     try {
         const [resLotes, resProcesos] = await Promise.all([
@@ -183,12 +191,12 @@ async function renderizarDetalleLote() {
                         const dtReal = new Date(fase.fecha_inicio_real);
                         const diffMins = Math.round((dtReal - dtForecast) / 60000);
                         if (diffMins <= 5) rendimientoHtml = `<span class="tag-ontime">✔ A tiempo</span>`;
-                        else if (diffMins <= 30) rendimientoHtml = `<span class="tag-warning">⚠ +${diffMins}m</span>`;
-                        else rendimientoHtml = `<span class="tag-delay">🚨 +${diffMins}m</span>`;
+                        else if (diffMins <= 30) rendimientoHtml = `<span class="tag-warning">⚠ +${formatearDesviacion(diffMins)}</span>`;
+                        else rendimientoHtml = `<span class="tag-delay">🚨 +${formatearDesviacion(diffMins)}</span>`;
                     } else if (fase.estado === 'PENDIENTE') {
                         const now = new Date();
                         const diffMins = Math.round((now - dtForecast) / 60000);
-                        if (diffMins > 15) rendimientoHtml = `<span class="tag-delay" title="Retraso proyectado actual">🚨 Proyecta +${diffMins}m</span>`;
+                        if (diffMins > 15) rendimientoHtml = `<span class="tag-delay" title="Retraso proyectado actual">🚨 Proyecta +${formatearDesviacion(diffMins)}</span>`;
                         else rendimientoHtml = `<span class="tag-none">A la espera</span>`;
                     }
                 }

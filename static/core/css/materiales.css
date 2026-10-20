@@ -68,7 +68,7 @@
 }
 .tabla-materiales .celda-cantidad { display: flex; align-items: center; gap: 0.3rem; }
 .tabla-materiales .celda-cantidad span { color: var(--text-muted, #94a3b8); white-space: nowrap; }
-.tabla-materiales__vacio { text-align: center; color: var(--text-muted, #94a3b8); font-style: italic; padding: 0.5rem; }
+.tabla-materiales__vacio { text-align: center; color: var(--text-muted, #94a3b8); font-style: italic; padding: 0.5rem; font-size: 0.72rem; }
 .material-inactivo { color: var(--warning, #f59e0b); font-size: 0.65rem; }
 
 /* Chip de material requerido (cantidad + nombre) */

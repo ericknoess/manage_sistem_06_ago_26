@@ -202,3 +202,15 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 .material-fase-campos .form-group { flex: 1; min-width: 0; }
 .modal-material-fase .form-control { width: 100%; box-sizing: border-box; }
 
+
+/* Pie de cada tarjeta: personal asignado o aviso de pendiente */
+.task-assignee-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.badge-unassigned { font-size: 0.65rem; color: var(--warning); font-weight: bold; }
+.badge-headcount { font-size: 0.62rem; color: #94a3b8; }

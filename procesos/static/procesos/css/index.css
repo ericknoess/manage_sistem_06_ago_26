@@ -122,7 +122,8 @@ body {
 .form-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
 .form-group label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-input[type="text"], select, input[type="number"], input[type="date"] {
+/* "body select" gana a los estilos base que inyecta el CDN de Tailwind (select { font-size: 100% }) */
+input[type="text"], body select, input[type="number"], input[type="date"] {
     background-color: var(--panel-bg); border: 1px solid var(--border-color); color: var(--text); padding: 0.4rem 0.4rem; border-radius: 6px; font-size: 0.74rem; outline: none; width: 100%;
 }
 input[readonly], select[disabled] { opacity: 0.5; cursor: not-allowed; background-color: rgba(0,0,0,0.2); }
