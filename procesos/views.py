@@ -3,6 +3,8 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth import logout as auth_logout
+from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import RestrictedError
 from django.utils import timezone
@@ -639,7 +641,13 @@ class MobileeBRViewSet(viewsets.ViewSet):
 
         reiniciar_intentos_pin(operador)
 
-        request.session.cycle_key()  # evita fijación de sesión
+        # Si en la tablet quedó abierta una sesión web se cierra: la terminal firma y registra solo como el operador.
+        # logout() también renueva la llave de sesión (evita fijación de sesión).
+        if request.user.is_authenticated:
+            auth_logout(request._request)
+            request.user = AnonymousUser()  # DRF guarda su propia copia del usuario de la petición
+        else:
+            request.session.cycle_key()
         request.session['operador_id'] = operador.id
         registrar(request, 'SESION', 'PIN_LOGIN', f"Ingreso a la terminal de {operador.nombre} ({codigo})", objeto=operador)
         return Response({

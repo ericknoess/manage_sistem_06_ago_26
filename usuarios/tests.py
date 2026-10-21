@@ -313,3 +313,33 @@ class FirmaConPinTests(BaseRoles):
         firma.significado = 'otro'
         with self.assertRaises(PermissionDenied):
             firma.save()
+
+
+class TerminalCompartidaTests(BaseRoles):
+    """Tablet donde alguien dejó abierta una sesión web: la terminal debe quedar solo con el operador."""
+
+    def setUp(self):
+        super().setUp()
+        self.lote, self.fase = self.crear_lote()
+        AsignacionFaseOperador.objects.create(fase_lote=self.fase, operador=self.operador, rol_ejercido=self.rol)
+        usuario_con_rol('supervisor', 'Supervisor de turno')
+        self.tablet = APIClient(enforce_csrf_checks=False)
+        self.assertTrue(self.tablet.login(username='supervisor', password='clave-de-prueba'))
+
+    def test_operador_firma_con_pin_aunque_hubiera_sesion_web(self):
+        self.tablet.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
+        respuesta = self.tablet.post(f'/api/fases-lote/{self.fase.id}/cambiar-estado/',
+                                     {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        registro = RegistroAuditoria.objects.get(accion='FASE_EN_PROGRESO')
+        # La acción y la firma son del operador, no del supervisor que había dejado la sesión abierta
+        self.assertEqual((registro.operador, registro.usuario), (self.operador, None))
+        self.assertEqual(registro.firma.metodo, 'PIN')
+        ingreso = RegistroAuditoria.objects.get(accion='PIN_LOGIN')
+        self.assertEqual((ingreso.operador, ingreso.usuario), (self.operador, None))
+
+    def test_login_web_cierra_la_terminal_del_operador(self):
+        self.tablet.logout()
+        self.tablet.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
+        self.assertTrue(self.tablet.login(username='supervisor', password='clave-de-prueba'))
+        self.assertNotIn('operador_id', self.tablet.session)
