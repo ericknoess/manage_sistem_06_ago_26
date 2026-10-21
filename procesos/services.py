@@ -288,11 +288,15 @@ def validar_inicio_contra_predecesora(fase, nuevo_inicio):
 def propagar_programacion(fase_origen, nota_tarea, nota_muestreo):
     """
     Re-alinea en cascada las fases PENDIENTES que dependen de `fase_origen` (y sus muestreos),
-    enganchándolas a la ventana de su predecesora: la real si ya se completó, la programada si no.
+    enganchándolas a la ventana de su predecesora: la real si ya se completó, el inicio real más la
+    duración planeada si está en curso, y la programada si aún no inicia.
 
     `nota_tarea` y `nota_muestreo` admiten los marcadores {paso} (predecesora inmediata) y {origen}.
     Devuelve la cantidad de fases actualizadas.
     """
+    if fase_origen.es_subtarea_muestreo:
+        # Un muestreo no tiene sucesoras: las de su actividad dependen de la actividad, no del muestreo
+        return 0
     todas_fases_lote = list(fase_origen.lote.fases.all().select_related('operacion_maestra'))
     origen = fase_origen.operacion_maestra.identificador_paso
     fases_a_actualizar = []
@@ -306,6 +310,9 @@ def propagar_programacion(fase_origen, nota_tarea, nota_muestreo):
         if fase_actual.estado == 'COMPLETADA' and fase_actual.fecha_fin_real:
             inicio_actual = fase_actual.fecha_inicio_real or fase_actual.fecha_fin_real
             fin_actual = fase_actual.fecha_fin_real
+        elif fase_actual.estado == 'EN_PROGRESO' and fase_actual.fecha_inicio_real:
+            inicio_actual = fase_actual.fecha_inicio_real
+            fin_actual = inicio_actual + fase_actual.duracion_planeada
         else:
             inicio_actual, fin_actual = fase_actual.inicio_programado, fase_actual.fin_programado
         if not inicio_actual or not fin_actual:
@@ -365,6 +372,154 @@ def buscar_conflicto_operador(operador_id, fase):
 # ==============================================================================
 # MATERIALES: COPIA POR LOTE, AJUSTES GxP Y REQUERIMIENTOS POR DÍA Y HORA
 # ==============================================================================
+
+# ==============================================================================
+# EJECUCIÓN EN PLANTA: VENTANA DE INICIO, DEPENDENCIAS Y ALERTAS DE PROGRAMACIÓN
+# ==============================================================================
+
+def formatear_hora(momento, formato='%d/%m %H:%M'):
+    return timezone.localtime(momento).strftime(formato)
+
+
+def _horas_legibles(delta):
+    horas = abs(delta.total_seconds()) / 3600
+    if horas >= 48:
+        dias, resto = divmod(round(horas), 24)
+        return f"{dias} d {resto} h" if resto else f"{dias} d"
+    return f"{horas:.1f}".rstrip('0').rstrip('.') + ' h'
+
+
+def bloqueo_por_dependencia(fase):
+    """
+    Mensaje si la fase todavía no puede iniciar por su dependencia, o None.
+    FS: la predecesora debe estar completada (u omitida). SS/OFFSET: la predecesora debe haber iniciado.
+    Un muestreo requiere que su actividad (la incubación) ya esté en curso.
+    """
+    operacion = fase.operacion_maestra
+    if fase.es_subtarea_muestreo:
+        actividad = FaseLote.objects.filter(lote=fase.lote, operacion_maestra=operacion, es_subtarea_muestreo=False).first()
+        if actividad and actividad.estado not in ('EN_PROGRESO', 'COMPLETADA'):
+            return f"Primero debe iniciar la actividad [{operacion.identificador_paso}] {operacion.nombre}."
+        return None
+
+    predecesora = operacion.predecesora
+    if not predecesora:
+        return None
+    fase_pred = FaseLote.objects.filter(lote=fase.lote, operacion_maestra=predecesora, es_subtarea_muestreo=False).first()
+    if not fase_pred or fase_pred.estado == 'OMITIDA':
+        return None
+    if (operacion.tipo_dependencia or 'FS') in ('SS', 'OFFSET'):
+        if fase_pred.estado == 'PENDIENTE':
+            return f"Primero debe iniciar [{predecesora.identificador_paso}] {predecesora.nombre} (dependencia Inicio a Inicio)."
+    elif fase_pred.estado != 'COMPLETADA':
+        return f"Primero debe completarse [{predecesora.identificador_paso}] {predecesora.nombre} (dependencia Fin a Inicio)."
+    return None
+
+
+def ventana_inicio(fase):
+    """(desde, hasta) en que la fase puede iniciar sin desviación de horario, según la tolerancia de la receta."""
+    if not fase.inicio_programado:
+        return None, None
+    op = fase.operacion_maestra
+    return (fase.inicio_programado - timedelta(hours=op.tolerancia_antes_horas or 0),
+            fase.inicio_programado + timedelta(hours=op.tolerancia_despues_horas or 0))
+
+
+def evaluar_inicio(fase, ahora=None):
+    """
+    Revisa si la fase pendiente puede iniciar ahora. Devuelve un dict:
+      bloqueo      mensaje si la dependencia lo impide (nadie puede iniciarla), o None
+      desviacion   None (dentro de la ventana), 'ADELANTO' o 'RETRASO'
+      mensaje      explicación de la desviación
+      desde/hasta  ventana de inicio sin desviación
+    """
+    ahora = ahora or timezone.now()
+    desde, hasta = ventana_inicio(fase)
+    resultado = {'bloqueo': bloqueo_por_dependencia(fase), 'desviacion': None, 'mensaje': '', 'desde': desde, 'hasta': hasta}
+    if desde and ahora < desde:
+        resultado['desviacion'] = 'ADELANTO'
+        resultado['mensaje'] = (f"Inicio adelantado {_horas_legibles(fase.inicio_programado - ahora)} respecto a lo programado "
+                                f"({formatear_hora(fase.inicio_programado)}). Sin desviación puede iniciar a partir de las {formatear_hora(desde)}.")
+    elif hasta and ahora > hasta:
+        resultado['desviacion'] = 'RETRASO'
+        resultado['mensaje'] = (f"Inicio con {_horas_legibles(ahora - fase.inicio_programado)} de retraso respecto a lo programado "
+                                f"({formatear_hora(fase.inicio_programado)}). La tolerancia vencía a las {formatear_hora(hasta)}.")
+    return resultado
+
+
+def _turnos_por_operador(operador_ids, desde, hasta):
+    """{operador_id: [(inicio, fin)]} de los turnos laborables entre dos fechas (incluye el día previo por turnos nocturnos)."""
+    from datetime import datetime as dt
+    ventanas = {}
+    turnos = TurnoDia.objects.filter(
+        operador_id__in=operador_ids, fecha__gte=desde - timedelta(days=1), fecha__lte=hasta,
+        tipo_turno__activo=True, tipo_turno__es_descanso=False,
+    ).select_related('tipo_turno')
+    for t in turnos:
+        tipo = t.tipo_turno
+        if tipo.hora_inicio is None or tipo.hora_fin is None:
+            inicio = timezone.make_aware(dt.combine(t.fecha, dt.min.time()))
+            fin = inicio + timedelta(days=1)
+        else:
+            inicio = timezone.make_aware(dt.combine(t.fecha, tipo.hora_inicio))
+            fin = timezone.make_aware(dt.combine(t.fecha, tipo.hora_fin))
+            if fin <= inicio:
+                fin += timedelta(days=1)  # turno nocturno
+        ventanas.setdefault(t.operador_id, []).append((inicio, fin))
+    return ventanas
+
+
+def alertas_programacion(fases, ahora=None):
+    """
+    Revisa las fases pendientes (aún por iniciar) y devuelve {fase_id: [mensajes]} con lo que quedó mal
+    tras reprogramaciones o ajustes automáticos:
+      - operador asignado con otra tarea que se traslapa
+      - operador sin turno laborable a la hora de inicio
+      - material que, por el adelanto, debía estar listo antes de ahora
+    """
+    ahora = ahora or timezone.now()
+    fases = [f for f in fases if f.estado == 'PENDIENTE' and f.inicio_programado and f.fin_programado and f.fin_programado > ahora]
+    if not fases:
+        return {}
+    ids = [f.id for f in fases]
+    asignaciones = list(AsignacionFaseOperador.objects.filter(fase_lote_id__in=ids).select_related('operador'))
+    operador_ids = {a.operador_id for a in asignaciones}
+
+    inicio_rango = min(f.inicio_programado for f in fases)
+    fin_rango = max(f.fin_programado for f in fases)
+    # Todas las asignaciones de esos operadores que tocan el rango, para detectar traslapes
+    otras = list(AsignacionFaseOperador.objects.filter(
+        operador_id__in=operador_ids, fase_lote__inicio_programado__lt=fin_rango, fase_lote__fin_programado__gt=inicio_rango,
+    ).exclude(fase_lote__estado__in=['OMITIDA', 'COMPLETADA']).select_related('fase_lote', 'fase_lote__operacion_maestra', 'fase_lote__lote'))
+    turnos = _turnos_por_operador(operador_ids, timezone.localtime(inicio_rango).date(), timezone.localtime(fin_rango).date())
+    materiales = MaterialFase.objects.filter(fase_id__in=ids, activo=True).select_related('material')
+
+    alertas = {}
+    por_fase = {f.id: f for f in fases}
+    for a in asignaciones:
+        fase = por_fase[a.fase_lote_id]
+        for o in otras:
+            otra = o.fase_lote
+            if o.operador_id != a.operador_id or otra.id == fase.id:
+                continue
+            if otra.inicio_programado < fase.fin_programado and otra.fin_programado > fase.inicio_programado:
+                alertas.setdefault(fase.id, []).append(
+                    f"👥 {a.operador.nombre} también está asignado a [{otra.operacion_maestra.identificador_paso}] "
+                    f"{otra.nombre_tarea_dinamica or otra.operacion_maestra.nombre} (lote {otra.lote.identificador_lote}) "
+                    f"de {formatear_hora(otra.inicio_programado)} a {formatear_hora(otra.fin_programado)}.")
+        if not any(i <= fase.inicio_programado < f for i, f in turnos.get(a.operador_id, [])):
+            alertas.setdefault(fase.id, []).append(f"🕒 {a.operador.nombre} no tiene turno a las {formatear_hora(fase.inicio_programado)}.")
+
+    for m in materiales:
+        fase = por_fase[m.fase_id]
+        adelantada = fase.inicio_base_cpm and fase.inicio_programado < fase.inicio_base_cpm
+        momento = fase.inicio_programado - timedelta(hours=m.anticipacion_horas or 0)
+        if adelantada and m.anticipacion_horas and momento < ahora < fase.inicio_programado:
+            alertas.setdefault(fase.id, []).append(
+                f"📦 La actividad se adelantó: {m.material.nombre} debía estar listo desde las {formatear_hora(momento)} "
+                f"({m.anticipacion_horas:g} h de anticipación).")
+    return alertas
+
 
 class ErrorMaterialFase(Exception):
     """Regla de negocio violada al modificar los materiales de una fase."""

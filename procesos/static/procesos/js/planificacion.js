@@ -13,6 +13,7 @@ let operadoresGlobales = [];
 let equiposGlobales = [];
 let materialesGlobales = [];
 let faseSeleccionadaId = null;
+let alertasGlobales = {};  // {fase_id: [mensajes]}: cruces, operadores sin turno, materiales tras un adelanto
 
 function obtenerLunes(date) {
     const d = new Date(date);
@@ -87,9 +88,9 @@ function cambiarModoVista(modo) {
 
 async function cargarDatosPlanificacion() {
     try {
-        const [resFases, resOp, resEq, resMat] = await Promise.all([
+        const [resFases, resOp, resEq, resMat, resAlertas] = await Promise.all([
             fetch('/api/fases-lote/'), fetch('/api/operadores/?activo=true'),
-            fetch('/api/equipos/'), fetch('/api/materiales/')
+            fetch('/api/equipos/'), fetch('/api/materiales/'), fetch('/api/fases-lote/alertas/')
         ]);
 
         if (!resFases.ok) throw new Error('Error de red');
@@ -98,6 +99,7 @@ async function cargarDatosPlanificacion() {
         operadoresGlobales = await resOp.json();
         equiposGlobales = await resEq.json();
         materialesGlobales = await resMat.json();
+        alertasGlobales = resAlertas.ok ? await resAlertas.json() : {};
 
         renderGrillaActiva();
 
@@ -227,7 +229,7 @@ function renderGrillaDiaria() {
                      onclick="seleccionarFase(${f.id})">
                      <div class="daily-task-meta">
                         <span>⏰ ${timeStr}</span>
-                        <span>👥 ${asignados}/${headcountReq} ${alertOps}</span>
+                        <span>${insigniaAlertas(f.id)}👥 ${asignados}/${headcountReq} ${alertOps}</span>
                      </div>
                      <div class="daily-task-title">
                         [${f.operacion_id_paso}] ${f.operacion_nombre}
@@ -286,6 +288,7 @@ function renderGrillaSemanal() {
             if (f.inicio_base_cpm && f.inicio_programado) {
                 const diffHours = (new Date(f.inicio_programado) - new Date(f.inicio_base_cpm)) / 3600000;
                 if (diffHours > 0) delayHtml = `<span class="badge-delay">+${diffHours.toFixed(1)}h</span>`;
+                else if (diffHours < 0) delayHtml = `<span class="badge-adelanto" title="Adelantada respecto a la línea base">${diffHours.toFixed(1)}h</span>`;
             }
 
             const opsDetalles = f.operadores_asignados || [];
@@ -299,7 +302,7 @@ function renderGrillaSemanal() {
                 <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
                 <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
                     <span>Lote: ${f.lote_codigo}</span>
-                    <div style="display:flex; gap:0.25rem; align-items:center;">${delayHtml}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
+                    <div style="display:flex; gap:0.25rem; align-items:center;">${insigniaAlertas(f.id)}${delayHtml}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
                 </div>
                 ${assigneesHTML}
             `;
@@ -399,8 +402,16 @@ function renderPanelDetalle(faseId) {
         ? `<button class="btn-icon" title="Bloqueado" disabled>🔒</button>` 
         : `<button class="btn-icon" data-permiso="reprogramar_fase" title="Reprogramar" onclick="abrirModalReprogramar(${fase.id}, '${fase.fecha_programada}', '${horaInicioTxt}')">✏️ Ajustar</button>`;
 
+    const alertas = alertasGlobales[fase.id] || [];
+    const alertasHtml = alertas.length ? `
+        <div class="alertas-programacion">
+            <div class="alertas-programacion__titulo">⚠️ Revisar tras el ajuste de programación</div>
+            <ul>${alertas.map(a => `<li>${escaparHtml(a)}</li>`).join('')}</ul>
+        </div>` : '';
+
     let html = `
         ${bannerLock}
+        ${alertasHtml}
         <div class="info-card ${lockClass}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <div>
@@ -680,4 +691,12 @@ async function cargarHistorialFase(faseId) {
     } catch (e) {
         contenedor.innerHTML = `<div class="aud-vacio">${e.message}</div>`;
     }
+}
+
+
+// Insignia ⚠️ con el número de alertas de programación de la fase (vacía si no tiene)
+function insigniaAlertas(faseId) {
+    const alertas = alertasGlobales[faseId] || [];
+    if (!alertas.length) return '';
+    return `<span class="badge-alerta" title="${escaparHtml(alertas.join('\n'))}">⚠️ ${alertas.length}</span>`;
 }

@@ -4,11 +4,20 @@ import os
 
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from auditoria.models import RegistroAuditoria
 from procesos.models import AsignacionFaseOperador, FaseLote, LoteProduccion, OperacionProceso, ProcesoMaestro
 from roster.models import Cuadrilla, Operador, RolOperador
+
+
+def programar_ahora(fase):
+    """Programa la fase para este momento, para iniciarla dentro de su ventana de tolerancia."""
+    fase.inicio_programado = timezone.now()
+    fase.fin_programado = fase.inicio_programado + fase.duracion_planeada
+    fase.save(update_fields=['inicio_programado', 'fin_programado'])
+    return fase
 
 
 def usuario_con_rol(nombre, *roles):
@@ -47,7 +56,8 @@ class BaseRoles(TestCase):
         }, format='json')
         self.assertEqual(respuesta.status_code, 201, respuesta.data)
         lote = LoteProduccion.objects.get(identificador_lote=codigo)
-        return lote, FaseLote.objects.get(lote=lote, operacion_maestra=self.t1)
+        fase = FaseLote.objects.get(lote=lote, operacion_maestra=self.t1)
+        return lote, programar_ahora(fase)
 
 
 class AccesoSinSesionTests(BaseRoles):

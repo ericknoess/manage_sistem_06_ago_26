@@ -29,6 +29,11 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
   Los horarios de `FaseLote` son fecha-hora completas (`inicio_programado`/`fin_programado`, `inicio_base_cpm`/`fin_base_cpm`);
   la API también expone `fecha_programada`/`hora_*` derivados en hora local, solo lectura.
+- Inicio en planta (`evaluar_inicio` en `procesos/services.py`): la dependencia con la predecesora debe cumplirse (FS completada,
+  SS iniciada; el muestreo espera a su incubación) y la ventana `OperacionProceso.tolerancia_antes_horas`/`tolerancia_despues_horas`
+  (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige
+  `motivo_desviacion` en la bitácora. Iniciar o completar recalcula sucesoras y muestreos desde la hora real;
+  `/api/fases-lote/alertas/` marca en Planificación cruces de operador, operadores sin turno y materiales afectados por un adelanto.
 - Materiales: `MaterialOperacion` (receta: cantidad, anticipación, actividad o cada muestreo) se copia a `MaterialFase`
   al instanciar el lote; los ajustes por lote exigen motivo y los retiros son bajas lógicas. El momento requerido es
   `inicio_programado - anticipacion_horas`, así que sigue a las reprogramaciones. Buscador compartido en `static/core/js/materiales.js`.

@@ -172,6 +172,8 @@ function abrirModalNuevaOperacion() {
     document.getElementById('inputDuracionMuestreo').value = '0';
     document.getElementById('inputOpsMuestreo').value = '0';
     document.getElementById('inputDesfase').value = '0';
+    document.getElementById('inputTolAntes').value = '2';
+    document.getElementById('inputTolDespues').value = '2';
     document.getElementById('selectPredecesora').value = '';
     document.getElementById('rolesBuilderCrear').innerHTML = '';
     agregarFilaRolBuilder('crear');
@@ -988,6 +990,9 @@ async function crearOperacionAPI() {
     const predecesora = document.getElementById('selectPredecesora').value || null;
     const tipo_dependencia = document.getElementById('selectTipoDep').value;
     const desfase_horas = parseFloat(document.getElementById('inputDesfase').value) || 0;
+    const tolerancia_antes_horas = leerTolerancia('inputTolAntes');
+    const tolerancia_despues_horas = leerTolerancia('inputTolDespues');
+    if (tolerancia_antes_horas === null || tolerancia_despues_horas === null) return alert("La tolerancia debe ser un número de horas mayor o igual a 0.");
     const tipo_equipo_requerido = document.getElementById('selectTipoEquipoReq').value;
 
     const requerimientos_rol = obtenerRolesDesdeBuilder('crear');
@@ -1012,6 +1017,8 @@ async function crearOperacionAPI() {
             predecesora,
             tipo_dependencia,
             desfase_horas,
+            tolerancia_antes_horas,
+            tolerancia_despues_horas,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             tipo_equipo_requerido,
             materiales,
@@ -1050,6 +1057,8 @@ function abrirModalEditarOperacion(id) {
 
     document.getElementById('editOpTipoDep').value = op.tipo_dependencia || 'FS';
     document.getElementById('editOpDesfase').value = op.desfase_horas || 0;
+    document.getElementById('editOpTolAntes').value = op.tolerancia_antes_horas ?? 2;
+    document.getElementById('editOpTolDespues').value = op.tolerancia_despues_horas ?? 2;
     document.getElementById('editOpEquipo').value = op.tipo_equipo_requerido || 'N/A';
 
     const predSelect = document.getElementById('editOpPredecesora');
@@ -1107,6 +1116,9 @@ async function guardarEdicionOperacionAPI() {
 
     const tipo_dependencia = document.getElementById('editOpTipoDep').value;
     const desfase_horas = parseFloat(document.getElementById('editOpDesfase').value) || 0;
+    const tolerancia_antes_horas = leerTolerancia('editOpTolAntes');
+    const tolerancia_despues_horas = leerTolerancia('editOpTolDespues');
+    if (tolerancia_antes_horas === null || tolerancia_despues_horas === null) return alert("La tolerancia debe ser un número de horas mayor o igual a 0.");
     const predecesora = document.getElementById('editOpPredecesora').value || null;
     const tipo_equipo_requerido = document.getElementById('editOpEquipo').value;
     const requerimientos_rol = obtenerRolesDesdeBuilder('editar');
@@ -1130,6 +1142,8 @@ async function guardarEdicionOperacionAPI() {
             predecesora, 
             tipo_dependencia,
             desfase_horas,
+            tolerancia_antes_horas,
+            tolerancia_despues_horas,
             tipo_equipo_requerido,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             requerimientos_rol,
@@ -1263,3 +1277,12 @@ async function ejecutarValidacionGxpAPI() {
 
 
 cargarCatalogosGlobales();
+
+
+// Tolerancia de inicio (h): vacío cuenta como 0; negativo o no numérico devuelve null
+function leerTolerancia(idCampo) {
+    const texto = document.getElementById(idCampo).value.trim();
+    if (texto === '') return 0;
+    const horas = parseFloat(texto);
+    return isNaN(horas) || horas < 0 ? null : horas;
+}

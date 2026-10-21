@@ -193,7 +193,8 @@ async function renderizarDetalleLote() {
                     if (estaIniciada && fase.fecha_inicio_real) {
                         const dtReal = new Date(fase.fecha_inicio_real);
                         const diffMins = Math.round((dtReal - dtForecast) / 60000);
-                        if (diffMins <= 5) rendimientoHtml = `<span class="tag-ontime">✔ A tiempo</span>`;
+                        if (diffMins < -5) rendimientoHtml = `<span class="tag-warning" title="Inició antes de lo programado">⏩ −${formatearDesviacion(-diffMins)}</span>`;
+                        else if (diffMins <= 5) rendimientoHtml = `<span class="tag-ontime">✔ A tiempo</span>`;
                         else if (diffMins <= 30) rendimientoHtml = `<span class="tag-warning">⚠ +${formatearDesviacion(diffMins)}</span>`;
                         else rendimientoHtml = `<span class="tag-delay">🚨 +${formatearDesviacion(diffMins)}</span>`;
                     } else if (fase.estado === 'PENDIENTE') {
@@ -363,7 +364,9 @@ async function cambiarEstadoFase(faseId, estadoActual) {
     let siguienteEstado = estadoActual === 'PENDIENTE' ? 'EN_PROGRESO' : (estadoActual === 'EN_PROGRESO' ? 'COMPLETADA' : null);
     if (!siguienteEstado) return;
     const fase = loteSeleccionado ? loteSeleccionado.fases.find(f => f.id === faseId) : null;
+    const avisoDesviacion = estadoActual === 'PENDIENTE' && fase ? avisoVentanaInicio(fase) : '';
     const r = await ejecutarConFirma({
+        avisoDesviacion,
         accion: `FASE_${siguienteEstado}`,
         titulo: siguienteEstado === 'EN_PROGRESO' ? '▶ Iniciar fase' : '✔ Completar fase',
         detalle: fase ? `[${fase.operacion_id_paso}] ${fase.operacion_nombre} · ${codigoLote(loteSeleccionado.id)}` : '',
@@ -460,4 +463,21 @@ async function abrirHistorialLote() {
 
 function cerrarHistorialLote() {
     document.getElementById('modalHistorialLote').style.display = 'none';
+}
+
+
+// Si iniciar ahora queda fuera de la ventana de tolerancia de la receta, devuelve el aviso; si no, ''.
+// El servidor vuelve a validarlo: esto solo adelanta la pregunta del motivo en el modal de firma.
+function avisoVentanaInicio(fase) {
+    if (!fase.inicio_programado) return '';
+    const programado = new Date(fase.inicio_programado);
+    const minutos = Math.round((Date.now() - programado) / 60000);
+    const hora = programado.toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+    if (minutos < -(fase.tolerancia_antes_horas || 0) * 60) {
+        return `⏩ Inicio adelantado ${formatearDesviacion(-minutos)} respecto a lo programado (${hora}); la tolerancia es de ${fase.tolerancia_antes_horas || 0} h.`;
+    }
+    if (minutos > (fase.tolerancia_despues_horas || 0) * 60) {
+        return `⏰ Inicio con ${formatearDesviacion(minutos)} de retraso respecto a lo programado (${hora}); la tolerancia es de ${fase.tolerancia_despues_horas || 0} h.`;
+    }
+    return '';
 }

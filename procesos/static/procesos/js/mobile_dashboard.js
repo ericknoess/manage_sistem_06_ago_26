@@ -129,7 +129,18 @@ function renderizarTareas(tareas) {
 
         let accionHtml = '';
         if (t.estado === 'PENDIENTE') {
-            accionHtml = `<button class="btn-massive btn-primary" onclick="cambiarEstadoFase(${t.fase_id}, 'EN_PROGRESO')">▶ INICIAR ACTIVIDAD</button>`;
+            // La tarea solo se inicia cuando su dependencia se cumple y ya entró en su ventana de tolerancia
+            if (t.bloqueo) {
+                accionHtml = `<div class="task-aviso task-aviso--espera">🔒 ${escaparTexto(t.bloqueo)}</div>
+                    <button class="btn-massive btn-primary" disabled>▶ INICIAR ACTIVIDAD</button>`;
+            } else if (t.desviacion === 'ADELANTO') {
+                accionHtml = `<div class="task-aviso task-aviso--espera">⏳ Disponible a partir de las ${formatearMomento(t.disponible_desde)}</div>
+                    <button class="btn-massive btn-primary" disabled>▶ INICIAR ACTIVIDAD</button>`;
+            } else {
+                const avisoRetraso = t.desviacion === 'RETRASO'
+                    ? `<div class="task-aviso task-aviso--retraso">⏰ Fuera de horario: al iniciarla deberás escribir el motivo.</div>` : '';
+                accionHtml = `${avisoRetraso}<button class="btn-massive btn-primary" onclick="cambiarEstadoFase(${t.fase_id}, 'EN_PROGRESO')">▶ INICIAR ACTIVIDAD</button>`;
+            }
         } else if (t.estado === 'EN_PROGRESO') {
             accionHtml = `<button class="btn-massive btn-success" onclick="cambiarEstadoFase(${t.fase_id}, 'COMPLETADA')">✔ MARCAR COMPLETADA</button>`;
         }
@@ -187,8 +198,38 @@ function cambiarEstadoFase(faseId, nuevoEstado) {
     document.getElementById('firmaPinFirmante').textContent = session ? `${session.nombre} (${session.codigo_empleado})` : '';
     document.getElementById('firmaPinError').hidden = true;
     document.getElementById('firmaPinInput').value = '';
+    document.getElementById('firmaPinMotivo').value = '';
+    if (nuevoEstado === 'EN_PROGRESO' && tarea && tarea.desviacion === 'RETRASO') pedirMotivoPin(tarea.mensaje);
+    else ocultarMotivoPin();
     document.getElementById('modalFirmaPin').hidden = false;
-    document.getElementById('firmaPinInput').focus();
+    (motivoPinVisible() ? document.getElementById('firmaPinMotivo') : document.getElementById('firmaPinInput')).focus();
+}
+
+function pedirMotivoPin(aviso) {
+    document.getElementById('firmaPinAviso').textContent = aviso;
+    document.getElementById('firmaPinDesviacion').hidden = false;
+    document.getElementById('firmaPinMotivo').required = true;
+    document.getElementById('firmaPinMotivo').minLength = 10;
+}
+
+function ocultarMotivoPin() {
+    document.getElementById('firmaPinDesviacion').hidden = true;
+    document.getElementById('firmaPinMotivo').required = false;
+}
+
+function motivoPinVisible() {
+    return !document.getElementById('firmaPinDesviacion').hidden;
+}
+
+function formatearMomento(iso) {
+    if (!iso) return '--';
+    return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function escaparTexto(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto ?? '';
+    return div.innerHTML;
 }
 
 function cerrarFirmaPin() {
@@ -215,7 +256,10 @@ async function enviarFirmaPin(evento) {
         const res = await fetch(`/api/fases-lote/${faseId}/cambiar-estado/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ estado: nuevoEstado, firma_pin: document.getElementById('firmaPinInput').value })
+            body: JSON.stringify({
+                estado: nuevoEstado, firma_pin: document.getElementById('firmaPinInput').value,
+                ...(motivoPinVisible() ? { motivo_desviacion: document.getElementById('firmaPinMotivo').value.trim() } : {}),
+            })
         });
         let data = {};
         try { data = await res.json(); } catch (e) { /* sin cuerpo */ }
@@ -232,6 +276,13 @@ async function enviarFirmaPin(evento) {
             });
         } else if (['FIRMA_INVALIDA', 'FIRMA_REQUERIDA'].includes(data.codigo)) {
             mostrarErrorFirmaPin(data.error);
+        } else if (data.codigo === 'MOTIVO_REQUERIDO') {
+            pedirMotivoPin(data.error);
+            document.getElementById('firmaPinMotivo').focus();
+        } else if (['FUERA_DE_VENTANA', 'DEPENDENCIA_PENDIENTE'].includes(data.codigo)) {
+            cerrarFirmaPin();
+            alert("⏳ " + data.error);
+            cargarTareasPendientes();
         } else if (data.codigo === 'CUENTA_BLOQUEADA') {
             cerrarFirmaPin();
             alert("🔒 " + data.error);

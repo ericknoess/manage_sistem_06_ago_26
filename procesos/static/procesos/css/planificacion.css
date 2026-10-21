@@ -222,3 +222,10 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 .historial-fase[open] summary::after { content: ' ▾'; }
 .historial-fase__contenido { margin-top: 0.4rem; max-height: 260px; overflow-y: auto; }
 .historial-fase .aud-evento { font-size: 0.68rem; padding: 0.4rem 0.5rem; }
+
+/* Adelanto respecto a la línea base y alertas tras un ajuste de programación */
+.badge-adelanto { font-size: 0.6rem; color: #38bdf8; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
+.badge-alerta { font-size: 0.6rem; color: #fbbf24; border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.15); border-radius: 3px; padding: 1px 4px; font-weight: bold; margin-right: 0.25rem; cursor: help; }
+.alertas-programacion { padding: 0.6rem 0.75rem; border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 6px; background: rgba(245, 158, 11, 0.1); color: #fcd34d; font-size: 0.7rem; line-height: 1.4; }
+.alertas-programacion__titulo { font-weight: 700; margin-bottom: 0.3rem; }
+.alertas-programacion ul { margin: 0; padding-left: 1rem; list-style: disc; }

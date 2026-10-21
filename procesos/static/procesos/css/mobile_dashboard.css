@@ -299,3 +299,15 @@ body {
 .firma-pin__legal { margin: 0; font-size: 0.72rem; color: #64748b; }
 .firma-pin__botones { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .btn-secundario-pin { background: transparent; border: 1px solid #475569; color: #cbd5e1; }
+
+/* Disponibilidad de la tarea (ventana de tolerancia y dependencias) */
+.task-aviso { margin-bottom: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.85rem; line-height: 1.35; }
+.task-aviso--espera { border: 1px solid rgba(148, 163, 184, 0.45); background: rgba(148, 163, 184, 0.1); color: #cbd5e1; }
+.task-aviso--retraso { border: 1px solid rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.12); color: #fcd34d; }
+.btn-massive:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
+
+/* Motivo obligatorio al iniciar fuera de la ventana */
+.firma-pin__desviacion { display: flex; flex-direction: column; gap: 0.6rem; }
+.firma-pin__desviacion[hidden] { display: none; }
+.firma-pin__aviso { padding: 0.65rem 0.8rem; border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 8px; background: rgba(245, 158, 11, 0.12); color: #fcd34d; font-size: 0.9rem; line-height: 1.35; }
+.firma-pin__desviacion textarea { resize: vertical; min-height: 3.5rem; font-size: 1rem; letter-spacing: normal; text-align: left; }

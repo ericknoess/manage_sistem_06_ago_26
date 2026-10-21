@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from actividades.models import MaterialInsumo
 from roster.models import Cuadrilla, Operador, RolOperador
+from usuarios.tests import programar_ahora
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
     MaterialOperacion, MaterialFase,
@@ -104,7 +105,7 @@ class ProgramacionFasesTests(TestCase):
 
     def test_completar_fase_engancha_sucesoras_al_fin_real(self):
         lote = self.crear_lote()
-        t1 = self.fase(lote, self.t1)
+        t1 = programar_ahora(self.fase(lote, self.t1))
         AsignacionFaseOperador.objects.create(fase_lote=t1, operador=self.operador, rol_ejercido=self.rol)
         for estado in ('EN_PROGRESO', 'COMPLETADA'):
             respuesta = self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': estado, 'firma_password': 'clave-de-prueba'}, format='json')
@@ -132,7 +133,7 @@ class ProgramacionFasesTests(TestCase):
 
     def test_no_se_retira_operador_de_fase_iniciada(self):
         lote = self.crear_lote()
-        t1 = self.fase(lote, self.t1)
+        t1 = programar_ahora(self.fase(lote, self.t1))
         asignacion = AsignacionFaseOperador.objects.create(fase_lote=t1, operador=self.operador, rol_ejercido=self.rol)
         self.client.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_password': 'clave-de-prueba'}, format='json')
 
@@ -356,3 +357,172 @@ class MaterialesTests(TestCase):
         respuesta = self.client.patch('/api/materiales/MAT-01/', {'id': 'MAT-99'}, format='json')
         self.assertEqual(respuesta.status_code, 400)
 
+
+
+class InicioEnPlantaTests(TestCase):
+    """
+    Ventana de tolerancia, dependencias al iniciar, reprogramación desde el inicio real y alertas.
+    Receta: T1 (2 h) → T2 incubación (72 h, FS, muestreo cada 24 h) → T3 (3 h, FS); T2 → T4 (1 h, SS +4 h)
+    """
+
+    def setUp(self):
+        from roster.models import TipoTurno
+        self.web = APIClient()
+        self.web.force_authenticate(usuario_con_rol('supervisora', 'Jefatura'))
+        self.proceso = ProcesoMaestro.objects.create(nombre='Proceso con ventana')
+        crear = lambda paso, horas, orden, pred=None, dep='FS', desfase=0, **extra: OperacionProceso.objects.create(
+            proceso=self.proceso, identificador_paso=paso, nombre=f'Operación {paso}', orden=orden, duracion_horas=horas,
+            predecesora=pred, tipo_dependencia=dep, desfase_horas=desfase, tolerancia_antes_horas=2, tolerancia_despues_horas=1, **extra,
+        )
+        self.t1 = crear('T1', 2, 1)
+        self.t2 = crear('T2', 72, 2, self.t1, tipo_operacion='INCUBACION', frecuencia_muestreo_horas=24, duracion_muestreo_horas=0.5)
+        self.t3 = crear('T3', 3, 3, self.t2)
+        self.t4 = crear('T4', 1, 4, self.t2, dep='SS', desfase=4)
+        self.rol = RolOperador.objects.create(nombre='Operador base')
+        self.cuadrilla = Cuadrilla.objects.create(identificador='A', nombre='Cuadrilla A')
+        self.operador = Operador.objects.create(cuadrilla=self.cuadrilla, nombre='Ana', codigo_empleado='OP-1', rol=self.rol, pin_acceso='1234')
+        self.turno_completo = TipoTurno.objects.create(codigo='D', nombre='Día completo', hora_inicio=None, hora_fin=None)
+
+        inicio = timezone.localtime(timezone.now()).replace(second=0, microsecond=0, tzinfo=None)
+        respuesta = self.web.post('/api/lotes/', {'identificador_lote': 'L-V', 'proceso_maestro': self.proceso.id,
+                                                  'fecha_inicio_planeada': inicio.isoformat()}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.lote = LoteProduccion.objects.get(identificador_lote='L-V')
+        AsignacionFaseOperador.objects.create(fase_lote=self.fase(self.t1), operador=self.operador, rol_ejercido=self.rol)
+
+    def fase(self, operacion, muestreo=0):
+        return FaseLote.objects.get(lote=self.lote, operacion_maestra=operacion, indice_muestreo=muestreo)
+
+    def mover(self, fase, horas):
+        """Programa la fase a `horas` de ahora (negativo = ya debió iniciar)."""
+        fase.inicio_programado = timezone.now() + timedelta(hours=horas)
+        fase.fin_programado = fase.inicio_programado + fase.duracion_planeada
+        fase.save()
+        return fase
+
+    def estado_web(self, fase, estado, **extra):
+        return self.web.post(f'/api/fases-lote/{fase.id}/cambiar-estado/',
+                             {'estado': estado, 'firma_password': 'clave-de-prueba', **extra}, format='json')
+
+    def terminal(self):
+        movil = APIClient()
+        movil.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
+        return movil
+
+    # --- Ventana de tolerancia --------------------------------------------------
+
+    def test_dentro_de_la_tolerancia_inicia_sin_motivo(self):
+        t1 = self.mover(self.fase(self.t1), 1.5)  # tolerancia de adelanto: 2 h
+        movil = self.terminal()
+        respuesta = movil.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_terminal_no_adelanta_fuera_de_tolerancia(self):
+        t1 = self.mover(self.fase(self.t1), 5)
+        movil = self.terminal()
+        respuesta = movil.post(f'/api/fases-lote/{t1.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_pin': '1234',
+                                                                             'motivo_desviacion': 'Quiero adelantarla'}, format='json')
+        self.assertEqual((respuesta.status_code, respuesta.data['codigo']), (403, 'FUERA_DE_VENTANA'))
+        tareas = movil.get(f'/api/mobile/{self.operador.id}/tareas-pendientes/').data['tareas_pendientes']
+        self.assertEqual(tareas[0]['desviacion'], 'ADELANTO')
+        self.assertIsNotNone(tareas[0]['disponible_desde'])
+
+    def test_web_adelanta_con_motivo_y_queda_en_bitacora(self):
+        from auditoria.models import RegistroAuditoria
+        t1 = self.mover(self.fase(self.t1), 5)
+        self.assertEqual(self.estado_web(t1, 'EN_PROGRESO').data['codigo'], 'MOTIVO_REQUERIDO')
+        respuesta = self.estado_web(t1, 'EN_PROGRESO', motivo_desviacion='Equipo liberado antes de lo previsto')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        registro = RegistroAuditoria.objects.get(accion='FASE_EN_PROGRESO')
+        self.assertIn('Equipo liberado', registro.motivo)
+        self.assertIn('adelantado', registro.cambios['desviacion_inicio'][1])
+
+    def test_retraso_fuera_de_tolerancia_pide_motivo_tambien_en_terminal(self):
+        t1 = self.mover(self.fase(self.t1), -3)  # tolerancia de retraso: 1 h
+        movil = self.terminal()
+        url = f'/api/fases-lote/{t1.id}/cambiar-estado/'
+        self.assertEqual(movil.post(url, {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json').data['codigo'], 'MOTIVO_REQUERIDO')
+        respuesta = movil.post(url, {'estado': 'EN_PROGRESO', 'firma_pin': '1234', 'motivo_desviacion': 'Llegó tarde el insumo'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_tolerancia_se_configura_en_la_receta(self):
+        disenador = APIClient()
+        disenador.force_authenticate(usuario_con_rol('ingeniera', 'Ingeniería de procesos'))
+        url = f'/api/operaciones-proceso/{self.t1.id}/'
+        self.assertEqual(disenador.patch(url, {'tolerancia_antes_horas': 8, 'tolerancia_despues_horas': 0.5}, format='json').status_code, 200)
+        self.assertEqual(disenador.patch(url, {'tolerancia_antes_horas': -1}, format='json').status_code, 400)
+        t1 = self.mover(self.fase(self.t1), 5)  # ahora 5 h de adelanto está dentro de las 8 h
+        self.assertEqual(self.estado_web(t1, 'EN_PROGRESO').status_code, 200)
+
+    # --- Dependencias -----------------------------------------------------------
+
+    def test_no_inicia_si_la_predecesora_no_termino(self):
+        self.mover(self.fase(self.t1), 0)
+        t2 = self.mover(self.fase(self.t2), 0)
+        self.assertEqual(self.estado_web(t2, 'EN_PROGRESO').data['codigo'], 'DEPENDENCIA_PENDIENTE')
+        self.assertEqual(self.estado_web(self.fase(self.t1), 'EN_PROGRESO').status_code, 200)
+        self.assertEqual(self.estado_web(self.fase(self.t2), 'EN_PROGRESO').data['codigo'], 'DEPENDENCIA_PENDIENTE')  # FS: debe completarse
+
+    def test_muestreo_espera_a_que_inicie_la_incubacion(self):
+        muestreo = self.mover(self.fase(self.t2, muestreo=1), 0)
+        self.assertEqual(self.estado_web(muestreo, 'EN_PROGRESO').data['codigo'], 'DEPENDENCIA_PENDIENTE')
+
+    # --- Reprogramación desde el inicio real --------------------------------------
+
+    def test_iniciar_antes_recalcula_sucesoras_y_muestreos(self):
+        t1 = self.mover(self.fase(self.t1), 1)
+        self.assertEqual(self.estado_web(t1, 'EN_PROGRESO').status_code, 200)
+        t1.refresh_from_db()
+        # FS: T2 se engancha al inicio real de T1 más su duración planeada (2 h)
+        self.assertEqual(self.fase(self.t2).inicio_programado, t1.fecha_inicio_real + timedelta(hours=2))
+
+        t2 = self.mover(self.fase(self.t2), 1.5)
+        self.assertEqual(self.estado_web(self.fase(self.t1), 'COMPLETADA').status_code, 200)
+        t2 = self.mover(self.fase(self.t2), 1.5)
+        r = self.estado_web(t2, "EN_PROGRESO"); self.assertEqual(r.status_code, 200, r.data)
+        t2.refresh_from_db()
+        self.assertEqual(self.fase(self.t2, muestreo=1).inicio_programado, t2.fecha_inicio_real + timedelta(hours=24))
+        self.assertEqual(self.fase(self.t4).inicio_programado, t2.fecha_inicio_real + timedelta(hours=4))  # SS +4 h
+
+    def test_completar_un_muestreo_no_mueve_las_sucesoras_de_la_incubacion(self):
+        self.mover(self.fase(self.t1), 0)
+        self.estado_web(self.fase(self.t1), 'EN_PROGRESO')
+        self.estado_web(self.fase(self.t1), 'COMPLETADA')
+        self.mover(self.fase(self.t2), 0)
+        self.estado_web(self.fase(self.t2), 'EN_PROGRESO')
+        t3_antes = self.fase(self.t3).inicio_programado
+        muestreo = self.mover(self.fase(self.t2, muestreo=1), 0)
+        AsignacionFaseOperador.objects.create(fase_lote=muestreo, operador=self.operador, rol_ejercido=self.rol)
+        r = self.estado_web(muestreo, "EN_PROGRESO"); self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(self.estado_web(self.fase(self.t2, muestreo=1), 'COMPLETADA').status_code, 200)
+        self.assertEqual(self.fase(self.t3).inicio_programado, t3_antes)
+
+    # --- Alertas para Planificación -----------------------------------------------
+
+    def test_alertas_de_cruce_turno_y_material(self):
+        from roster.models import TurnoDia
+        t3 = self.fase(self.t3)
+        t4 = self.fase(self.t4)
+        for fase in (t3, t4):
+            AsignacionFaseOperador.objects.create(fase_lote=fase, operador=self.operador, rol_ejercido=self.rol)
+        # T4 traslapa a T3; Ana no tiene turno ningún día
+        t4.inicio_programado, t4.fin_programado = t3.inicio_programado, t3.fin_programado
+        t4.save()
+        alertas = self.web.get('/api/fases-lote/alertas/').data
+        self.assertTrue(any('también está asignado' in m for m in alertas[t3.id]))
+        self.assertTrue(any('no tiene turno' in m for m in alertas[t3.id]))
+
+        hoy = timezone.localdate()
+        for dias in range(-1, 6):
+            TurnoDia.objects.create(operador=self.operador, fecha=hoy + timedelta(days=dias), tipo_turno=self.turno_completo)
+        alertas = self.web.get('/api/fases-lote/alertas/').data
+        self.assertFalse(any('no tiene turno' in m for m in alertas[t3.id]))
+
+        # Material: la actividad se adelantó y su anticipación ya empezó
+        material = MaterialInsumo.objects.create(id='MAT-V', nombre='Medio V', unidad_medida='L')
+        t1 = self.mover(self.fase(self.t1), 1)
+        MaterialFase.objects.create(fase=t1, material=material, cantidad=1, unidad_medida='L', anticipacion_horas=3)
+        t1.inicio_base_cpm = t1.inicio_programado + timedelta(hours=10)
+        t1.save()
+        alertas = self.web.get('/api/fases-lote/alertas/').data
+        self.assertTrue(any('Medio V' in m for m in alertas[t1.id]))

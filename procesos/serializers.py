@@ -63,6 +63,7 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             'id', 'proceso', 'etapa', 'identificador_paso', 'nombre', 'tipo_operacion',
             'duracion_horas', 'frecuencia_muestreo_horas', 'duracion_muestreo_horas',
             'ops_muestreo', 'predecesora', 'tipo_dependencia', 'desfase_horas',
+            'tolerancia_antes_horas', 'tolerancia_despues_horas',
             'personal_requerido', 'tipo_equipo_requerido', 'materiales',
             'requerimientos_rol', 'requerimientos_rol_detalles'
         ]
@@ -75,6 +76,10 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
+        for campo in ('tolerancia_antes_horas', 'tolerancia_despues_horas'):
+            if data.get(campo) is not None and data[campo] < 0:
+                raise serializers.ValidationError({campo: "La tolerancia no puede ser negativa."})
+
         predecesora = data.get('predecesora', None)
         
         if self.instance and predecesora and self.instance.id == predecesora.id:
@@ -247,6 +252,10 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     fecha_base_cpm = serializers.SerializerMethodField()
     hora_inicio_base_cpm = serializers.SerializerMethodField()
 
+    # Ventana en que la fase puede iniciar sin desviación (tolerancia de la receta)
+    tolerancia_antes_horas = serializers.FloatField(source='operacion_maestra.tolerancia_antes_horas', read_only=True)
+    tolerancia_despues_horas = serializers.FloatField(source='operacion_maestra.tolerancia_despues_horas', read_only=True)
+
     class Meta:
         model = FaseLote
         fields = [
@@ -261,7 +270,8 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'es_subtarea_muestreo', 'indice_muestreo',
             'equipos_asignados', 'equipos_detalles', 'materiales',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
-            'desviacion_horas', 'personal_requerido', 'operadores_asignados'
+            'desviacion_horas', 'personal_requerido', 'operadores_asignados',
+            'tolerancia_antes_horas', 'tolerancia_despues_horas',
         ]
         # Estado y horarios solo cambian vía las acciones `cambiar-estado` y `reprogramar`
         read_only_fields = [

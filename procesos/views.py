@@ -42,6 +42,7 @@ from .serializers import (
 from .services import (
     CPMCalculatorService, validar_disponibilidad_personal_fase, construir_fases_lote,
     validar_inicio_contra_predecesora, propagar_programacion, buscar_conflicto_operador,
+    evaluar_inicio, alertas_programacion, formatear_hora,
     generar_materiales_lote, ajustar_material_fase, agregar_material_fase, retirar_material_fase,
     requerimientos_materiales, ErrorMaterialFase
 )
@@ -123,6 +124,8 @@ class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
                 ops_muestreo=op.ops_muestreo,
                 tipo_dependencia=op.tipo_dependencia,
                 desfase_horas=op.desfase_horas,
+                tolerancia_antes_horas=op.tolerancia_antes_horas,
+                tolerancia_despues_horas=op.tolerancia_despues_horas,
                 personal_requerido=op.personal_requerido,
                 tipo_equipo_requerido=op.tipo_equipo_requerido
             )
@@ -327,18 +330,38 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         if nuevo_estado == fase.estado:
             return Response({"error": f"La fase ya está en estado {nuevo_estado}."}, status=status.HTTP_400_BAD_REQUEST)
 
+        tiempo_actual = timezone.now()
+
+        # Al iniciar: la dependencia debe cumplirse y, fuera de la ventana de tolerancia, se exige motivo.
+        # Se revisa antes de la firma para no contar como intento fallido algo que no es de la contraseña.
+        evaluacion, motivo_desviacion = None, (request.data.get('motivo_desviacion') or '').strip()
+        if fase.estado == 'PENDIENTE' and nuevo_estado in ('EN_PROGRESO', 'COMPLETADA'):
+            evaluacion = evaluar_inicio(fase, tiempo_actual)
+            if evaluacion['bloqueo']:
+                return Response({"error": evaluacion['bloqueo'], "codigo": "DEPENDENCIA_PENDIENTE"}, status=status.HTTP_400_BAD_REQUEST)
+            if evaluacion['desviacion'] == 'ADELANTO' and not request.user.is_authenticated:
+                # En la terminal no se adelanta fuera de tolerancia: lo autoriza un supervisor desde Piso de planta
+                return Response({"error": f"Esta tarea aún no está disponible. Puedes iniciarla a partir de las {formatear_hora(evaluacion['desde'])}. "
+                                          "Si debe adelantarse, pide a tu supervisor que la inicie desde Piso de planta.",
+                                 "codigo": "FUERA_DE_VENTANA"}, status=status.HTTP_403_FORBIDDEN)
+            if evaluacion['desviacion'] and len(motivo_desviacion) < 10:
+                return Response({"error": f"{evaluacion['mensaje']} Escribe el motivo (mínimo 10 caracteres).",
+                                 "codigo": "MOTIVO_REQUERIDO", "desviacion": evaluacion['desviacion']},
+                                status=status.HTTP_400_BAD_REQUEST)
+
         # Registro eBR: cada cambio de estado se firma (contraseña en web, PIN en la terminal)
         firmante, error = _firma_o_respuesta(request, f"FASE_{nuevo_estado}")
         if error:
             return error
 
-        tiempo_actual = timezone.now()
         ejecutar_auto_ajuste = False
         estado_anterior = fase.estado
         lote_estado_anterior = fase.lote.estado
 
         if nuevo_estado == 'EN_PROGRESO' and fase.estado == 'PENDIENTE':
             fase.fecha_inicio_real = tiempo_actual
+            # Sus muestreos y sucesoras se recalculan desde el inicio real (si arrancó antes o después)
+            ejecutar_auto_ajuste = True
         elif nuevo_estado == 'COMPLETADA' and fase.estado == 'EN_PROGRESO':
             fase.fecha_fin_real = tiempo_actual
             # Siempre intentaremos re-alinear las tareas siguientes al final REAL de esta tarea
@@ -350,9 +373,10 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         # Enganche estricto de las sucesoras al término real de esta fase
         fases_actualizadas_count = 0
         if ejecutar_auto_ajuste:
+            momento = 'inicio' if nuevo_estado == 'EN_PROGRESO' else 'término'
             fases_actualizadas_count = propagar_programacion(
                 fase,
-                nota_tarea="(Auto-Ajuste) Enganche automático con el término real de [{paso}].",
+                nota_tarea=f"(Auto-Ajuste) Enganche automático con el {momento} real de [{{paso}}].",
                 nota_muestreo="(Auto-Ajuste) Muestreo alineado con el inicio real de [{paso}].",
             )
 
@@ -372,8 +396,12 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         cambios = {'estado': [estado_anterior, nuevo_estado]}
         if fases_actualizadas_count:
             cambios['sucesoras_reajustadas'] = [None, fases_actualizadas_count]
+        motivo = firmante['comentario']
+        if evaluacion and evaluacion['desviacion']:
+            cambios['desviacion_inicio'] = [None, evaluacion['mensaje']]
+            motivo = f"{evaluacion['desviacion'].capitalize()}: {motivo_desviacion}" + (f" · {motivo}" if motivo else '')
         registro = registrar(request, 'FASE', f"FASE_{nuevo_estado}", f"Fase {textos.get(nuevo_estado, nuevo_estado)}: {self._nombre_fase(fase)}",
-                             objeto=fase, fase=fase, cambios=cambios, motivo=firmante['comentario'])
+                             objeto=fase, fase=fase, cambios=cambios, motivo=motivo)
         firmar(registro, firmante)
         if lote.estado != lote_estado_anterior:
             registrar(request, 'LOTE', f"LOTE_{lote.estado}", f"Lote {lote.identificador_lote} pasa a {lote.get_estado_display()}",
@@ -381,9 +409,23 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
 
         response_data = self.get_serializer(fase).data
         if ejecutar_auto_ajuste and fases_actualizadas_count > 0:
-            response_data['mensaje_cascada'] = f"Se auto-ajustaron {fases_actualizadas_count} tareas posteriores."
+            mensaje = f"Se auto-ajustaron {fases_actualizadas_count} tareas posteriores."
+            # Lo que el ajuste dejó mal (cruces, turnos, materiales) se avisa aquí y Planificación lo marca
+            alertas = alertas_programacion(lote.fases.select_related('operacion_maestra', 'lote'))
+            if alertas:
+                total = sum(len(v) for v in alertas.values())
+                mensaje += f"\n\n⚠️ Revisa Planificación: {total} alerta(s) de personal o materiales en este lote."
+            response_data['mensaje_cascada'] = mensaje
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='alertas')
+    def alertas(self, request):
+        """{fase_id: [mensajes]} de las fases por iniciar con cruces de personal, operadores sin turno
+        o materiales que por un adelanto debían estar listos antes de ahora."""
+        fases = self.get_queryset().filter(estado='PENDIENTE', lote__estado__in=['PLANEADO', 'EN_PROGRESO'],
+                                           fin_programado__gt=timezone.now())
+        return Response(alertas_programacion(fases))
 
     @staticmethod
     def _nombre_fase(fase):
@@ -680,14 +722,21 @@ class MobileeBRViewSet(viewsets.ViewSet):
         ).order_by('fase_lote__inicio_programado')
         
         tareas_data = []
+        ahora = timezone.now()
         for asig in asignaciones:
             fase = asig.fase_lote
+            # Qué tan lista está la tarea para iniciar: dependencia y ventana de tolerancia
+            disponibilidad = {'bloqueo': None, 'desviacion': None, 'mensaje': '', 'disponible_desde': None}
+            if fase.estado == 'PENDIENTE':
+                ev = evaluar_inicio(fase, ahora)
+                disponibilidad = {'bloqueo': ev['bloqueo'], 'desviacion': ev['desviacion'], 'mensaje': ev['mensaje'],
+                                  'disponible_desde': ev['desde']}
             tareas_data.append({
                 "fase_id": fase.id, "lote_identificador": fase.lote.identificador_lote, "proceso_nombre": fase.lote.proceso_maestro.nombre,
                 "tarea_nombre": fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo else fase.operacion_maestra.nombre,
                 "identificador_paso": fase.operacion_maestra.identificador_paso, "tipo_operacion": fase.operacion_maestra.tipo_operacion,
                 "estado": fase.estado, "inicio_programado": fase.inicio_programado, "fin_programado": fase.fin_programado,
-                "rol_asignado": asig.rol_ejercido.nombre
+                "rol_asignado": asig.rol_ejercido.nombre, **disponibilidad,
             })
             
         return Response({"tareas_pendientes": tareas_data}, status=status.HTTP_200_OK)

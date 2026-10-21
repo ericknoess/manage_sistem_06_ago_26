@@ -83,7 +83,9 @@ class BitacoraTests(TestCase):
         self.assertEqual(self.ultimo(categoria='ASIGNACION').cambios['operador'], ['Ana', None])
 
     def test_operador_con_pin_queda_como_actor(self):
+        from usuarios.tests import programar_ahora
         _, fase = self.crear_lote()
+        programar_ahora(fase)
         self.jefa.post('/api/asignaciones-operador/', {'fase_lote': fase.id, 'operador': self.operador.id, 'rol_ejercido': self.rol.id}, format='json')
         movil = APIClient()
         movil.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')

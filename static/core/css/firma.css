@@ -69,3 +69,8 @@
 .firma-cancelar { border: 1px solid #475569; background: transparent; color: #cbd5e1; }
 .firma-firmar { border: none; background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); color: #ffffff; }
 .firma-firmar:disabled { opacity: 0.6; cursor: wait; }
+
+/* Inicio fuera de la ventana de tolerancia: aviso y motivo obligatorio */
+.firma-desviacion { display: flex; flex-direction: column; gap: 0.5rem; }
+.firma-desviacion[hidden] { display: none; }
+.firma-desviacion__aviso { padding: 0.5rem 0.7rem; border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 6px; background: rgba(245, 158, 11, 0.12); color: #fcd34d; font-size: 0.76rem; line-height: 1.4; }

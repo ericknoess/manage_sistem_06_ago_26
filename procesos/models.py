@@ -103,6 +103,11 @@ class OperacionProceso(models.Model):
     tipo_dependencia = models.CharField(max_length=10, choices=TIPO_DEPENDENCIA_CHOICES, default='FS', help_text="Regla lógica de dependencia")
     desfase_horas = models.FloatField(default=0, help_text="Holgura o anticipación en horas respecto a la predecesora")
 
+    # Ventana de inicio en planta: cuánto antes (−) o después (+) de su hora programada puede iniciar la actividad
+    # sin tratarse como desviación de horario. Aplica también a cada muestreo de la actividad.
+    tolerancia_antes_horas = models.FloatField(default=2, help_text="Horas antes de la hora programada en que ya se puede iniciar")
+    tolerancia_despues_horas = models.FloatField(default=2, help_text="Horas después de la hora programada en que aún se inicia sin desviación")
+
     personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos")
     tipo_equipo_requerido = models.CharField(
         max_length=100, 

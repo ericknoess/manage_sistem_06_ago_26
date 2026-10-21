@@ -8,6 +8,8 @@
 //
 // Pide la contraseña, la manda con la petición (firma_password, firma_comentario) y, si es incorrecta,
 // deja reintentar en el mismo modal. El significado de cada firma viene del servidor (/api/sesion/).
+// `avisoDesviacion` (texto) muestra el aviso y pide un motivo obligatorio, que viaja como `motivo_desviacion`;
+// si el servidor responde MOTIVO_REQUERIDO, el modal muestra ese campo y deja reintentar.
 // Necesita sesion.js (SESION) y su CSS en static/core/css/firma.css.
 
 const SIGNIFICADOS_POR_DEFECTO = {
@@ -24,7 +26,7 @@ function escaparFirma(texto) {
     return div.innerHTML;
 }
 
-function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', cuerpo = {} }) {
+function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', cuerpo = {}, avisoDesviacion = '' }) {
     const sesion = window.SESION || {};
     const significado = (sesion.firmas && sesion.firmas[accion]) || SIGNIFICADOS_POR_DEFECTO[accion] || titulo;
 
@@ -41,6 +43,13 @@ function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', 
                 <div class="firma-significado">
                     <span>Significado de tu firma</span>
                     «${escaparFirma(significado)}»
+                </div>
+                <div class="firma-desviacion" hidden>
+                    <div class="firma-desviacion__aviso"></div>
+                    <label class="firma-campo">
+                        <span>Motivo de la desviación (obligatorio)</span>
+                        <textarea name="motivo_desviacion" rows="2" maxlength="500" placeholder="¿Por qué se inicia fuera de la ventana programada?"></textarea>
+                    </label>
                 </div>
                 <div class="firma-firmante">Firmas como <strong>${escaparFirma(sesion.nombre || '')}</strong> (${escaparFirma(sesion.usuario || '')})</div>
                 <label class="firma-campo">
@@ -64,7 +73,16 @@ function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', 
         const campoClave = formulario.elements.firma_password;
         const cajaError = fondo.querySelector('.firma-error');
         const botonFirmar = fondo.querySelector('.firma-firmar');
-        campoClave.focus();
+        const cajaDesviacion = fondo.querySelector('.firma-desviacion');
+        const campoMotivo = formulario.elements.motivo_desviacion;
+        const pedirMotivo = (aviso) => {
+            fondo.querySelector('.firma-desviacion__aviso').textContent = aviso;
+            cajaDesviacion.hidden = false;
+            campoMotivo.required = true;
+            campoMotivo.minLength = 10;
+        };
+        if (avisoDesviacion) pedirMotivo(avisoDesviacion);
+        (avisoDesviacion ? campoMotivo : campoClave).focus();
 
         const cerrar = (resultado) => {
             document.removeEventListener('keydown', alEscape);
@@ -88,6 +106,7 @@ function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', 
                         ...cuerpo,
                         firma_password: campoClave.value,
                         firma_comentario: formulario.elements.firma_comentario.value.trim(),
+                        ...(cajaDesviacion.hidden ? {} : { motivo_desviacion: campoMotivo.value.trim() }),
                     }),
                 });
                 let datos = {};
@@ -98,6 +117,13 @@ function ejecutarConFirma({ accion, titulo, detalle = '', url, metodo = 'POST', 
                     cajaError.hidden = false;
                     campoClave.value = '';
                     campoClave.focus();
+                    botonFirmar.disabled = false;
+                    botonFirmar.textContent = 'Firmar';
+                    return;
+                }
+                if (!respuesta.ok && datos.codigo === 'MOTIVO_REQUERIDO') {
+                    pedirMotivo(datos.error);
+                    campoMotivo.focus();
                     botonFirmar.disabled = false;
                     botonFirmar.textContent = 'Firmar';
                     return;
