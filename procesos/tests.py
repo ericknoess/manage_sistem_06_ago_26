@@ -13,7 +13,7 @@ from roster.models import Cuadrilla, Operador, RolOperador
 from usuarios.tests import programar_ahora
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, LoteProduccion, FaseLote, AsignacionFaseOperador,
-    MaterialOperacion, MaterialFase,
+    MaterialOperacion, MaterialFase, EquipoOperacion, EquipoFase, ReservaEquipo,
 )
 
 
@@ -143,14 +143,15 @@ class ProgramacionFasesTests(TestCase):
 
     # --- Restricciones de la API ---------------------------------------------
 
-    def test_patch_de_fase_ignora_estado_y_horarios(self):
+    def test_fase_no_se_edita_por_patch(self):
+        """Estado y horarios solo cambian por cambiar-estado/reprogramar; los equipos, por /api/equipos-fase/."""
         lote = self.crear_lote()
         t1 = self.fase(lote, self.t1)
         respuesta = self.client.patch(f'/api/fases-lote/{t1.id}/', {
             'estado': 'COMPLETADA', 'fecha_inicio_real': '2026-01-01T00:00:00',
             'inicio_programado': '2026-01-01T00:00:00',
         }, format='json')
-        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.status_code, 405)
 
         t1.refresh_from_db()
         self.assertEqual(t1.estado, 'PENDIENTE')
@@ -526,3 +527,194 @@ class InicioEnPlantaTests(TestCase):
         t1.save()
         alertas = self.web.get('/api/fases-lote/alertas/').data
         self.assertTrue(any('Medio V' in m for m in alertas[t1.id]))
+
+
+class EquiposTests(TestCase):
+    """
+    Receta: T1 (2 h, 1 Biorreactor con 2 h de preparación y 1 h de limpieza) → T2 (3 h, FS, sin equipo).
+    """
+
+    def setUp(self):
+        from actividades.models import Equipo, TipoEquipo
+        self.jefa = APIClient()
+        self.jefa.force_authenticate(usuario_con_rol('jefa', 'Jefatura'))
+        self.biorreactor = TipoEquipo.objects.get_or_create(codigo='BIORREACTOR', defaults={'nombre': 'Biorreactor'})[0]
+        self.autoclave = TipoEquipo.objects.get_or_create(codigo='AUTOCLAVE', defaults={'nombre': 'Autoclave'})[0]
+        self.br1 = Equipo.objects.create(id='BR-01', nombre='Biorreactor 500 L', tipo=self.biorreactor)
+        self.br2 = Equipo.objects.create(id='BR-02', nombre='Biorreactor 200 L', tipo=self.biorreactor)
+        self.ac1 = Equipo.objects.create(id='AC-01', nombre='Autoclave', tipo=self.autoclave)
+
+        self.proceso = ProcesoMaestro.objects.create(nombre='Proceso con equipos')
+        self.t1 = OperacionProceso.objects.create(proceso=self.proceso, identificador_paso='T1', nombre='Siembra', orden=1, duracion_horas=2)
+        self.t2 = OperacionProceso.objects.create(proceso=self.proceso, identificador_paso='T2', nombre='Cosecha', orden=2,
+                                                  duracion_horas=3, predecesora=self.t1)
+        EquipoOperacion.objects.create(operacion=self.t1, tipo=self.biorreactor, cantidad=1, horas_preparacion=2, horas_limpieza=1)
+        self.rol = RolOperador.objects.create(nombre='Operador base')
+        cuadrilla = Cuadrilla.objects.create(identificador='A', nombre='Cuadrilla A')
+        self.operador = Operador.objects.create(cuadrilla=cuadrilla, nombre='Ana', codigo_empleado='OP-1', rol=self.rol)
+
+    def crear_lote(self, codigo='L-1', inicio=None):
+        inicio = inicio or timezone.localtime(timezone.now()).replace(second=0, microsecond=0, tzinfo=None)
+        respuesta = self.jefa.post('/api/lotes/', {'identificador_lote': codigo, 'proceso_maestro': self.proceso.id,
+                                                   'fecha_inicio_planeada': inicio.isoformat()}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        lote = LoteProduccion.objects.get(identificador_lote=codigo)
+        AsignacionFaseOperador.objects.create(fase_lote=self.fase(lote, self.t1), operador=self.operador, rol_ejercido=self.rol)
+        return lote
+
+    def fase(self, lote, operacion):
+        return FaseLote.objects.get(lote=lote, operacion_maestra=operacion, es_subtarea_muestreo=False)
+
+    def requerimiento(self, lote):
+        return EquipoFase.objects.get(fase=self.fase(lote, self.t1))
+
+    def reservar(self, ef, equipo, cliente=None):
+        return (cliente or self.jefa).post(f'/api/equipos-fase/{ef.id}/reservar/', {'equipo': equipo.id}, format='json')
+
+    def iniciar(self, fase):
+        return self.jefa.post(f'/api/fases-lote/{fase.id}/cambiar-estado/',
+                              {'estado': 'EN_PROGRESO', 'firma_password': 'clave-de-prueba'}, format='json')
+
+    # --- Receta y lote --------------------------------------------------------------
+
+    def test_el_lote_copia_los_equipos_de_la_receta(self):
+        ef = self.requerimiento(self.crear_lote())
+        self.assertEqual((ef.tipo, ef.cantidad, ef.cantidad_receta, ef.horas_preparacion, ef.horas_limpieza),
+                         (self.biorreactor, 1, 1, 2, 1))
+        inicio, fin = ef.ventana_ocupacion()
+        self.assertEqual(inicio, ef.fase.inicio_programado - timedelta(hours=2))
+        self.assertEqual(fin, ef.fase.fin_programado + timedelta(hours=1))
+
+    def test_la_receta_guarda_equipos_por_tipo(self):
+        ingeniera = APIClient()
+        ingeniera.force_authenticate(usuario_con_rol('ingeniera', 'Ingeniería de procesos'))
+        respuesta = ingeniera.patch(f'/api/operaciones-proceso/{self.t2.id}/', {'equipos': [
+            {'tipo': 'AUTOCLAVE', 'cantidad': 2, 'horas_preparacion': 0.5, 'horas_limpieza': 1, 'aplica_a': 'ACTIVIDAD'},
+        ]}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['equipos'][0]['tipo_nombre'], 'Autoclave')
+        repetido = ingeniera.patch(f'/api/operaciones-proceso/{self.t2.id}/', {'equipos': [
+            {'tipo': 'AUTOCLAVE', 'cantidad': 1}, {'tipo': 'AUTOCLAVE', 'cantidad': 1}]}, format='json')
+        self.assertEqual(repetido.status_code, 400)
+
+    # --- Reservas ---------------------------------------------------------------------
+
+    def test_reserva_valida_tipo_cantidad_y_estado(self):
+        ef = self.requerimiento(self.crear_lote())
+        self.assertIn('la fase pide Biorreactor', self.reservar(ef, self.ac1).data['error'])
+        self.br1.estado = 'MANTENIMIENTO'
+        self.br1.save()
+        self.assertIn('mantenimiento', self.reservar(ef, self.br1).data['error'])
+        self.br2.calibracion_vence = timezone.localdate() - timedelta(days=1)
+        self.br2.save()
+        self.assertIn('calibración', self.reservar(ef, self.br2).data['error'])
+        self.br2.calibracion_vence = None
+        self.br2.save()
+        self.assertEqual(self.reservar(ef, self.br2).status_code, 201)
+        self.br1.estado = 'DISPONIBLE'
+        self.br1.save()
+        self.assertIn('ya tiene', self.reservar(ef, self.br1).data['error'])  # pide 1
+
+    def test_no_se_reserva_un_equipo_ocupado_incluida_preparacion_y_limpieza(self):
+        inicio = timezone.localtime(timezone.now()).replace(second=0, microsecond=0, tzinfo=None)
+        ef_a = self.requerimiento(self.crear_lote('L-A', inicio))
+        # L-B empieza 4 h después: su preparación (2 h) toca la limpieza de L-A (fin + 1 h = inicio + 3 h)
+        ef_b = self.requerimiento(self.crear_lote('L-B', inicio + timedelta(hours=4)))
+        self.assertEqual(self.reservar(ef_a, self.br1).status_code, 201)
+        respuesta = self.reservar(ef_b, self.br1)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('está reservado para', respuesta.data['error'])
+        candidatos = self.jefa.get(f'/api/equipos-fase/{ef_b.id}/candidatos/').data
+        self.assertEqual({c['id']: c['disponible'] for c in candidatos}, {'BR-01': False, 'BR-02': True})
+
+    def test_ajustes_exigen_motivo_y_no_bajan_de_lo_reservado(self):
+        ef = self.requerimiento(self.crear_lote())
+        url = f'/api/equipos-fase/{ef.id}/'
+        self.assertEqual(self.jefa.post(url + 'ajustar/', {'cantidad': 2}, format='json').status_code, 400)
+        self.assertEqual(self.jefa.post(url + 'ajustar/', {'cantidad': 2, 'motivo': 'Escalamiento del lote'}, format='json').status_code, 200)
+        self.reservar(ef, self.br1)
+        self.reservar(ef, self.br2)
+        self.assertIn('libera', self.jefa.post(url + 'ajustar/', {'cantidad': 1, 'motivo': 'Regresa a uno'}, format='json').data['error'])
+        respuesta = self.jefa.post(url + 'retirar/', {'motivo': 'No se usará biorreactor'}, format='json')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.data['reservados'], 0)
+        self.assertFalse(respuesta.data['activo'])
+
+    def test_consulta_no_reserva(self):
+        consulta = APIClient()
+        consulta.force_authenticate(usuario_con_rol('consulta', 'Consulta'))
+        ef = self.requerimiento(self.crear_lote())
+        self.assertEqual(self.reservar(ef, self.br1, consulta).status_code, 403)
+
+    # --- Ejecución ----------------------------------------------------------------------
+
+    def test_no_inicia_sin_el_equipo_reservado(self):
+        lote = self.crear_lote()
+        t1 = self.fase(lote, self.t1)
+        respuesta = self.iniciar(t1)
+        self.assertEqual(respuesta.data['codigo'], 'EQUIPO_PENDIENTE')
+        self.reservar(self.requerimiento(lote), self.br1)
+        self.br1.estado = 'FUERA_SERVICIO'
+        self.br1.save()
+        self.assertIn('fuera de servicio', self.iniciar(t1).data['error'])
+        self.br1.estado = 'DISPONIBLE'
+        self.br1.save()
+        self.assertEqual(self.iniciar(t1).status_code, 200)
+
+    def test_cambiar_equipo_en_ejecucion_con_motivo_y_firma(self):
+        from auditoria.models import RegistroAuditoria
+        lote = self.crear_lote()
+        ef = self.requerimiento(lote)
+        reserva_id = self.reservar(ef, self.br1).data['reservas'][0]['id']
+        url = f'/api/equipos-fase/{ef.id}/cambiar/'
+        # Antes de iniciar no aplica: se libera y se reserva otro
+        self.assertIn('ejecución', self.jefa.post(url, {'reserva': reserva_id, 'equipo': 'BR-02', 'motivo': 'Falla',
+                                                        'firma_password': 'clave-de-prueba'}, format='json').data['error'])
+        self.iniciar(self.fase(lote, self.t1))
+        self.assertEqual(self.jefa.post(url, {'reserva': reserva_id, 'equipo': 'BR-02', 'firma_password': 'clave-de-prueba'},
+                                        format='json').status_code, 400)  # sin motivo
+        self.assertEqual(self.jefa.post(url, {'reserva': reserva_id, 'equipo': 'BR-02', 'motivo': 'Falla del agitador'},
+                                        format='json').data['codigo'], 'FIRMA_REQUERIDA')
+        respuesta = self.jefa.post(url, {'reserva': reserva_id, 'equipo': 'BR-02', 'motivo': 'Falla del agitador',
+                                         'firma_password': 'clave-de-prueba'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        anterior, nueva = ReservaEquipo.objects.filter(equipo_fase=ef).order_by('id')
+        self.assertIsNotNone(anterior.hasta)
+        self.assertEqual((nueva.equipo_id, nueva.desde), ('BR-02', anterior.hasta))
+        self.assertEqual(respuesta.data['reservados'], 1)
+        registro = RegistroAuditoria.objects.get(categoria='EQUIPO_LOTE', accion='CAMBIAR')
+        self.assertEqual(registro.firma.significado, 'Autorizo el cambio de equipo durante la ejecución')
+        self.assertEqual(registro.motivo, 'Falla del agitador')
+
+    # --- Alertas y monitor ------------------------------------------------------------------
+
+    def test_reprogramar_que_cruza_reservas_genera_alerta(self):
+        inicio = timezone.localtime(timezone.now()).replace(second=0, microsecond=0, tzinfo=None) + timedelta(days=1)
+        lote_a, lote_b = self.crear_lote('L-A', inicio), self.crear_lote('L-B', inicio + timedelta(days=1))
+        self.reservar(self.requerimiento(lote_a), self.br1)
+        self.reservar(self.requerimiento(lote_b), self.br1)
+        t1_b = self.fase(lote_b, self.t1)
+        planeador = APIClient()
+        planeador.force_authenticate(usuario_con_rol('planeador', 'Planeador'))
+        respuesta = planeador.post(f'/api/fases-lote/{t1_b.id}/reprogramar/', {
+            'fecha_programada': inicio.date().isoformat(), 'hora_inicio_programada': inicio.strftime('%H:%M'),
+            'motivo_reprogramacion': 'OTRO'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        alertas = self.jefa.get('/api/fases-lote/alertas/').data
+        self.assertTrue(any('BR-01' in m and 'se cruza' in m for m in alertas[t1_b.id]))
+
+    def test_monitor_muestra_tramos_y_pendientes(self):
+        lote_a = self.crear_lote('L-A')
+        self.crear_lote('L-B')
+        self.reservar(self.requerimiento(lote_a), self.br1)
+        hoy = timezone.localdate()
+        datos = self.jefa.get(f'/api/equipos-fase/ocupacion/?desde={hoy}&hasta={hoy + timedelta(days=1)}').data
+        self.assertEqual([(t['equipo'], t['lote_codigo']) for t in datos['tramos']], [('BR-01', 'L-A')])
+        self.assertEqual([(p['tipo'], p['lote_codigo'], p['faltan']) for p in datos['pendientes']], [('BIORREACTOR', 'L-B', 1)])
+
+    def test_clonar_receta_copia_equipos(self):
+        ingeniera = APIClient()
+        ingeniera.force_authenticate(usuario_con_rol('ingeniera', 'Ingeniería de procesos'))
+        respuesta = ingeniera.post(f'/api/procesos-maestros/{self.proceso.id}/clonar/', {'nuevo_nombre': 'Copia'}, format='json')
+        self.assertIn(respuesta.status_code, (200, 201), respuesta.data)
+        self.assertTrue(EquipoOperacion.objects.filter(operacion__proceso_id=respuesta.data['nuevo_id'], tipo=self.biorreactor).exists())

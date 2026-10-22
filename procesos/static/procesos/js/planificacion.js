@@ -10,7 +10,6 @@ const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "S
 
 let fasesGlobales = [];
 let operadoresGlobales = [];
-let equiposGlobales = [];
 let materialesGlobales = [];
 let faseSeleccionadaId = null;
 let alertasGlobales = {};  // {fase_id: [mensajes]}: cruces, operadores sin turno, materiales tras un adelanto
@@ -88,16 +87,15 @@ function cambiarModoVista(modo) {
 
 async function cargarDatosPlanificacion() {
     try {
-        const [resFases, resOp, resEq, resMat, resAlertas] = await Promise.all([
+        const [resFases, resOp, resMat, resAlertas] = await Promise.all([
             fetch('/api/fases-lote/'), fetch('/api/operadores/?activo=true'),
-            fetch('/api/equipos/'), fetch('/api/materiales/'), fetch('/api/fases-lote/alertas/')
+            fetch('/api/materiales/'), fetch('/api/fases-lote/alertas/')
         ]);
 
         if (!resFases.ok) throw new Error('Error de red');
 
         fasesGlobales = await resFases.json();
         operadoresGlobales = await resOp.json();
-        equiposGlobales = await resEq.json();
         materialesGlobales = await resMat.json();
         alertasGlobales = resAlertas.ok ? await resAlertas.json() : {};
 
@@ -229,7 +227,7 @@ function renderGrillaDiaria() {
                      onclick="seleccionarFase(${f.id})">
                      <div class="daily-task-meta">
                         <span>⏰ ${timeStr}</span>
-                        <span>${insigniaAlertas(f.id)}👥 ${asignados}/${headcountReq} ${alertOps}</span>
+                        <span>${insigniaAlertas(f.id)}${insigniaEquipos(f)}👥 ${asignados}/${headcountReq} ${alertOps}</span>
                      </div>
                      <div class="daily-task-title">
                         [${f.operacion_id_paso}] ${f.operacion_nombre}
@@ -302,7 +300,7 @@ function renderGrillaSemanal() {
                 <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
                 <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
                     <span>Lote: ${f.lote_codigo}</span>
-                    <div style="display:flex; gap:0.25rem; align-items:center;">${insigniaAlertas(f.id)}${delayHtml}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
+                    <div style="display:flex; gap:0.25rem; align-items:center;">${insigniaAlertas(f.id)}${delayHtml}${insigniaEquipos(f)}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
                 </div>
                 ${assigneesHTML}
             `;
@@ -381,17 +379,9 @@ function renderPanelDetalle(faseId) {
         return `<span class="resource-chip op ${extraClass}">👤 ${a.operador_nombre.split(' ')[0]} ${advertenciaUI} ${btnRemover}</span>`;
     }).join('');
 
-    // 2. Equipos Asignados
-    const equiposAsignadosIds = fase.equipos_asignados || [];
-    const equiposChips = equiposAsignadosIds.map(eqId => {
-        const eq = equiposGlobales.find(e => e.id === eqId);
-        const btnRemover = estaIniciada ? '' : `<span class="btn-remove-tag" data-permiso="asignar_personal" onclick="actualizarRecursosFase(${fase.id}, 'equipo', '${eqId}', 'remover')">✕</span>`;
-        return `<span class="resource-chip eq">⚙️ ${eq ? eq.nombre : eqId} ${btnRemover}</span>`;
-    }).join('');
-
-    const equiposOpts = equiposGlobales
-        .filter(eq => !equiposAsignadosIds.includes(eq.id))
-        .map(eq => `<option value="${eq.id}">${eq.nombre}</option>`).join('');
+    // 2. Equipos: requerimiento por tipo (de la receta) y reservas de equipos concretos
+    const equiposEditables = fase.estado === 'PENDIENTE';
+    const equiposHtml = htmlEquiposFase(fase, { editable: equiposEditables });
 
     // 3. Materiales del lote (copiados de la receta; ajustes y retiros con motivo GxP)
     const materialesEditables = !['EN_PROGRESO', 'COMPLETADA', 'OMITIDA'].includes(fase.estado);
@@ -429,9 +419,8 @@ function renderPanelDetalle(faseId) {
             </div>
 
             <div class="resource-section">
-                <div class="resource-title">EQUIPOS ASIGNADOS:</div>
-                <div class="resource-tags-container">${equiposChips || '<span style="color:#64748b; font-size:0.65rem;">Ninguno</span>'}</div>
-                ${estaIniciada ? '' : `<select class="select-resource" data-permiso="asignar_personal" onchange="actualizarRecursosFase(${fase.id}, 'equipo', this.value, 'agregar')"><option value="" disabled selected>+ Agregar equipo...</option>${equiposOpts}</select>`}
+                <div class="resource-title">EQUIPOS:</div>
+                ${equiposHtml}
             </div>
 
             <div class="resource-section">
@@ -475,6 +464,7 @@ function renderPanelDetalle(faseId) {
         });
     }
     panel.innerHTML = html;
+    if (equiposEditables) cargarCandidatosEquipos(panel);
 
     if (materialesEditables) {
         crearSelectorMateriales(document.getElementById('buscadorMaterialFase'), {
@@ -636,31 +626,6 @@ async function ejecutarReprogramacionAPI() {
     }
 }
 
-async function actualizarRecursosFase(faseId, tipo, recursoId, accion) {
-    if (!recursoId) return;
-    const fase = fasesGlobales.find(f => f.id === faseId);
-    if (!fase) return;
-
-    let nuevosEquipos = [...(fase.equipos_asignados || [])];
-
-    if (tipo === 'equipo') {
-        if (accion === 'agregar' && !nuevosEquipos.includes(recursoId)) nuevosEquipos.push(recursoId);
-        if (accion === 'remover') nuevosEquipos = nuevosEquipos.filter(id => id !== recursoId);
-    }
-
-    try {
-        const response = await fetch(`/api/fases-lote/${faseId}/`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-            body: JSON.stringify({ equipos_asignados: nuevosEquipos })
-        });
-
-        if (!response.ok) throw new Error('Error al actualizar recursos');
-        await cargarDatosPlanificacion();
-    } catch (error) { alert("Error: " + error.message); }
-}
-
-
 async function asignarOperadorFase(faseId, opId, rolId) {
     try {
         const res = await fetch('/api/asignaciones-operador/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') }, body: JSON.stringify({ fase_lote: faseId, operador: opId, rol_ejercido: rolId, horas_invertidas: 0 }) });
@@ -698,5 +663,21 @@ async function cargarHistorialFase(faseId) {
 function insigniaAlertas(faseId) {
     const alertas = alertasGlobales[faseId] || [];
     if (!alertas.length) return '';
-    return `<span class="badge-alerta" title="${escaparHtml(alertas.join('\n'))}">⚠️ ${alertas.length}</span>`;
+    return `<span class="badge-alerta" data-tooltip="${escaparHtml(alertas.join('\n'))}">⚠️ ${alertas.length}</span>`;
 }
+
+// Insignia 🏗️ reservados/requeridos (vacía si la fase no pide equipo)
+function insigniaEquipos(fase) {
+    const resumen = resumenEquiposFase(fase);
+    if (!resumen) return '';
+    const clase = resumen.completo ? 'badge-equipos' : 'badge-equipos badge-equipos--falta';
+    const titulo = resumen.completo ? 'Equipos reservados' : 'Falta reservar equipo';
+    return `<span class="${clase}" data-tooltip="${titulo}">🏗️ ${resumen.reservados}/${resumen.requeridos}</span>`;
+}
+
+// Usado por core/js/equipos.js para encontrar la fase de los modales
+function buscarFaseParaEquipos(faseId) {
+    return fasesGlobales.find(f => f.id === faseId);
+}
+
+configurarEquipos({ alActualizar: () => cargarDatosPlanificacion() });

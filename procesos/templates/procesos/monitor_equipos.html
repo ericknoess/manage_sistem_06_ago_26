@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Equipos - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'procesos/css/monitor_equipos.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/tooltip.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📊 Monitor de Equipos</h2>
+            <p>Ocupación de cada equipo por día y hora según el forecast vigente de los lotes, con preparación y limpieza.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'catalogo-equipos' %}" class="btn-secundario">🏗️ Catálogo de equipos</a>
+            <a href="{% url 'planificacion-semanal' %}" class="btn-secundario">📅 Planificación (reservas por lote)</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Periodo y filtros">
+        <div class="grupo-periodo">
+            <button class="btn-nav" onclick="moverPeriodo(-1)" title="Periodo anterior">◀</button>
+            <button class="btn-nav" onclick="irAHoy()">Hoy</button>
+            <button class="btn-nav" onclick="moverPeriodo(1)" title="Periodo siguiente">▶</button>
+            <input type="date" id="inputFechaInicio" onchange="cambiarFechaInicio(this.value)" title="Primer día del periodo">
+            <div class="segmentado" role="group" aria-label="Duración del periodo">
+                <button data-dias="1" onclick="cambiarDuracion(1)">Día</button>
+                <button data-dias="3" onclick="cambiarDuracion(3)">3 días</button>
+                <button data-dias="7" onclick="cambiarDuracion(7)">Semana</button>
+            </div>
+            <span id="etiquetaPeriodo" class="etiqueta-periodo"></span>
+        </div>
+        <div class="grupo-filtros">
+            <input type="search" id="filtroTexto" placeholder="🔎 Equipo, área o lote…" oninput="renderizar()">
+            <select id="filtroTipo" onchange="renderizar()"><option value="">Todos los tipos</option></select>
+        </div>
+    </section>
+
+    <section class="indicadores" id="indicadores" aria-label="Resumen del periodo"></section>
+
+    <main class="contenido">
+        <section class="panel">
+            <div class="panel-titulo">
+                <span>⏰ Ocupación por equipo</span>
+                <span class="leyenda">
+                    <span class="leyenda__item"><i class="muestra muestra--preparacion"></i>Preparación / limpieza</span>
+                    <span class="leyenda__item"><i class="muestra muestra--pendiente"></i>Programada</span>
+                    <span class="leyenda__item"><i class="muestra muestra--progreso"></i>En ejecución</span>
+                    <span class="leyenda__item"><i class="muestra muestra--completada"></i>Completada</span>
+                </span>
+            </div>
+            <div class="cronograma" id="cronograma">
+                <div class="estado-vacio">Cargando ocupación…</div>
+            </div>
+        </section>
+
+        <aside class="panel">
+            <div class="panel-titulo">⚠️ Pendientes de reservar</div>
+            <div class="pendientes" id="pendientes"></div>
+        </aside>
+    </main>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/tooltip.js' %}"></script>
+    <script src="{% static 'procesos/js/monitor_equipos.js' %}"></script>
+</body>
+</html>

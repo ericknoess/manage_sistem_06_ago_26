@@ -228,3 +228,21 @@ tbody tr.fila-operacion.drag-over { border-top: 2px solid var(--accent); }
     line-height: 1.3;
     color: #94a3b8;
 }
+
+/* Equipos por tipo en el formulario de actividad */
+.agregar-equipo { display: flex; gap: 0.4rem; align-items: center; }
+.agregar-equipo select { flex: 1; }
+.btn-agregar-equipo {
+    height: 32px;
+    padding: 0 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.btn-agregar-equipo:hover { border-color: var(--accent); }
+.tag-resource--vacio { opacity: 0.55; }

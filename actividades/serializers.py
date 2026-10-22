@@ -1,13 +1,54 @@
 # actividades/serializers.py
 
 from rest_framework import serializers
-from .models import Equipo, MaterialInsumo, ActividadSemanal
+from django.utils import timezone
+
+from .models import Equipo, MaterialInsumo, ActividadSemanal, TipoEquipo
 from roster.models import Operador
 
+class TipoEquipoSerializer(serializers.ModelSerializer):
+    # Equipos registrados y actividades de receta que piden este tipo (anotados en el ViewSet)
+    equipos_registrados = serializers.IntegerField(read_only=True, default=None)
+    usos_en_recetas = serializers.IntegerField(read_only=True, default=None)
+
+    class Meta:
+        model = TipoEquipo
+        fields = ['codigo', 'nombre', 'activo', 'equipos_registrados', 'usos_en_recetas']
+
+    def validate_codigo(self, valor):
+        valor = valor.strip().upper().replace(' ', '_')
+        if self.instance and valor != self.instance.codigo:
+            raise serializers.ValidationError("El código de un tipo de equipo no se puede cambiar.")
+        return valor
+
+
 class EquipoSerializer(serializers.ModelSerializer):
+    tipo_nombre = serializers.CharField(source='tipo.nombre', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    # Días para el vencimiento de la calibración (negativo si ya venció; None si no aplica)
+    dias_calibracion = serializers.SerializerMethodField()
+    reservas_vigentes = serializers.IntegerField(read_only=True, default=None)
+
     class Meta:
         model = Equipo
-        fields = ['id', 'nombre', 'tipo', 'activo']
+        fields = ['id', 'nombre', 'tipo', 'tipo_nombre', 'area', 'capacidad', 'estado', 'estado_display',
+                  'calibracion_vence', 'dias_calibracion', 'activo', 'reservas_vigentes']
+
+    def get_dias_calibracion(self, obj):
+        if not obj.calibracion_vence:
+            return None
+        return (obj.calibracion_vence - timezone.localdate()).days
+
+    def validate_id(self, valor):
+        # El código es la llave primaria y lo referencian las reservas de los lotes: no se renombra
+        if self.instance and valor != self.instance.id:
+            raise serializers.ValidationError("El código de un equipo no se puede cambiar.")
+        return valor.strip()
+
+    def validate_tipo(self, tipo):
+        if not tipo.activo and (not self.instance or self.instance.tipo_id != tipo.codigo):
+            raise serializers.ValidationError("Ese tipo de equipo está dado de baja.")
+        return tipo
 
 class MaterialInsumoSerializer(serializers.ModelSerializer):
     categoria_display = serializers.CharField(source='get_categoria_display', read_only=True)

@@ -27,3 +27,13 @@ function formatearRangoFase(inicioIso, finIso) {
     const dias = Math.round((new Date(fin.toDateString()) - new Date(inicio.toDateString())) / 86400000);
     return `${hora(inicio)} - ${hora(fin)}${dias > 0 ? ` (+${dias}d)` : ''}`;
 }
+
+// Escapa texto para insertarlo en HTML (nombres, motivos, textos que escribe el usuario).
+function escaparHtml(texto) {
+    return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Normaliza para buscar sin distinguir mayúsculas ni acentos.
+function normalizarBusqueda(texto) {
+    return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}

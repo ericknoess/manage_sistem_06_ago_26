@@ -23,7 +23,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - `templates/inicio.html` + `static/core/`: página central y recursos compartidos (base.css, utils.js)
 - `roster/`: cuadrillas, operadores, roles, tipos de turno, turnos diarios, incidencias,
   secuencias de rotación y carga masiva (`roster/services.py`)
-- `actividades/`: catálogos de Equipos y Materiales. `ActividadSemanal` es el histórico del
+- `actividades/`: catálogos de Equipos (con `TipoEquipo`, estado operativo y vencimiento de calibración) y Materiales. `ActividadSemanal` es el histórico del
   tablero semanal retirado (solo lectura; `/tablero/` redirige a Planificación, único lugar para asignar personal)
 - `procesos/`: ProcesoMaestro → EtapaProceso → OperacionProceso; lotes, fases y asignaciones.
   Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
@@ -37,6 +37,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Materiales: `MaterialOperacion` (receta: cantidad, anticipación, actividad o cada muestreo) se copia a `MaterialFase`
   al instanciar el lote; los ajustes por lote exigen motivo y los retiros son bajas lógicas. El momento requerido es
   `inicio_programado - anticipacion_horas`, así que sigue a las reprogramaciones. Buscador compartido en `static/core/js/materiales.js`.
+- Equipos: la receta pide equipos por tipo (`EquipoOperacion`: cantidad, horas de preparación y limpieza, actividad o cada muestreo);
+  se copia a `EquipoFase` al instanciar el lote (ajustes con motivo, retiros como baja lógica) y en Planificación se reservan equipos
+  concretos (`ReservaEquipo`). La ocupación es `inicio - preparación` a `fin + limpieza` y sigue al forecast. No se reserva un equipo
+  ocupado, de otro tipo, no disponible o con calibración vencida, y una fase no inicia sin su equipo. Con la fase en ejecución el equipo
+  se cambia con motivo y firma (`CAMBIAR_EQUIPO`): la reserva anterior se cierra en `hasta` y la nueva abre en `desde`.
+  Lógica en `procesos/services.py`; API `/api/equipos-fase/`; front compartido en `static/core/js/equipos.js`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
   Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
@@ -57,7 +63,8 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   5 intentos fallidos (login o firma) bloquean la cuenta (`Perfil.bloqueado`, `is_active=False`) o el PIN (`Operador.pin_bloqueado`);
   se desbloquean con la acción del admin o `python manage.py desbloquear_usuario <usuario>`.
 - Pantallas: /login/, /auditoria/ (bitácora), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
-  /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales)
+  /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales),
+  /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos)
 
 ## Convenciones
 - Código, modelos, comentarios y UI en español.

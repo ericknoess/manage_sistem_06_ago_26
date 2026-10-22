@@ -20,6 +20,7 @@ SIGNIFICADOS = {
     'FASE_COMPLETADA': 'Ejecución completada y verificada',
     'FASE_PENDIENTE': 'Autorizo regresar la fase a pendiente',
     'FASE_OMITIDA': 'Autorizo omitir la fase',
+    'CAMBIAR_EQUIPO': 'Autorizo el cambio de equipo durante la ejecución',
 }
 
 

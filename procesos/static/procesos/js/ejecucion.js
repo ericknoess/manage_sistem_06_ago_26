@@ -251,7 +251,7 @@ async function renderizarDetalleLote() {
                             <div style="color: white; margin-top:2px;">REAL: ${actInicio} a ${actFin}</div>
                         </td>
                         <td>${rendimientoHtml}</td>
-                        <td>${asignacionesHtml}</td>
+                        <td>${asignacionesHtml}${htmlEquiposCompacto(fase, { permiteCambio: fase.estado === 'EN_PROGRESO' && !isLocked })}</td>
                         <td style="text-align: center; white-space: nowrap;">${accionesHtml}</td>
                     </tr>
                 `;
@@ -481,3 +481,10 @@ function avisoVentanaInicio(fase) {
     }
     return '';
 }
+
+// Usado por core/js/equipos.js para encontrar la fase de los modales
+function buscarFaseParaEquipos(faseId) {
+    return loteSeleccionado ? loteSeleccionado.fases.find(f => f.id === faseId) : null;
+}
+
+configurarEquipos({ alActualizar: () => cargarCatalogos() });

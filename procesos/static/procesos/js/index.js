@@ -2,6 +2,7 @@
 
 let procesosGlobales = [];
 let materialesGlobales = [];
+let tiposEquipoGlobales = [];
 let rolesGlobales = []; 
 let procesoSeleccionado = null;
 let mostrandoArchivados = false;
@@ -9,6 +10,8 @@ let ultimoDataCPM = null;
 
 // Materiales que se están editando en cada modal: [{ material, cantidad, anticipacion_horas, aplica_a }]
 const materialesBuilder = { crear: [], editar: [] };
+// Equipos por tipo de cada modal: [{ tipo, cantidad, horas_preparacion, horas_limpieza, aplica_a }]
+const equiposBuilder = { crear: [], editar: [] };
 let buscadoresMaterialesListos = false;
 
 // GESTIÓN DEL NIVEL DE ZOOM (px por hora) - CONFIGURACIÓN CON 6px/h
@@ -22,14 +25,17 @@ const ZOOM_CONFIG = {
 
 async function cargarCatalogosGlobales() {
     try {
-        const [resProc, resMat, resRoles] = await Promise.all([
+        const [resProc, resMat, resRoles, resTipos] = await Promise.all([
             fetch('/api/procesos-maestros/'),
             fetch('/api/materiales/'),
-            fetch('/api/roles-operador/')
+            fetch('/api/roles-operador/'),
+            fetch('/api/tipos-equipo/')
         ]);
         procesosGlobales = await resProc.json();
         materialesGlobales = await resMat.json();
         rolesGlobales = await resRoles.json();
+        tiposEquipoGlobales = await resTipos.json();
+        llenarSelectsTipoEquipo();
 
         inicializarBuscadoresMateriales();
         renderizarListaProcesos();
@@ -163,6 +169,100 @@ function obtenerMaterialesDesdeBuilder(modo) {
     return materiales;
 }
 
+// --- EQUIPOS DE LA ACTIVIDAD (por tipo) ----------------------------------------
+
+function llenarSelectsTipoEquipo() {
+    const opciones = tiposEquipoGlobales.filter(t => t.activo)
+        .map(t => `<option value="${escaparHtml(t.codigo)}">${escaparHtml(t.nombre)}</option>`).join('');
+    ['Crear', 'Editar'].forEach(sufijo => {
+        document.getElementById(`selectTipoEquipo${sufijo}`).innerHTML = opciones || '<option value="">Sin tipos en el catálogo</option>';
+    });
+}
+
+function nombreTipoEquipo(codigo) {
+    const tipo = tiposEquipoGlobales.find(t => t.codigo === codigo);
+    return tipo ? tipo.nombre : codigo;
+}
+
+function agregarEquipoBuilder(modo) {
+    const tipo = document.getElementById(modo === 'crear' ? 'selectTipoEquipoCrear' : 'selectTipoEquipoEditar').value;
+    if (!tipo) return;
+    if (equiposBuilder[modo].some(e => e.tipo === tipo && e.aplica_a === 'ACTIVIDAD')) {
+        return alert(`${nombreTipoEquipo(tipo)} ya está en la actividad; ajusta su cantidad.`);
+    }
+    equiposBuilder[modo].push({ tipo, cantidad: 1, horas_preparacion: 0, horas_limpieza: 0, aplica_a: 'ACTIVIDAD' });
+    renderizarEquiposBuilder(modo);
+}
+
+function quitarEquipoBuilder(modo, indice) {
+    equiposBuilder[modo].splice(indice, 1);
+    renderizarEquiposBuilder(modo);
+}
+
+function renderizarEquiposBuilder(modo) {
+    const contenedor = document.getElementById(modo === 'crear' ? 'equiposBuilderCrear' : 'equiposBuilderEditar');
+    const filas = equiposBuilder[modo];
+    const conMuestreo = esIncubacionConMuestreo(modo);
+    if (!conMuestreo) filas.forEach(f => f.aplica_a = 'ACTIVIDAD');
+
+    if (!filas.length) {
+        contenedor.innerHTML = `<div class="tabla-materiales__vacio">Sin equipos. Elige un tipo arriba para agregarlo.</div>`;
+        return;
+    }
+    const campo = (i, nombre, valor, paso, minimo = 0) =>
+        `<input type="number" min="${minimo}" step="${paso}" value="${valor}" oninput="equiposBuilder['${modo}'][${i}].${nombre} = this.value">`;
+    contenedor.innerHTML = `
+        <table class="tabla-materiales">
+            <thead><tr>
+                <th>Tipo de equipo</th>
+                <th style="width: 80px;">Cantidad</th>
+                <th style="width: 105px;" title="Horas que el equipo se ocupa antes del inicio (montaje, esterilización SIP)">Preparación (h)</th>
+                <th style="width: 105px;" title="Horas que el equipo se ocupa después del fin (limpieza CIP)">Limpieza (h)</th>
+                ${conMuestreo ? '<th style="width: 120px;">Se usa en</th>' : ''}
+                <th style="width: 32px;"></th>
+            </tr></thead>
+            <tbody>
+                ${filas.map((f, i) => {
+                    const tipo = tiposEquipoGlobales.find(t => t.codigo === f.tipo);
+                    const aviso = tipo && !tipo.activo ? '<div class="material-inactivo">⚠️ Tipo dado de baja</div>' : '';
+                    const sinEquipos = tipo && !tipo.equipos_registrados ? '<div class="material-inactivo">⚠️ No hay equipos activos de este tipo</div>' : '';
+                    return `<tr>
+                        <td><strong>🏗️ ${escaparHtml(nombreTipoEquipo(f.tipo))}</strong>${aviso}${sinEquipos}</td>
+                        <td>${campo(i, 'cantidad', f.cantidad, 1, 1)}</td>
+                        <td>${campo(i, 'horas_preparacion', f.horas_preparacion, 0.5)}</td>
+                        <td>${campo(i, 'horas_limpieza', f.horas_limpieza, 0.5)}</td>
+                        ${conMuestreo ? `<td><select onchange="equiposBuilder['${modo}'][${i}].aplica_a = this.value">
+                            <option value="ACTIVIDAD" ${f.aplica_a === 'ACTIVIDAD' ? 'selected' : ''}>Actividad</option>
+                            <option value="MUESTREO" ${f.aplica_a === 'MUESTREO' ? 'selected' : ''}>Cada muestreo</option>
+                        </select></td>` : ''}
+                        <td><button type="button" class="btn-icon delete" title="Quitar equipo" onclick="quitarEquipoBuilder('${modo}', ${i})">🗑️</button></td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// Devuelve los equipos listos para la API, o null (con aviso) si algún valor no es válido.
+function obtenerEquiposDesdeBuilder(modo) {
+    const equipos = [];
+    for (const f of equiposBuilder[modo]) {
+        const cantidad = parseInt(f.cantidad, 10);
+        const preparacion = parseFloat(f.horas_preparacion) || 0;
+        const limpieza = parseFloat(f.horas_limpieza) || 0;
+        if (!(cantidad >= 1)) {
+            alert(`La cantidad de ${nombreTipoEquipo(f.tipo)} debe ser al menos 1.`);
+            return null;
+        }
+        if (preparacion < 0 || limpieza < 0) {
+            alert(`Las horas de preparación y limpieza de ${nombreTipoEquipo(f.tipo)} no pueden ser negativas.`);
+            return null;
+        }
+        equipos.push({ tipo: f.tipo, cantidad, horas_preparacion: preparacion, horas_limpieza: limpieza, aplica_a: f.aplica_a });
+    }
+    return equipos;
+}
+
 function abrirModalNuevaOperacion() {
     if (!procesoSeleccionado) return alert("Debe seleccionar un proceso maestro primero.");
     document.getElementById('inputPasoId').value = '';
@@ -178,6 +278,8 @@ function abrirModalNuevaOperacion() {
     document.getElementById('rolesBuilderCrear').innerHTML = '';
     agregarFilaRolBuilder('crear');
     materialesBuilder.crear = [];
+    equiposBuilder.crear = [];
+    renderizarEquiposBuilder('crear');
 
     toggleIncubacionFields(false);
     document.getElementById('modalNuevaOperacion').style.display = 'flex';
@@ -301,6 +403,7 @@ function toggleIncubacionFields(isEdit = false) {
         opsMuestreoInput.setAttribute('readonly', 'readonly');
     }
     renderizarMaterialesBuilder(isEdit ? 'editar' : 'crear');
+    renderizarEquiposBuilder(isEdit ? 'editar' : 'crear');
 }
 
 function toggleVistaArchivados() {
@@ -603,6 +706,12 @@ function renderizarCPMConHolguras(cpmData) {
                 return `<span class="chip-material" title="${escaparHtml(titulo)}">🧪 ${formatearCantidad(m.cantidad, m.unidad_medida)} ${escaparHtml(m.material_nombre)}${sufijo}</span>`;
             }).join('');
 
+            const chipsEquipos = (opOriginal.equipos || []).map(e => {
+                const sufijo = e.aplica_a === 'MUESTREO' ? ' /muestreo' : '';
+                const horas = [e.horas_preparacion ? `prep. ${e.horas_preparacion} h` : '', e.horas_limpieza ? `limpieza ${e.horas_limpieza} h` : ''].filter(Boolean).join(' · ');
+                return `<span class="tag-resource" title="${escaparHtml(horas || 'Sin preparación ni limpieza')}">🏗️ ${escaparHtml(e.tipo_nombre)} ×${e.cantidad}${sufijo}</span>`;
+            }).join('') || '<span class="tag-resource tag-resource--vacio">🏗️ Sin equipo</span>';
+
             const safeName = t.nombre.replace(/'/g, "\\'");
 
             tr.innerHTML = `
@@ -612,7 +721,7 @@ function renderizarCPMConHolguras(cpmData) {
                 <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
                 <td>
                     ${badgesRolesHtml}
-                    <span class="tag-resource">🏗️ ${t.tipo_equipo_requerido}</span>
+                    ${chipsEquipos}
                     ${chipsMateriales ? `<div>${chipsMateriales}</div>` : ''}
                 </td>
                 <td>${t.es}h ➔ ${t.ef}h</td>
@@ -993,13 +1102,14 @@ async function crearOperacionAPI() {
     const tolerancia_antes_horas = leerTolerancia('inputTolAntes');
     const tolerancia_despues_horas = leerTolerancia('inputTolDespues');
     if (tolerancia_antes_horas === null || tolerancia_despues_horas === null) return alert("La tolerancia debe ser un número de horas mayor o igual a 0.");
-    const tipo_equipo_requerido = document.getElementById('selectTipoEquipoReq').value;
 
     const requerimientos_rol = obtenerRolesDesdeBuilder('crear');
 
     if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
     const materiales = obtenerMaterialesDesdeBuilder('crear');
     if (!materiales) return;
+    const equipos = obtenerEquiposDesdeBuilder('crear');
+    if (!equipos) return;
 
     const res = await fetch('/api/operaciones-proceso/', {
         method: 'POST',
@@ -1020,7 +1130,7 @@ async function crearOperacionAPI() {
             tolerancia_antes_horas,
             tolerancia_despues_horas,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
-            tipo_equipo_requerido,
+            equipos,
             materiales,
             requerimientos_rol
         })
@@ -1059,7 +1169,6 @@ function abrirModalEditarOperacion(id) {
     document.getElementById('editOpDesfase').value = op.desfase_horas || 0;
     document.getElementById('editOpTolAntes').value = op.tolerancia_antes_horas ?? 2;
     document.getElementById('editOpTolDespues').value = op.tolerancia_despues_horas ?? 2;
-    document.getElementById('editOpEquipo').value = op.tipo_equipo_requerido || 'N/A';
 
     const predSelect = document.getElementById('editOpPredecesora');
     Array.from(predSelect.options).forEach(opt => {
@@ -1083,6 +1192,9 @@ function abrirModalEditarOperacion(id) {
 
     materialesBuilder.editar = (op.materiales || []).map(m => ({
         material: m.material, cantidad: Number(m.cantidad), anticipacion_horas: m.anticipacion_horas, aplica_a: m.aplica_a,
+    }));
+    equiposBuilder.editar = (op.equipos || []).map(e => ({
+        tipo: e.tipo, cantidad: e.cantidad, horas_preparacion: e.horas_preparacion, horas_limpieza: e.horas_limpieza, aplica_a: e.aplica_a,
     }));
 
     toggleIncubacionFields(true);
@@ -1120,12 +1232,13 @@ async function guardarEdicionOperacionAPI() {
     const tolerancia_despues_horas = leerTolerancia('editOpTolDespues');
     if (tolerancia_antes_horas === null || tolerancia_despues_horas === null) return alert("La tolerancia debe ser un número de horas mayor o igual a 0.");
     const predecesora = document.getElementById('editOpPredecesora').value || null;
-    const tipo_equipo_requerido = document.getElementById('editOpEquipo').value;
     const requerimientos_rol = obtenerRolesDesdeBuilder('editar');
 
     if (!identificador_paso || !nombre || isNaN(duracion_horas)) return alert("Completa los campos obligatorios.");
     const materiales = obtenerMaterialesDesdeBuilder('editar');
     if (!materiales) return;
+    const equipos = obtenerEquiposDesdeBuilder('editar');
+    if (!equipos) return;
 
     const res = await fetch(`/api/operaciones-proceso/${id}/`, {
         method: 'PATCH',
@@ -1144,7 +1257,7 @@ async function guardarEdicionOperacionAPI() {
             desfase_horas,
             tolerancia_antes_horas,
             tolerancia_despues_horas,
-            tipo_equipo_requerido,
+            equipos,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             requerimientos_rol,
             materiales

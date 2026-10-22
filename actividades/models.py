@@ -3,17 +3,61 @@
 from django.db import models
 from roster.models import Operador
 
+class TipoEquipo(models.Model):
+    """
+    Categoría de equipo (Biorreactor, Autoclave, Centrífuga…). Las recetas piden equipos por tipo y,
+    al planear el lote, se reserva un equipo concreto de ese tipo.
+    """
+    codigo = models.CharField(max_length=50, primary_key=True, help_text="Código del tipo (Ej: BIORREACTOR)")
+    nombre = models.CharField(max_length=100, help_text="Nombre visible del tipo")
+    activo = models.BooleanField(default=True, help_text="Disponible para nuevas recetas y equipos (baja lógica)")
+
+    class Meta:
+        ordering = ['nombre']
+        verbose_name = "Tipo de equipo"
+        verbose_name_plural = "Tipos de equipo"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Equipo(models.Model):
     """
     Catálogo maestro de equipos críticos de bioproceso (Biorreactores, tanques, centrífugas).
     """
+    ESTADO_CHOICES = [
+        ('DISPONIBLE', 'Disponible'),
+        ('MANTENIMIENTO', 'En mantenimiento'),
+        ('FUERA_SERVICIO', 'Fuera de servicio'),
+    ]
+
     id = models.CharField(max_length=50, primary_key=True, help_text="Código único del equipo (Ej: EQ-01)")
     nombre = models.CharField(max_length=150, help_text="Nombre descriptivo del equipo")
-    tipo = models.CharField(max_length=50, default="EQUIPO", help_text="Tipo o categoría del equipo")
-    activo = models.BooleanField(default=True, help_text="Disponibilidad operativa en planta")
+    tipo = models.ForeignKey(TipoEquipo, on_delete=models.PROTECT, to_field='codigo', db_column='tipo',
+                             related_name='equipos', help_text="Tipo o categoría del equipo")
+    area = models.CharField(max_length=100, blank=True, default='', help_text="Área o sala donde está el equipo")
+    capacidad = models.CharField(max_length=50, blank=True, default='', help_text="Capacidad o tamaño (Ej: 500 L)")
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='DISPONIBLE',
+                              help_text="Solo un equipo disponible se puede reservar")
+    calibracion_vence = models.DateField(null=True, blank=True,
+                                         help_text="Vencimiento de la calibración o calificación; después de esa fecha no se reserva")
+    activo = models.BooleanField(default=True, help_text="Disponibilidad operativa en planta (baja lógica)")
+
+    class Meta:
+        ordering = ['id']
 
     def __str__(self):
         return f"[{self.id}] {self.nombre}"
+
+    def motivo_no_reservable(self, hasta=None):
+        """Por qué el equipo no se puede reservar hasta la fecha-hora `hasta`, o None si sí se puede."""
+        if not self.activo:
+            return f"El equipo [{self.id}] está dado de baja."
+        if self.estado != 'DISPONIBLE':
+            return f"El equipo [{self.id}] está {self.get_estado_display().lower()}."
+        if self.calibracion_vence and hasta and self.calibracion_vence < hasta.date():
+            return f"La calibración de [{self.id}] vence el {self.calibracion_vence:%d/%m/%Y}, antes de terminar la reserva."
+        return None
 
 
 class MaterialInsumo(models.Model):

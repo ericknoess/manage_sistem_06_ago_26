@@ -259,19 +259,11 @@
                     <label>Duración (h)</label>
                     <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5">
                 </div>
-                <div class="form-group">
-                    <label>Equipo Req.</label>
-                    <select id="selectTipoEquipoReq">
-                        <option value="N/A">N/A</option>
-                        <option value="Biorreactor">Biorreactor</option>
-                        <option value="Autoclave">Autoclave</option>
-                        <option value="Centrífuga">Centrífuga</option>
-                    </select>
-                </div>
+                <div class="form-group" aria-hidden="true"><!-- los equipos se definen por tipo en su sección --></div>
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly oninput="renderizarMaterialesBuilder('crear')">
+                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly oninput="renderizarMaterialesBuilder('crear'); renderizarEquiposBuilder('crear')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -323,6 +315,20 @@
                     </label>
                     <div id="buscadorMaterialesCrear"></div>
                     <div id="materialesBuilderCrear"></div>
+                </div>
+
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>Equipos (por tipo; se reservan al planear el lote)</span>
+                        <span class="seccion-materiales__acciones">
+                            <a href="{% url 'catalogo-equipos' %}" target="_blank" title="Abrir el catálogo de equipos en otra pestaña">🏗️ Catálogo ↗</a>
+                        </span>
+                    </label>
+                    <div class="agregar-equipo">
+                        <select id="selectTipoEquipoCrear" aria-label="Tipo de equipo a agregar"></select>
+                        <button type="button" class="btn-agregar-equipo" onclick="agregarEquipoBuilder('crear')">➕ Agregar equipo</button>
+                    </div>
+                    <div id="equiposBuilderCrear"></div>
                 </div>
 
                 <div class="form-group" style="grid-column: span 3;">
@@ -377,19 +383,11 @@
                     <label>Duración (h)</label>
                     <input type="number" id="editOpDuracion" step="0.5" min="0.5">
                 </div>
-                <div class="form-group">
-                    <label>Equipo Req.</label>
-                    <select id="editOpEquipo">
-                        <option value="N/A">N/A</option>
-                        <option value="Biorreactor">Biorreactor</option>
-                        <option value="Autoclave">Autoclave</option>
-                        <option value="Centrífuga">Centrífuga</option>
-                    </select>
-                </div>
+                <div class="form-group" aria-hidden="true"><!-- los equipos se definen por tipo en su sección --></div>
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="editOpFrecMuestreo" min="0" step="1" oninput="renderizarMaterialesBuilder('editar')">
+                    <input type="number" id="editOpFrecMuestreo" min="0" step="1" oninput="renderizarMaterialesBuilder('editar'); renderizarEquiposBuilder('editar')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -449,6 +447,20 @@
                     </label>
                     <div id="buscadorMaterialesEditar"></div>
                     <div id="materialesBuilderEditar"></div>
+                </div>
+
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>Equipos (por tipo; se reservan al planear el lote)</span>
+                        <span class="seccion-materiales__acciones">
+                            <a href="{% url 'catalogo-equipos' %}" target="_blank" title="Abrir el catálogo de equipos en otra pestaña">🏗️ Catálogo ↗</a>
+                        </span>
+                    </label>
+                    <div class="agregar-equipo">
+                        <select id="selectTipoEquipoEditar" aria-label="Tipo de equipo a agregar"></select>
+                        <button type="button" class="btn-agregar-equipo" onclick="agregarEquipoBuilder('editar')">➕ Agregar equipo</button>
+                    </div>
+                    <div id="equiposBuilderEditar"></div>
                 </div>
             </div>
             <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">

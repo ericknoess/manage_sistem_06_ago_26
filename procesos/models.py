@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from django.db import models
-from actividades.models import Equipo, MaterialInsumo
+from actividades.models import Equipo, MaterialInsumo, TipoEquipo
 from roster.models import RolOperador, Operador
 
 # ==============================================================================
@@ -109,11 +109,6 @@ class OperacionProceso(models.Model):
     tolerancia_despues_horas = models.FloatField(default=2, help_text="Horas después de la hora programada en que aún se inicia sin desviación")
 
     personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos")
-    tipo_equipo_requerido = models.CharField(
-        max_length=100, 
-        default='N/A', 
-        help_text="Categoría o tipo de equipo requerido"
-    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -185,6 +180,31 @@ class MaterialOperacion(models.Model):
         return f"{self.cantidad} {self.material.unidad_medida} {self.material.nombre} para [{self.operacion.identificador_paso}]"
 
 
+class EquipoOperacion(models.Model):
+    """
+    Equipo que necesita una operación de la receta, por tipo y cantidad. El equipo queda ocupado
+    desde `horas_preparacion` antes del inicio (montaje, SIP) hasta `horas_limpieza` después del fin (CIP).
+    """
+    APLICA_A_CHOICES = MaterialOperacion.APLICA_A_CHOICES
+
+    operacion = models.ForeignKey(OperacionProceso, on_delete=models.CASCADE, related_name='equipos')
+    tipo = models.ForeignKey(TipoEquipo, on_delete=models.PROTECT, related_name='usos_en_operaciones')
+    cantidad = models.PositiveIntegerField(default=1, help_text="Cuántos equipos de este tipo se ocupan")
+    horas_preparacion = models.FloatField(default=0, help_text="Horas que el equipo se ocupa antes del inicio (montaje, esterilización)")
+    horas_limpieza = models.FloatField(default=0, help_text="Horas que el equipo se ocupa después del fin (limpieza, CIP)")
+    aplica_a = models.CharField(max_length=10, choices=APLICA_A_CHOICES, default='ACTIVIDAD')
+
+    class Meta:
+        verbose_name = "Equipo de Operación"
+        verbose_name_plural = "Equipos de Operación"
+        constraints = [
+            models.UniqueConstraint(fields=['operacion', 'tipo', 'aplica_a'], name='unique_tipo_equipo_por_operacion'),
+        ]
+
+    def __str__(self):
+        return f"{self.cantidad}x {self.tipo.nombre} para [{self.operacion.identificador_paso}]"
+
+
 class LoteProduccion(models.Model):
     ESTADO_LOTE_CHOICES = [
         ('PLANEADO', 'Planeado'),
@@ -250,8 +270,6 @@ class FaseLote(models.Model):
     
     motivo_reprogramacion = models.CharField(max_length=50, choices=MOTIVO_REPROGRAMACION_CHOICES, null=True, blank=True)
     notas_reprogramacion = models.TextField(null=True, blank=True)
-
-    equipos_asignados = models.ManyToManyField(Equipo, blank=True, related_name='fases_asignadas')
 
     fecha_inicio_real = models.DateTimeField(null=True, blank=True)
     fecha_fin_real = models.DateTimeField(null=True, blank=True)
@@ -323,3 +341,83 @@ class AsignacionFaseOperador(models.Model):
 
     def __str__(self):
         return f"{self.operador.nombre} -> {self.fase_lote.operacion_maestra.nombre} [{self.rol_ejercido.nombre}]"
+
+class EquipoFase(models.Model):
+    """
+    Requerimiento de equipo de una fase de lote, copiado de la receta al instanciar el lote. Los ajustes
+    guardan motivo y los retiros son bajas lógicas, igual que los materiales. Los equipos concretos
+    se reservan en `ReservaEquipo`.
+    """
+    fase = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='equipos')
+    tipo = models.ForeignKey(TipoEquipo, on_delete=models.PROTECT, related_name='requerimientos_lote')
+    cantidad = models.PositiveIntegerField(default=1)
+    cantidad_receta = models.PositiveIntegerField(null=True, blank=True, help_text="Cantidad original de la receta; vacía si se agregó en el lote")
+    horas_preparacion = models.FloatField(default=0)
+    horas_limpieza = models.FloatField(default=0)
+    activo = models.BooleanField(default=True)
+    motivo_ajuste = models.TextField(blank=True, default='')
+    ajustado_en = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Equipo de Fase"
+        verbose_name_plural = "Equipos de Fase"
+        constraints = [
+            models.UniqueConstraint(fields=['fase', 'tipo'], name='unique_tipo_equipo_por_fase'),
+        ]
+
+    def __str__(self):
+        return f"{self.cantidad}x {self.tipo.nombre} | {self.fase}"
+
+    def ventana_ocupacion(self):
+        """(inicio, fin) en que la fase ocupa el equipo, con preparación y limpieza. Usa las horas reales si ya las hay."""
+        fase = self.fase
+        inicio = fase.fecha_inicio_real or fase.inicio_programado
+        if not inicio:
+            return None, None
+        if fase.fecha_fin_real:
+            fin = fase.fecha_fin_real
+        elif fase.fecha_inicio_real:
+            fin = fase.fecha_inicio_real + fase.duracion_planeada
+        else:
+            fin = fase.fin_programado or inicio + fase.duracion_planeada
+        return (inicio - timedelta(hours=self.horas_preparacion or 0), fin + timedelta(hours=self.horas_limpieza or 0))
+
+
+class ReservaEquipo(models.Model):
+    """
+    Equipo concreto reservado para un requerimiento de fase. Si se cambia durante la ejecución, la reserva
+    anterior se cierra en `hasta` y la nueva empieza en `desde`, de modo que el registro muestra qué equipo
+    se usó en cada tramo. Liberar una reserva antes de iniciar es baja lógica (`activo=False`).
+    """
+    equipo_fase = models.ForeignKey(EquipoFase, on_delete=models.CASCADE, related_name='reservas')
+    equipo = models.ForeignKey(Equipo, on_delete=models.PROTECT, related_name='reservas')
+    desde = models.DateTimeField(null=True, blank=True, help_text="Inicio del tramo si entró por un cambio durante la ejecución")
+    hasta = models.DateTimeField(null=True, blank=True, help_text="Fin del tramo si se cambió por otro equipo durante la ejecución")
+    activo = models.BooleanField(default=True)
+    motivo = models.TextField(blank=True, default='', help_text="Motivo de la liberación o del cambio")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Reserva de Equipo"
+        verbose_name_plural = "Reservas de Equipo"
+        ordering = ['equipo_fase', 'creado_en']
+
+    def __str__(self):
+        return f"{self.equipo} → {self.equipo_fase.fase}"
+
+    @property
+    def vigente(self):
+        """Ocupa el equipo ahora o en adelante: activa y sin cerrar por un cambio."""
+        return self.activo and self.hasta is None
+
+    def ventana(self):
+        """Tramo que ocupa este equipo: la ventana del requerimiento recortada por `desde`/`hasta`."""
+        inicio, fin = self.equipo_fase.ventana_ocupacion()
+        if inicio is None:
+            return None, None
+        if self.desde and self.desde > inicio:
+            inicio = self.desde
+        if self.hasta and self.hasta < fin:
+            fin = self.hasta
+        return inicio, fin

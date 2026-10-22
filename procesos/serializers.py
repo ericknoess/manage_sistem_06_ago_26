@@ -5,9 +5,9 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
-    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase
+    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase,
+    EquipoOperacion, EquipoFase, ReservaEquipo,
 )
-from actividades.serializers import EquipoSerializer
 from roster.models import RolOperador
 
 
@@ -52,8 +52,29 @@ class MaterialOperacionSerializer(serializers.ModelSerializer):
         return valor
 
 
+class EquipoOperacionSerializer(serializers.ModelSerializer):
+    tipo_nombre = serializers.CharField(source='tipo.nombre', read_only=True)
+    tipo_activo = serializers.BooleanField(source='tipo.activo', read_only=True)
+
+    class Meta:
+        model = EquipoOperacion
+        fields = ['id', 'tipo', 'tipo_nombre', 'tipo_activo', 'cantidad', 'horas_preparacion', 'horas_limpieza', 'aplica_a']
+
+    def validate_cantidad(self, valor):
+        if valor < 1:
+            raise serializers.ValidationError("La cantidad debe ser al menos 1.")
+        return valor
+
+    def validate(self, data):
+        for campo in ('horas_preparacion', 'horas_limpieza'):
+            if (data.get(campo) or 0) < 0:
+                raise serializers.ValidationError({campo: "Las horas no pueden ser negativas."})
+        return data
+
+
 class OperacionProcesoSerializer(serializers.ModelSerializer):
     materiales = MaterialOperacionSerializer(many=True, required=False)
+    equipos = EquipoOperacionSerializer(many=True, required=False)
     requerimientos_rol = RequerimientoPersonalFaseSerializer(many=True, required=False)
     requerimientos_rol_detalles = RequerimientoPersonalFaseSerializer(source='requerimientos_rol', many=True, read_only=True)
 
@@ -64,7 +85,7 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             'duracion_horas', 'frecuencia_muestreo_horas', 'duracion_muestreo_horas',
             'ops_muestreo', 'predecesora', 'tipo_dependencia', 'desfase_horas',
             'tolerancia_antes_horas', 'tolerancia_despues_horas',
-            'personal_requerido', 'tipo_equipo_requerido', 'materiales',
+            'personal_requerido', 'materiales', 'equipos',
             'requerimientos_rol', 'requerimientos_rol_detalles'
         ]
         extra_kwargs = {
@@ -114,7 +135,25 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             if not genera_muestreos and any(m.get('aplica_a') == 'MUESTREO' for m in materiales):
                 raise serializers.ValidationError({"materiales": "Solo una incubación con frecuencia de muestreo puede tener materiales por muestreo."})
 
+        equipos = data.get('equipos')
+        if equipos:
+            vistos = set()
+            for e in equipos:
+                clave = (e['tipo'].codigo, e.get('aplica_a', 'ACTIVIDAD'))
+                if clave in vistos:
+                    raise serializers.ValidationError({"equipos": f"El tipo de equipo {e['tipo'].nombre} está repetido."})
+                vistos.add(clave)
+            valor = lambda campo: data.get(campo, getattr(self.instance, campo, None))
+            genera_muestreos = valor('tipo_operacion') == 'INCUBACION' and (valor('frecuencia_muestreo_horas') or 0) > 0
+            if not genera_muestreos and any(e.get('aplica_a') == 'MUESTREO' for e in equipos):
+                raise serializers.ValidationError({"equipos": "Solo una incubación con frecuencia de muestreo puede pedir equipo por muestreo."})
+
         return data
+
+    @staticmethod
+    def _guardar_equipos(operacion, equipos_data):
+        operacion.equipos.all().delete()
+        EquipoOperacion.objects.bulk_create([EquipoOperacion(operacion=operacion, **e) for e in equipos_data])
 
     @staticmethod
     def _guardar_materiales(operacion, materiales_data):
@@ -125,9 +164,11 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         requerimientos_data = validated_data.pop('requerimientos_rol', [])
         materiales_data = validated_data.pop('materiales', [])
-        
+        equipos_data = validated_data.pop('equipos', [])
+
         operacion = OperacionProceso.objects.create(**validated_data)
         self._guardar_materiales(operacion, materiales_data)
+        self._guardar_equipos(operacion, equipos_data)
             
         for req in requerimientos_data:
             RequerimientoPersonalFase.objects.create(operacion=operacion, **req)
@@ -138,6 +179,7 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         requerimientos_data = validated_data.pop('requerimientos_rol', None)
         materiales_data = validated_data.pop('materiales', None)
+        equipos_data = validated_data.pop('equipos', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -145,6 +187,8 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
 
         if materiales_data is not None:
             self._guardar_materiales(instance, materiales_data)
+        if equipos_data is not None:
+            self._guardar_equipos(instance, equipos_data)
 
         if requerimientos_data is not None:
             instance.requerimientos_rol.all().delete()
@@ -221,6 +265,57 @@ class RequerimientoMaterialSerializer(MaterialFaseSerializer):
         return fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo and fase.nombre_tarea_dinamica else fase.operacion_maestra.nombre
 
 
+class ReservaEquipoSerializer(serializers.ModelSerializer):
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    equipo_estado = serializers.CharField(source='equipo.estado', read_only=True)
+    vigente = serializers.BooleanField(read_only=True)
+    inicio = serializers.SerializerMethodField()
+    fin = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReservaEquipo
+        fields = ['id', 'equipo', 'equipo_nombre', 'equipo_estado', 'desde', 'hasta', 'activo', 'vigente',
+                  'motivo', 'creado_en', 'inicio', 'fin']
+        read_only_fields = fields
+
+    def get_inicio(self, obj):
+        return obj.ventana()[0]
+
+    def get_fin(self, obj):
+        return obj.ventana()[1]
+
+
+class EquipoFaseSerializer(serializers.ModelSerializer):
+    tipo_nombre = serializers.CharField(source='tipo.nombre', read_only=True)
+    reservas = ReservaEquipoSerializer(many=True, read_only=True)
+    reservados = serializers.SerializerMethodField()
+    ocupacion_inicio = serializers.SerializerMethodField()
+    ocupacion_fin = serializers.SerializerMethodField()
+    ajustado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EquipoFase
+        fields = [
+            'id', 'fase', 'tipo', 'tipo_nombre', 'cantidad', 'cantidad_receta', 'horas_preparacion', 'horas_limpieza',
+            'activo', 'ajustado', 'motivo_ajuste', 'ajustado_en', 'reservas', 'reservados',
+            'ocupacion_inicio', 'ocupacion_fin',
+        ]
+        read_only_fields = fields
+
+    def get_reservados(self, obj):
+        """Equipos reservados vigentes (los cerrados por un cambio quedan como historial)."""
+        return sum(1 for r in obj.reservas.all() if r.vigente)
+
+    def get_ocupacion_inicio(self, obj):
+        return obj.ventana_ocupacion()[0]
+
+    def get_ocupacion_fin(self, obj):
+        return obj.ventana_ocupacion()[1]
+
+    def get_ajustado(self, obj):
+        return obj.ajustado_en is not None
+
+
 class FaseLoteSerializer(serializers.ModelSerializer):
     operacion_nombre = serializers.SerializerMethodField()
     operacion_id_paso = serializers.CharField(source='operacion_maestra.identificador_paso', read_only=True)
@@ -239,7 +334,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     
     operadores_asignados = AsignacionFaseOperadorSerializer(many=True, read_only=True)
     
-    equipos_detalles = EquipoSerializer(source='equipos_asignados', many=True, read_only=True)
+    equipos = EquipoFaseSerializer(many=True, read_only=True)
     materiales = MaterialFaseSerializer(many=True, read_only=True)
     
     duracion_real_horas = serializers.SerializerMethodField()
@@ -268,7 +363,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'fecha_base_cpm', 'hora_inicio_base_cpm',
             'motivo_reprogramacion', 'notas_reprogramacion',
             'es_subtarea_muestreo', 'indice_muestreo',
-            'equipos_asignados', 'equipos_detalles', 'materiales',
+            'equipos', 'materiales',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados',
             'tolerancia_antes_horas', 'tolerancia_despues_horas',
@@ -280,9 +375,6 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'motivo_reprogramacion', 'notas_reprogramacion', 'es_subtarea_muestreo', 'indice_muestreo',
             'fecha_inicio_real', 'fecha_fin_real',
         ]
-        extra_kwargs = {
-            'equipos_asignados': {'required': False},
-        }
 
     @staticmethod
     def _local(valor):

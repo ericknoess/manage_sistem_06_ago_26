@@ -12,6 +12,7 @@ from .views import (
     FaseLoteViewSet,
     AsignacionFaseOperadorViewSet,
     MaterialFaseViewSet,
+    EquipoFaseViewSet,
     MobileeBRViewSet  # [NUEVO] Importamos la vista de la API móvil para piso de planta
 )
 
@@ -28,6 +29,7 @@ router.register(r'lotes', LoteProduccionViewSet, basename='lote')
 router.register(r'fases-lote', FaseLoteViewSet, basename='fase-lote')
 router.register(r'asignaciones-operador', AsignacionFaseOperadorViewSet, basename='asignacion-operador')
 router.register(r'materiales-fase', MaterialFaseViewSet, basename='material-fase')
+router.register(r'equipos-fase', EquipoFaseViewSet, basename='equipo-fase')
 
 # 3. [NUEVO] Rutas de la API Móvil para Operadores (Autenticación rápida y tareas)
 router.register(r'mobile', MobileeBRViewSet, basename='mobile-ebr')
@@ -51,6 +53,9 @@ urlpatterns = [
     
     # Monitor de materiales requeridos por día y hora
     path('materiales/', TemplateView.as_view(template_name='procesos/monitor_materiales.html'), name='monitor-materiales'),
+
+    # Monitor de ocupación de equipos por día y hora
+    path('equipos/', TemplateView.as_view(template_name='procesos/monitor_equipos.html'), name='monitor-equipos'),
 
     # Rutas generadas automáticamente por el router de la API
     path('api/', include(router.urls)),

@@ -1,7 +1,7 @@
 # procesos/admin.py
 
 from django.contrib import admin
-from .models import ProcesoMaestro, OperacionProceso, RequerimientoPersonalFase, MaterialOperacion
+from .models import ProcesoMaestro, OperacionProceso, RequerimientoPersonalFase, MaterialOperacion, EquipoOperacion
 
 class RequerimientoPersonalFaseInline(admin.TabularInline):
     """
@@ -11,6 +11,12 @@ class RequerimientoPersonalFaseInline(admin.TabularInline):
     model = RequerimientoPersonalFase
     extra = 1
     autocomplete_fields = ['rol']
+
+
+class EquipoOperacionInline(admin.TabularInline):
+    """Equipos (por tipo) que ocupa la operación, con horas de preparación y limpieza."""
+    model = EquipoOperacion
+    extra = 1
 
 
 class MaterialOperacionInline(admin.TabularInline):
@@ -45,10 +51,9 @@ class OperacionProcesoAdmin(admin.ModelAdmin):
         'nombre', 
         'tipo_operacion', 
         'duracion_horas', 
-        'personal_requerido', 
-        'tipo_equipo_requerido'
+        'personal_requerido',
     )
     list_filter = ('tipo_operacion', 'tipo_dependencia', 'proceso')
     search_fields = ('identificador_paso', 'nombre', 'proceso__nombre')
     autocomplete_fields = ['proceso', 'predecesora']
-    inlines = [RequerimientoPersonalFaseInline, MaterialOperacionInline]
+    inlines = [RequerimientoPersonalFaseInline, MaterialOperacionInline, EquipoOperacionInline]

@@ -55,6 +55,13 @@
                             <span class="app-desc">Materiales e insumos: unidad, categoría, almacenamiento, código ERP y proveedor.</span>
                         </span>
                     </a>
+                    <a class="app-card" href="{% url 'catalogo-equipos' %}">
+                        <span class="app-icono">🏗️</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Catálogo de equipos</span>
+                            <span class="app-desc">Equipos y sus tipos: área, capacidad, estado operativo y vencimiento de calibración.</span>
+                        </span>
+                    </a>
                 </div>
 
                 <div class="etapa etapa--planificacion">
@@ -63,7 +70,7 @@
                         <span class="app-icono">📅</span>
                         <span class="app-texto">
                             <span class="app-nombre">Planificación y asignación</span>
-                            <span class="app-desc">Vista semanal y diaria por lote: único lugar para asignar operadores y ajustar materiales de cada fase.</span>
+                            <span class="app-desc">Vista semanal y diaria por lote: único lugar para asignar operadores, reservar equipos y ajustar materiales de cada fase.</span>
                         </span>
                     </a>
                     <a class="app-card" href="{% url 'gantt-lotes' %}">
@@ -78,6 +85,13 @@
                         <span class="app-texto">
                             <span class="app-nombre">Monitor de materiales</span>
                             <span class="app-desc">Qué material se necesita, cuánto y a qué hora, por día, según el forecast de los lotes.</span>
+                        </span>
+                    </a>
+                    <a class="app-card" href="{% url 'monitor-equipos' %}">
+                        <span class="app-icono">🏗️</span>
+                        <span class="app-texto">
+                            <span class="app-nombre">Monitor de equipos</span>
+                            <span class="app-desc">Ocupación de cada equipo por día y hora, con preparación y limpieza, y lo que falta reservar.</span>
                         </span>
                     </a>
                 </div>

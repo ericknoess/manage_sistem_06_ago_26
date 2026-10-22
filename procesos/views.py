@@ -30,21 +30,24 @@ def _firma_o_respuesta(request, accion):
  
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
-    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase
+    LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase,
+    EquipoOperacion, EquipoFase, ReservaEquipo,
 )
-from actividades.models import MaterialInsumo
+from actividades.models import Equipo, MaterialInsumo, TipoEquipo
 from roster.models import Operador
 from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
     LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer,
-    MaterialFaseSerializer, RequerimientoMaterialSerializer
+    MaterialFaseSerializer, RequerimientoMaterialSerializer, EquipoFaseSerializer, ReservaEquipoSerializer,
 )
 from .services import (
     CPMCalculatorService, validar_disponibilidad_personal_fase, construir_fases_lote,
     validar_inicio_contra_predecesora, propagar_programacion, buscar_conflicto_operador,
     evaluar_inicio, alertas_programacion, formatear_hora,
     generar_materiales_lote, ajustar_material_fase, agregar_material_fase, retirar_material_fase,
-    requerimientos_materiales, ErrorMaterialFase
+    requerimientos_materiales, ErrorMaterialFase,
+    generar_equipos_lote, ajustar_equipo_fase, agregar_equipo_fase, retirar_equipo_fase, reservar_equipo,
+    liberar_reserva, cambiar_equipo, validar_cambio_equipo, equipos_candidatos, ocupacion_equipos, ErrorEquipoFase,
 )
 
 
@@ -55,7 +58,7 @@ from .services import (
 class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     auditoria_categoria, auditoria_nombre = 'RECETA', 'receta'
     auditoria_excluir = ('etapas', 'operaciones')
-    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
+    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__equipos__tipo', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
     serializer_class = ProcesoMaestroSerializer
     permiso_escritura = 'editar_receta'
     permisos_por_accion = {'archivar': 'archivar_receta', 'desarchivar': 'archivar_receta'}
@@ -127,8 +130,12 @@ class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
                 tolerancia_antes_horas=op.tolerancia_antes_horas,
                 tolerancia_despues_horas=op.tolerancia_despues_horas,
                 personal_requerido=op.personal_requerido,
-                tipo_equipo_requerido=op.tipo_equipo_requerido
             )
+            EquipoOperacion.objects.bulk_create([
+                EquipoOperacion(operacion=nueva_op, tipo_id=e.tipo_id, cantidad=e.cantidad, aplica_a=e.aplica_a,
+                                horas_preparacion=e.horas_preparacion, horas_limpieza=e.horas_limpieza)
+                for e in op.equipos.all()
+            ])
             MaterialOperacion.objects.bulk_create([
                 MaterialOperacion(operacion=nueva_op, material_id=m.material_id, cantidad=m.cantidad,
                                   anticipacion_horas=m.anticipacion_horas, aplica_a=m.aplica_a)
@@ -160,7 +167,7 @@ class EtapaProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
 
 class OperacionProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     auditoria_categoria, auditoria_nombre = 'RECETA', 'actividad'
-    queryset = OperacionProceso.objects.prefetch_related('materiales__material').all().order_by('proceso', 'orden', 'id')
+    queryset = OperacionProceso.objects.prefetch_related('materiales__material', 'equipos__tipo').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
     permiso_escritura = 'editar_receta'
     permisos_por_accion = {'validar_disponibilidad': SOLO_SESION}  # POST de solo consulta
@@ -216,7 +223,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material').order_by('-created_at')
+        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo').order_by('-created_at')
 
     serializer_class = LoteProduccionSerializer
     permisos_por_accion = {
@@ -231,6 +238,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lote = serializer.save()
         FaseLote.objects.bulk_create(construir_fases_lote(lote))
         generar_materiales_lote(lote)
+        generar_equipos_lote(lote)
         registrar(request, 'LOTE', 'CREAR', f"Lote {lote.identificador_lote} instanciado con la receta {lote.proceso_maestro.nombre}",
                   objeto=lote, lote=lote, cambios={
                       'receta': [None, lote.proceso_maestro.nombre],
@@ -293,27 +301,23 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         return Response({"mensaje": f"El lote {lote.identificador_lote} ha sido abortado."}, status=status.HTTP_200_OK)
 
 
-class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """
-    Las fases se crean al instanciar el lote y no se borran. Por PATCH solo se editan equipos
-    (el serializer marca el resto como solo lectura); estado y horarios cambian únicamente vía
-    `cambiar-estado` y `reprogramar`, que aplican las reglas GxP.
+    Las fases se crean al instanciar el lote y no se borran. Estado y horarios cambian únicamente vía
+    `cambiar-estado` y `reprogramar`, que aplican las reglas GxP; los equipos, vía `/api/equipos-fase/`.
     """
     serializer_class = FaseLoteSerializer
     permission_classes = [PermisoFaseLote]
-    auditoria_categoria, auditoria_nombre = 'FASE', 'equipos de la fase'
-    auditoria_campos = ('equipos_asignados',)
-
-    def _auditoria_contexto(self, instancia):
-        return {'fase': instancia}
     permisos_por_accion = {
-        'update': 'asignar_personal', 'partial_update': 'asignar_personal',  # PATCH solo cambia equipos
         'reprogramar': 'reprogramar_fase',
         'cambiar_estado': 'ejecutar_fase',
     }
 
     def get_queryset(self):
-        return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related('materiales__material').filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
+        return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related(
+            'materiales__material', 'operadores_asignados__operador', 'operadores_asignados__rol_ejercido',
+            'equipos__tipo', 'equipos__reservas__equipo',
+        ).filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
     @transaction.atomic
@@ -338,7 +342,7 @@ class FaseLoteViewSet(AuditoriaMixin, mixins.ListModelMixin, mixins.RetrieveMode
         if fase.estado == 'PENDIENTE' and nuevo_estado in ('EN_PROGRESO', 'COMPLETADA'):
             evaluacion = evaluar_inicio(fase, tiempo_actual)
             if evaluacion['bloqueo']:
-                return Response({"error": evaluacion['bloqueo'], "codigo": "DEPENDENCIA_PENDIENTE"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": evaluacion['bloqueo'], "codigo": evaluacion['codigo_bloqueo']}, status=status.HTTP_400_BAD_REQUEST)
             if evaluacion['desviacion'] == 'ADELANTO' and not request.user.is_authenticated:
                 # En la terminal no se adelanta fuera de tolerancia: lo autoriza un supervisor desde Piso de planta
                 return Response({"error": f"Esta tarea aún no está disponible. Puedes iniciarla a partir de las {formatear_hora(evaluacion['desde'])}. "
@@ -642,6 +646,211 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         return Response(RequerimientoMaterialSerializer(filas, many=True).data)
 
 
+def _entero(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _horas_equipo(valor):
+    if valor in (None, ''):
+        return None
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        raise ErrorEquipoFase("Las horas deben ser un número.")
+
+
+class EquipoFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Equipos de las fases de lote. El requerimiento (tipo y cantidad) se copia de la receta al instanciar
+    el lote; `agregar`, `ajustar` y `retirar` exigen motivo. Los equipos concretos se reservan con `reservar`
+    y se liberan con `liberar`; con la fase en ejecución, `cambiar` sustituye el equipo con motivo y firma.
+    Filtro: ?fase=<id>. `ocupacion` alimenta el monitor de equipos.
+    """
+    serializer_class = EquipoFaseSerializer
+    permiso_escritura = 'asignar_personal'
+    permisos_por_accion = {
+        'agregar': 'ajustar_material_lote', 'ajustar': 'ajustar_material_lote', 'retirar': 'ajustar_material_lote',
+        'reservar': 'asignar_personal', 'liberar': 'asignar_personal', 'cambiar': 'asignar_personal',
+    }
+
+    def get_queryset(self):
+        qs = EquipoFase.objects.select_related('tipo', 'fase__lote', 'fase__operacion_maestra').prefetch_related(
+            'reservas__equipo').order_by('fase', 'tipo__nombre')
+        if self.request.query_params.get('fase'):
+            qs = qs.filter(fase_id=self.request.query_params['fase'])
+        return qs
+
+    def _error(self, mensaje, estado=status.HTTP_400_BAD_REQUEST):
+        return Response({"error": mensaje}, status=estado)
+
+    def _datos(self, ef):
+        ef = self.get_queryset().get(id=ef.id)  # recarga con sus reservas
+        return self.get_serializer(ef).data
+
+    @staticmethod
+    def _resumen(ef):
+        return {'cantidad': ef.cantidad, 'horas_preparacion': ef.horas_preparacion, 'horas_limpieza': ef.horas_limpieza}
+
+    @action(detail=False, methods=['post'], url_path='agregar')
+    @transaction.atomic
+    def agregar(self, request):
+        try:
+            fase = FaseLote.objects.select_related('lote').get(id=request.data.get('fase'))
+            tipo = TipoEquipo.objects.get(codigo=request.data.get('tipo'))
+        except (FaseLote.DoesNotExist, TipoEquipo.DoesNotExist, ValueError):
+            return self._error("La fase o el tipo de equipo no existen.")
+        try:
+            ef = agregar_equipo_fase(fase, tipo, _entero(request.data.get('cantidad')),
+                                     _horas_equipo(request.data.get('horas_preparacion')),
+                                     _horas_equipo(request.data.get('horas_limpieza')), request.data.get('motivo'))
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        registrar(request, 'EQUIPO_LOTE', 'AGREGAR', f"Equipo {tipo.nombre} agregado a {FaseLoteViewSet._nombre_fase(fase)}",
+                  objeto=ef, fase=fase, motivo=ef.motivo_ajuste, cambios=diferencias(None, {'tipo': tipo.nombre, **self._resumen(ef)}))
+        return Response(self._datos(ef), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='ajustar')
+    @transaction.atomic
+    def ajustar(self, request, pk=None):
+        ef = self.get_object()
+        antes = self._resumen(ef)
+        try:
+            ajustar_equipo_fase(ef, _entero(request.data.get('cantidad')), _horas_equipo(request.data.get('horas_preparacion')),
+                                _horas_equipo(request.data.get('horas_limpieza')), request.data.get('motivo'))
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        registrar(request, 'EQUIPO_LOTE', 'AJUSTAR', f"Equipo {ef.tipo.nombre} ajustado en {FaseLoteViewSet._nombre_fase(ef.fase)}",
+                  objeto=ef, fase=ef.fase, motivo=ef.motivo_ajuste, cambios=diferencias(antes, self._resumen(ef)))
+        return Response(self._datos(ef))
+
+    @action(detail=True, methods=['post'], url_path='retirar')
+    @transaction.atomic
+    def retirar(self, request, pk=None):
+        ef = self.get_object()
+        try:
+            retirar_equipo_fase(ef, request.data.get('motivo'))
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        registrar(request, 'EQUIPO_LOTE', 'RETIRAR', f"Equipo {ef.tipo.nombre} retirado de {FaseLoteViewSet._nombre_fase(ef.fase)}",
+                  objeto=ef, fase=ef.fase, motivo=ef.motivo_ajuste, cambios={'activo': [True, False]})
+        return Response(self._datos(ef))
+
+    @action(detail=True, methods=['get'], url_path='candidatos')
+    def candidatos(self, request, pk=None):
+        """Equipos del tipo pedido, con el motivo por el que no se pueden reservar (null si están libres).
+        ?desde=ahora calcula la disponibilidad desde este momento (para un cambio durante la ejecución)."""
+        ef = self.get_object()
+        desde = timezone.now() if request.query_params.get('desde') == 'ahora' else None
+        return Response([
+            {'id': c['equipo'].id, 'nombre': c['equipo'].nombre, 'area': c['equipo'].area,
+             'estado': c['equipo'].get_estado_display(), 'disponible': c['motivo'] is None, 'motivo': c['motivo']}
+            for c in equipos_candidatos(ef, desde)
+        ])
+
+    @action(detail=True, methods=['post'], url_path='reservar')
+    @transaction.atomic
+    def reservar(self, request, pk=None):
+        ef = self.get_object()
+        try:
+            equipo = Equipo.objects.select_related('tipo').get(id=request.data.get('equipo'))
+        except Equipo.DoesNotExist:
+            return self._error("El equipo no existe.")
+        try:
+            reserva = reservar_equipo(ef, equipo)
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        inicio, fin = reserva.ventana()
+        registrar(request, 'EQUIPO_LOTE', 'RESERVAR', f"Equipo [{equipo.id}] {equipo.nombre} reservado para {FaseLoteViewSet._nombre_fase(ef.fase)}",
+                  objeto=reserva, fase=ef.fase, cambios={'equipo': [None, f"[{equipo.id}] {equipo.nombre}"],
+                                                         'ocupacion': [None, f"{formatear_hora(inicio)} – {formatear_hora(fin)}"]})
+        return Response(self._datos(ef), status=status.HTTP_201_CREATED)
+
+    def _reserva(self, ef, request):
+        return ef.reservas.select_related('equipo').get(id=request.data.get('reserva'))
+
+    @action(detail=True, methods=['post'], url_path='liberar')
+    @transaction.atomic
+    def liberar(self, request, pk=None):
+        ef = self.get_object()
+        try:
+            reserva = self._reserva(ef, request)
+            liberar_reserva(reserva, request.data.get('motivo', ''))
+        except ReservaEquipo.DoesNotExist:
+            return self._error("La reserva no existe en este requerimiento.")
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        registrar(request, 'EQUIPO_LOTE', 'LIBERAR', f"Equipo [{reserva.equipo_id}] liberado de {FaseLoteViewSet._nombre_fase(ef.fase)}",
+                  objeto=reserva, fase=ef.fase, motivo=reserva.motivo, cambios={'equipo': [f"[{reserva.equipo_id}] {reserva.equipo.nombre}", None]})
+        return Response(self._datos(ef))
+
+    @action(detail=True, methods=['post'], url_path='cambiar')
+    @transaction.atomic
+    def cambiar(self, request, pk=None):
+        """Sustituye un equipo con la fase en ejecución. Exige motivo y firma electrónica (CAMBIAR_EQUIPO)."""
+        ef = self.get_object()
+        try:
+            reserva = self._reserva(ef, request)
+            nuevo = Equipo.objects.select_related('tipo').get(id=request.data.get('equipo'))
+        except (ReservaEquipo.DoesNotExist, Equipo.DoesNotExist):
+            return self._error("La reserva o el equipo nuevo no existen.")
+        # Reglas de negocio primero: un error de datos no debe contar como firma fallida
+        try:
+            validar_cambio_equipo(reserva, nuevo, request.data.get('motivo'))
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+
+        firmante, error = _firma_o_respuesta(request, 'CAMBIAR_EQUIPO')
+        if error:
+            return error
+        try:
+            nueva = cambiar_equipo(reserva, nuevo, request.data.get('motivo'))
+        except ErrorEquipoFase as e:
+            return self._error(str(e))
+        registro = registrar(
+            request, 'EQUIPO_LOTE', 'CAMBIAR',
+            f"Equipo [{reserva.equipo_id}] sustituido por [{nuevo.id}] durante {FaseLoteViewSet._nombre_fase(ef.fase)}",
+            objeto=nueva, fase=ef.fase, motivo=nueva.motivo,
+            cambios={'equipo': [f"[{reserva.equipo_id}] {reserva.equipo.nombre}", f"[{nuevo.id}] {nuevo.nombre}"],
+                     'momento_del_cambio': [None, formatear_hora(nueva.desde, '%Y-%m-%d %H:%M')]})
+        firmar(registro, firmante)
+        return Response(self._datos(ef))
+
+    @action(detail=False, methods=['get'], url_path='ocupacion')
+    def ocupacion(self, request):
+        """?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (ambos días incluidos, hora local): tramos reservados por equipo
+        y requerimientos que aún no tienen equipo reservado."""
+        try:
+            desde = datetime.strptime(request.query_params.get('desde', ''), '%Y-%m-%d').date()
+            hasta = datetime.strptime(request.query_params.get('hasta', ''), '%Y-%m-%d').date()
+        except ValueError:
+            return self._error("Indique 'desde' y 'hasta' con formato YYYY-MM-DD.")
+        if hasta < desde or (hasta - desde).days > 62:
+            return self._error("El rango debe ser válido y de máximo 62 días.")
+        inicio = timezone.make_aware(datetime.combine(desde, time.min))
+        fin = timezone.make_aware(datetime.combine(hasta + timedelta(days=1), time.min))
+        tramos, pendientes = ocupacion_equipos(inicio, fin)
+
+        def fase_info(fase):
+            return {'fase_id': fase.id, 'lote_id': fase.lote_id, 'lote_codigo': fase.lote.identificador_lote,
+                    'paso': fase.operacion_maestra.identificador_paso, 'fase_estado': fase.estado,
+                    'actividad': fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo else fase.operacion_maestra.nombre,
+                    'inicio_actividad': fase.fecha_inicio_real or fase.inicio_programado,
+                    'fin_actividad': fase.fecha_fin_real or fase.fin_programado}
+
+        return Response({
+            'tramos': [{'reserva_id': r.id, 'equipo': r.equipo_id, 'equipo_nombre': r.equipo.nombre,
+                        'tipo': r.equipo.tipo_id, 'inicio': r.ventana()[0], 'fin': r.ventana()[1],
+                        'cambiado': r.hasta is not None or r.desde is not None, 'motivo': r.motivo,
+                        **fase_info(r.equipo_fase.fase)} for r in tramos],
+            'pendientes': [{'equipo_fase_id': ef.id, 'tipo': ef.tipo_id, 'tipo_nombre': ef.tipo.nombre, 'faltan': faltan,
+                            'inicio': ef.ventana_ocupacion()[0], 'fin': ef.ventana_ocupacion()[1], **fase_info(ef.fase)}
+                           for ef, faltan in pendientes],
+        })
+
+
 # ==============================================================================
 # 3. VIEWSET MOBILE eBR (EJECUCIÓN EN PISO DE PLANTA)
 # ==============================================================================
@@ -719,7 +928,7 @@ class MobileeBRViewSet(viewsets.ViewSet):
             operador=operador, fase_lote__lote__archivado=False, fase_lote__lote__estado__in=['PLANEADO', 'EN_PROGRESO']
         ).exclude(fase_lote__estado__in=['COMPLETADA', 'OMITIDA']).select_related(
             'fase_lote', 'fase_lote__lote', 'fase_lote__operacion_maestra', 'fase_lote__lote__proceso_maestro'
-        ).order_by('fase_lote__inicio_programado')
+        ).prefetch_related('fase_lote__equipos__reservas__equipo').order_by('fase_lote__inicio_programado')
         
         tareas_data = []
         ahora = timezone.now()
@@ -737,6 +946,8 @@ class MobileeBRViewSet(viewsets.ViewSet):
                 "identificador_paso": fase.operacion_maestra.identificador_paso, "tipo_operacion": fase.operacion_maestra.tipo_operacion,
                 "estado": fase.estado, "inicio_programado": fase.inicio_programado, "fin_programado": fase.fin_programado,
                 "rol_asignado": asig.rol_ejercido.nombre, **disponibilidad,
+                "equipos": [f"[{r.equipo_id}] {r.equipo.nombre}" for ef in fase.equipos.all() if ef.activo
+                            for r in ef.reservas.all() if r.vigente],
             })
             
         return Response({"tareas_pendientes": tareas_data}, status=status.HTTP_200_OK)

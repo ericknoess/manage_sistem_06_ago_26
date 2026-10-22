@@ -9,7 +9,7 @@ NOMBRES_PERMISO = {
     'reprogramar_fase': 'reprogramar fases',
     'asignar_personal': 'asignar personal o equipos',
     'ejecutar_fase': 'iniciar o completar fases',
-    'ajustar_material_lote': 'ajustar materiales de un lote',
+    'ajustar_material_lote': 'ajustar materiales o equipos de un lote',
     'editar_receta': 'editar recetas',
     'archivar_receta': 'archivar recetas',
     'gestionar_catalogos': 'modificar catálogos',

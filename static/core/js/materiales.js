@@ -23,16 +23,6 @@ function textoAlmacenamiento(condicion) {
     return (ALMACENAMIENTO_INFO[condicion] || ALMACENAMIENTO_INFO.AMBIENTE).texto;
 }
 
-// Escapa texto para insertarlo en HTML (nombres de material, proveedores, motivos).
-function escaparHtml(texto) {
-    return String(texto ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Normaliza para buscar sin distinguir mayúsculas ni acentos.
-function normalizarBusqueda(texto) {
-    return String(texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-}
-
 // Todas las palabras escritas deben aparecer en código, nombre, categoría, código ERP o proveedor.
 function materialCoincide(material, consulta) {
     const palabras = normalizarBusqueda(consulta).split(/\s+/).filter(Boolean);

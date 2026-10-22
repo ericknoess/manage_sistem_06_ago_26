@@ -311,3 +311,5 @@ body {
 .firma-pin__desviacion[hidden] { display: none; }
 .firma-pin__aviso { padding: 0.65rem 0.8rem; border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 8px; background: rgba(245, 158, 11, 0.12); color: #fcd34d; font-size: 0.9rem; line-height: 1.35; }
 .firma-pin__desviacion textarea { resize: vertical; min-height: 3.5rem; font-size: 1rem; letter-spacing: normal; text-align: left; }
+
+.detail-item--ancho { grid-column: 1 / -1; }

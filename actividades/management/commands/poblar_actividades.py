@@ -1,7 +1,7 @@
 # actividades/management/commands/poblar_actividades.py
 
 from django.core.management.base import BaseCommand
-from actividades.models import Equipo, MaterialInsumo
+from actividades.models import Equipo, MaterialInsumo, TipoEquipo
 
 class Command(BaseCommand):
     help = 'Pobla los catálogos de equipos y materiales.'
@@ -21,9 +21,10 @@ class Command(BaseCommand):
 
         equipos_objs = {}
         for eq in equipos_data:
+            TipoEquipo.objects.get_or_create(codigo=eq["tipo"], defaults={"nombre": eq["tipo"].capitalize()})
             obj, _ = Equipo.objects.update_or_create(
                 id=eq["id"],
-                defaults={"nombre": eq["nombre"], "tipo": eq["tipo"], "activo": True}
+                defaults={"nombre": eq["nombre"], "tipo_id": eq["tipo"], "activo": True}
             )
             equipos_objs[eq["id"]] = obj
 

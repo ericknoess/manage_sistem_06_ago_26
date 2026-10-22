@@ -1,4 +1,4 @@
-/* actividades/static/actividades/css/catalogo_materiales.css — Catálogo maestro de materiales */
+/* static/core/css/catalogo.css — Pantallas de catálogo maestro (materiales, equipos): filtros, tabla y modal de alta/edición */
 
 :root {
     --bg-dark: #0f172a;

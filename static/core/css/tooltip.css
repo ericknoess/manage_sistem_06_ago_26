@@ -1,0 +1,20 @@
+/* static/core/css/tooltip.css — Globo de ayuda inmediato (core/js/tooltip.js) */
+
+.tooltip-globo {
+    position: fixed;
+    z-index: 2000;
+    max-width: 320px;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #0b1222;
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    white-space: pre-line;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.08s;
+}
+.tooltip-globo.is-visible { opacity: 1; }

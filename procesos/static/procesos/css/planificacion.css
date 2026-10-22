@@ -229,3 +229,5 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 .alertas-programacion { padding: 0.6rem 0.75rem; border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 6px; background: rgba(245, 158, 11, 0.1); color: #fcd34d; font-size: 0.7rem; line-height: 1.4; }
 .alertas-programacion__titulo { font-weight: 700; margin-bottom: 0.3rem; }
 .alertas-programacion ul { margin: 0; padding-left: 1rem; list-style: disc; }
+.badge-equipos { font-size: 0.6rem; color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.6); background: rgba(167, 139, 250, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
+.badge-equipos--falta { color: #fbbf24; border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }

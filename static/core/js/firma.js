@@ -18,6 +18,7 @@ const SIGNIFICADOS_POR_DEFECTO = {
     ARCHIVAR_LOTE: 'Autorizo el archivo del lote completado',
     FASE_EN_PROGRESO: 'Inicio la ejecución de la fase',
     FASE_COMPLETADA: 'Ejecución completada y verificada',
+    CAMBIAR_EQUIPO: 'Autorizo el cambio de equipo durante la ejecución',
 };
 
 function escaparFirma(texto) {

@@ -1,13 +1,18 @@
 # actividades/admin.py
 
 from django.contrib import admin
-from .models import Equipo, MaterialInsumo, ActividadSemanal
+from .models import Equipo, MaterialInsumo, ActividadSemanal, TipoEquipo
+
+@admin.register(TipoEquipo)
+class TipoEquipoAdmin(admin.ModelAdmin):
+    list_display = ('codigo', 'nombre', 'activo')
+    search_fields = ('codigo', 'nombre')
 
 @admin.register(Equipo)
 class EquipoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre', 'tipo', 'activo')
-    search_fields = ('id', 'nombre', 'tipo')
-    list_filter = ('tipo', 'activo')
+    list_display = ('id', 'nombre', 'tipo', 'area', 'estado', 'calibracion_vence', 'activo')
+    search_fields = ('id', 'nombre', 'tipo__nombre', 'area')
+    list_filter = ('tipo', 'estado', 'activo')
 
 @admin.register(MaterialInsumo)
 class MaterialInsumoAdmin(admin.ModelAdmin):

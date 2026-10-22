@@ -7,7 +7,7 @@ from django.db.models import Count, Max
 from roster.models import TurnoDia, Operador
 from .models import (
     OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador,
-    MaterialOperacion, MaterialFase,
+    MaterialOperacion, MaterialFase, EquipoOperacion, EquipoFase, ReservaEquipo,
 )
 
 
@@ -130,7 +130,7 @@ class CPMCalculatorService:
                 "holgura": holgura,
                 "es_critica": es_critica,
                 "personal_requerido": op.personal_requerido,
-                "tipo_equipo_requerido": op.tipo_equipo_requerido,
+                "equipos": [f"{e.tipo.nombre} ×{e.cantidad}" for e in op.equipos.all()],
             })
 
         return {
@@ -428,14 +428,19 @@ def ventana_inicio(fase):
 def evaluar_inicio(fase, ahora=None):
     """
     Revisa si la fase pendiente puede iniciar ahora. Devuelve un dict:
-      bloqueo      mensaje si la dependencia lo impide (nadie puede iniciarla), o None
+      bloqueo      mensaje si la dependencia o el equipo lo impiden (nadie puede iniciarla), o None
+      codigo_bloqueo  DEPENDENCIA_PENDIENTE o EQUIPO_PENDIENTE
       desviacion   None (dentro de la ventana), 'ADELANTO' o 'RETRASO'
       mensaje      explicación de la desviación
       desde/hasta  ventana de inicio sin desviación
     """
     ahora = ahora or timezone.now()
     desde, hasta = ventana_inicio(fase)
-    resultado = {'bloqueo': bloqueo_por_dependencia(fase), 'desviacion': None, 'mensaje': '', 'desde': desde, 'hasta': hasta}
+    bloqueo, codigo = bloqueo_por_dependencia(fase), 'DEPENDENCIA_PENDIENTE'
+    if not bloqueo:
+        bloqueo, codigo = bloqueo_por_equipo(fase, ahora), 'EQUIPO_PENDIENTE'
+    resultado = {'bloqueo': bloqueo, 'codigo_bloqueo': codigo if bloqueo else None,
+                 'desviacion': None, 'mensaje': '', 'desde': desde, 'hasta': hasta}
     if desde and ahora < desde:
         resultado['desviacion'] = 'ADELANTO'
         resultado['mensaje'] = (f"Inicio adelantado {_horas_legibles(fase.inicio_programado - ahora)} respecto a lo programado "
@@ -476,6 +481,7 @@ def alertas_programacion(fases, ahora=None):
       - operador asignado con otra tarea que se traslapa
       - operador sin turno laborable a la hora de inicio
       - material que, por el adelanto, debía estar listo antes de ahora
+      - equipo reservado que se cruza con otra reserva, o que ya no está disponible o calibrado
     """
     ahora = ahora or timezone.now()
     fases = [f for f in fases if f.estado == 'PENDIENTE' and f.inicio_programado and f.fin_programado and f.fin_programado > ahora]
@@ -518,6 +524,9 @@ def alertas_programacion(fases, ahora=None):
             alertas.setdefault(fase.id, []).append(
                 f"📦 La actividad se adelantó: {m.material.nombre} debía estar listo desde las {formatear_hora(momento)} "
                 f"({m.anticipacion_horas:g} h de anticipación).")
+
+    for fase_id, mensajes in alertas_equipos(fases, ahora).items():
+        alertas.setdefault(fase_id, []).extend(mensajes)
     return alertas
 
 
@@ -631,3 +640,303 @@ def requerimientos_materiales(desde, hasta):
     filas = [mf for mf in candidatos if desde <= mf.momento_requerido < hasta]
     filas.sort(key=lambda mf: (mf.momento_requerido, mf.material.nombre))
     return filas
+
+
+
+# ==============================================================================
+# EQUIPOS: COPIA POR LOTE, AJUSTES GxP, RESERVAS Y CAMBIO DURANTE LA EJECUCIÓN
+# ==============================================================================
+
+class ErrorEquipoFase(Exception):
+    """Regla de negocio violada al modificar los equipos de una fase."""
+
+
+def generar_equipos_lote(lote):
+    """
+    Copia los equipos de la receta a las fases ya guardadas del lote: los de la actividad a la fase
+    principal y los marcados `MUESTREO` a cada subtarea de muestreo. Los equipos concretos se reservan después.
+    """
+    por_operacion = {}
+    for eo in EquipoOperacion.objects.filter(operacion__proceso=lote.proceso_maestro_id):
+        por_operacion.setdefault(eo.operacion_id, []).append(eo)
+
+    nuevos = []
+    for fase in lote.fases.all():
+        aplica = 'MUESTREO' if fase.es_subtarea_muestreo else 'ACTIVIDAD'
+        for eo in por_operacion.get(fase.operacion_maestra_id, []):
+            if eo.aplica_a == aplica:
+                nuevos.append(EquipoFase(
+                    fase=fase, tipo_id=eo.tipo_id, cantidad=eo.cantidad, cantidad_receta=eo.cantidad,
+                    horas_preparacion=eo.horas_preparacion, horas_limpieza=eo.horas_limpieza,
+                ))
+    EquipoFase.objects.bulk_create(nuevos)
+    return len(nuevos)
+
+
+def _validar_lote_vigente(fase):
+    if fase.lote.estado in ('COMPLETADO', 'ABORTADO'):
+        raise ErrorEquipoFase(f"El lote está {fase.lote.get_estado_display().lower()}; sus equipos ya no se modifican.")
+
+
+def _validar_fase_por_iniciar(fase, que='sus equipos'):
+    _validar_lote_vigente(fase)
+    if fase.estado != 'PENDIENTE':
+        detalle = " Para sustituir un equipo en uso, usa «Cambiar equipo»." if fase.estado == 'EN_PROGRESO' else ''
+        raise ErrorEquipoFase(f"La fase está {fase.get_estado_display().lower()}; {que} ya no se modifican.{detalle}")
+
+
+def _validar_motivo_equipo(motivo):
+    motivo = (motivo or '').strip()
+    if len(motivo) < 5:
+        raise ErrorEquipoFase("Indique el motivo del cambio (mínimo 5 caracteres) para la trazabilidad GxP.")
+    return motivo
+
+
+def _validar_horas_equipo(*horas):
+    for h in horas:
+        if h is not None and h < 0:
+            raise ErrorEquipoFase("Las horas de preparación y limpieza no pueden ser negativas.")
+
+
+def reservas_vigentes(equipo_fase):
+    return [r for r in equipo_fase.reservas.all() if r.vigente]
+
+
+def ajustar_equipo_fase(equipo_fase, cantidad, horas_preparacion, horas_limpieza, motivo):
+    """Cambia la cantidad y/o las horas de preparación y limpieza de un requerimiento, conservando la de receta."""
+    _validar_fase_por_iniciar(equipo_fase.fase)
+    if cantidad is None or cantidad < 1:
+        raise ErrorEquipoFase("La cantidad debe ser al menos 1.")
+    _validar_horas_equipo(horas_preparacion, horas_limpieza)
+    reservados = len(reservas_vigentes(equipo_fase)) if equipo_fase.activo else 0
+    if cantidad < reservados:
+        raise ErrorEquipoFase(f"Hay {reservados} equipo(s) reservado(s); libera alguno antes de bajar la cantidad a {cantidad}.")
+    equipo_fase.cantidad = cantidad
+    if horas_preparacion is not None:
+        equipo_fase.horas_preparacion = horas_preparacion
+    if horas_limpieza is not None:
+        equipo_fase.horas_limpieza = horas_limpieza
+    equipo_fase.activo = True
+    equipo_fase.motivo_ajuste = _validar_motivo_equipo(motivo)
+    equipo_fase.ajustado_en = timezone.now()
+    equipo_fase.save()
+    return equipo_fase
+
+
+def agregar_equipo_fase(fase, tipo, cantidad, horas_preparacion, horas_limpieza, motivo):
+    """Agrega a la fase un tipo de equipo que no venía en la receta (o reactiva uno retirado)."""
+    _validar_fase_por_iniciar(fase)
+    if not tipo.activo:
+        raise ErrorEquipoFase(f"El tipo de equipo {tipo.nombre} está dado de baja.")
+    existente = EquipoFase.objects.filter(fase=fase, tipo=tipo).first()
+    if existente and existente.activo:
+        raise ErrorEquipoFase(f"{tipo.nombre} ya está en la fase; ajusta su cantidad en lugar de agregarlo.")
+    if existente:
+        return ajustar_equipo_fase(existente, cantidad, horas_preparacion, horas_limpieza, motivo)
+    if cantidad is None or cantidad < 1:
+        raise ErrorEquipoFase("La cantidad debe ser al menos 1.")
+    _validar_horas_equipo(horas_preparacion, horas_limpieza)
+    return EquipoFase.objects.create(
+        fase=fase, tipo=tipo, cantidad=cantidad, horas_preparacion=horas_preparacion or 0,
+        horas_limpieza=horas_limpieza or 0, motivo_ajuste=_validar_motivo_equipo(motivo), ajustado_en=timezone.now(),
+    )
+
+
+def retirar_equipo_fase(equipo_fase, motivo):
+    """Baja lógica del requerimiento; sus reservas se liberan con el mismo motivo."""
+    _validar_fase_por_iniciar(equipo_fase.fase)
+    motivo = _validar_motivo_equipo(motivo)
+    equipo_fase.reservas.filter(activo=True, hasta__isnull=True).update(activo=False, motivo=f"Requerimiento retirado: {motivo}")
+    equipo_fase.motivo_ajuste = motivo
+    equipo_fase.activo = False
+    equipo_fase.ajustado_en = timezone.now()
+    equipo_fase.save()
+    return equipo_fase
+
+
+def reservas_que_ocupan(equipo, excluir_reserva_id=None):
+    """Reservas que ocupan o ocuparon el equipo (excluye fases omitidas y lotes abortados o archivados)."""
+    qs = ReservaEquipo.objects.filter(equipo=equipo, activo=True, equipo_fase__activo=True).exclude(
+        equipo_fase__fase__estado='OMITIDA').exclude(equipo_fase__fase__lote__estado='ABORTADO').exclude(
+        equipo_fase__fase__lote__archivado=True).select_related(
+        'equipo_fase__fase__operacion_maestra', 'equipo_fase__fase__lote')
+    if excluir_reserva_id:
+        qs = qs.exclude(id=excluir_reserva_id)
+    return qs
+
+
+def buscar_conflicto_equipo(equipo, inicio, fin, excluir_reserva_id=None, excluir_equipo_fase_id=None):
+    """Primera reserva del equipo cuyo tramo se traslapa con [inicio, fin), o None."""
+    if inicio is None or fin is None:
+        return None
+    for reserva in reservas_que_ocupan(equipo, excluir_reserva_id):
+        if excluir_equipo_fase_id and reserva.equipo_fase_id == excluir_equipo_fase_id:
+            continue
+        r_inicio, r_fin = reserva.ventana()
+        if r_inicio and r_inicio < fin and r_fin > inicio:
+            return reserva
+    return None
+
+
+def describir_reserva(reserva):
+    fase = reserva.equipo_fase.fase
+    r_inicio, r_fin = reserva.ventana()
+    nombre = fase.nombre_tarea_dinamica if fase.es_subtarea_muestreo else fase.operacion_maestra.nombre
+    return (f"[{fase.operacion_maestra.identificador_paso}] {nombre} (lote {fase.lote.identificador_lote}) "
+            f"de {formatear_hora(r_inicio)} a {formatear_hora(r_fin)}")
+
+
+def motivo_no_disponible(equipo, inicio, fin, excluir_reserva_id=None, excluir_equipo_fase_id=None):
+    """Por qué el equipo no sirve para ocuparlo en [inicio, fin): estado, calibración o un cruce; None si está libre."""
+    motivo = equipo.motivo_no_reservable(fin)
+    if motivo:
+        return motivo
+    conflicto = buscar_conflicto_equipo(equipo, inicio, fin, excluir_reserva_id, excluir_equipo_fase_id)
+    if conflicto:
+        return f"[{equipo.id}] está reservado para {describir_reserva(conflicto)}."
+    return None
+
+
+def equipos_candidatos(equipo_fase, desde=None):
+    """Equipos activos del tipo pedido, cada uno con `motivo` (None si se puede reservar) para el selector."""
+    from actividades.models import Equipo
+    inicio, fin = equipo_fase.ventana_ocupacion()
+    if desde and inicio and desde > inicio:
+        inicio = desde
+    ya = {r.equipo_id for r in reservas_vigentes(equipo_fase)}
+    candidatos = []
+    for equipo in Equipo.objects.filter(tipo_id=equipo_fase.tipo_id, activo=True).order_by('id'):
+        motivo = "Ya está reservado en esta fase." if equipo.id in ya else motivo_no_disponible(
+            equipo, inicio, fin, excluir_equipo_fase_id=equipo_fase.id)
+        candidatos.append({'equipo': equipo, 'motivo': motivo})
+    return candidatos
+
+
+def reservar_equipo(equipo_fase, equipo):
+    """Reserva un equipo concreto para el requerimiento de una fase por iniciar."""
+    _validar_fase_por_iniciar(equipo_fase.fase, que='sus reservas')
+    if not equipo_fase.activo:
+        raise ErrorEquipoFase("Ese requerimiento de equipo está retirado.")
+    if equipo.tipo_id != equipo_fase.tipo_id:
+        raise ErrorEquipoFase(f"[{equipo.id}] es {equipo.tipo.nombre}; la fase pide {equipo_fase.tipo.nombre}.")
+    vigentes = reservas_vigentes(equipo_fase)
+    if any(r.equipo_id == equipo.id for r in vigentes):
+        raise ErrorEquipoFase(f"[{equipo.id}] ya está reservado en esta fase.")
+    if len(vigentes) >= equipo_fase.cantidad:
+        raise ErrorEquipoFase(f"La fase ya tiene los {equipo_fase.cantidad} equipo(s) de {equipo_fase.tipo.nombre} que pide.")
+    inicio, fin = equipo_fase.ventana_ocupacion()
+    motivo = motivo_no_disponible(equipo, inicio, fin, excluir_equipo_fase_id=equipo_fase.id)
+    if motivo:
+        raise ErrorEquipoFase(motivo)
+    return ReservaEquipo.objects.create(equipo_fase=equipo_fase, equipo=equipo)
+
+
+def liberar_reserva(reserva, motivo=''):
+    """Libera (baja lógica) la reserva de una fase por iniciar."""
+    _validar_fase_por_iniciar(reserva.equipo_fase.fase, que='sus reservas')
+    if not reserva.vigente:
+        raise ErrorEquipoFase("Esa reserva ya no está vigente.")
+    reserva.activo = False
+    reserva.motivo = (motivo or '').strip()
+    reserva.save(update_fields=['activo', 'motivo'])
+    return reserva
+
+
+def validar_cambio_equipo(reserva, nuevo_equipo, motivo, ahora=None):
+    """Revisa que el equipo de una fase en ejecución se pueda sustituir; devuelve el motivo limpio o lanza ErrorEquipoFase."""
+    ahora = ahora or timezone.now()
+    fase = reserva.equipo_fase.fase
+    _validar_lote_vigente(fase)
+    if fase.estado != 'EN_PROGRESO':
+        raise ErrorEquipoFase("Solo se cambia el equipo de una fase en ejecución; antes de iniciar, libera la reserva y reserva otro.")
+    if not reserva.vigente:
+        raise ErrorEquipoFase("Esa reserva ya no está vigente.")
+    motivo = _validar_motivo_equipo(motivo)
+    if nuevo_equipo.id == reserva.equipo_id:
+        raise ErrorEquipoFase("Elige un equipo distinto al actual.")
+    if nuevo_equipo.tipo_id != reserva.equipo_fase.tipo_id:
+        raise ErrorEquipoFase(f"[{nuevo_equipo.id}] es {nuevo_equipo.tipo.nombre}; la fase pide {reserva.equipo_fase.tipo.nombre}.")
+    if any(r.equipo_id == nuevo_equipo.id for r in reservas_vigentes(reserva.equipo_fase)):
+        raise ErrorEquipoFase(f"[{nuevo_equipo.id}] ya está reservado en esta fase.")
+    _, fin = reserva.equipo_fase.ventana_ocupacion()
+    no_disponible = motivo_no_disponible(nuevo_equipo, ahora, fin, excluir_equipo_fase_id=reserva.equipo_fase_id)
+    if no_disponible:
+        raise ErrorEquipoFase(no_disponible)
+    return motivo
+
+
+def cambiar_equipo(reserva, nuevo_equipo, motivo, ahora=None):
+    """
+    Sustituye el equipo de una fase en ejecución: la reserva actual se cierra en este momento y el
+    nuevo equipo queda reservado desde ahora hasta el fin (con limpieza). Devuelve la reserva nueva.
+    """
+    ahora = ahora or timezone.now()
+    motivo = validar_cambio_equipo(reserva, nuevo_equipo, motivo, ahora)
+    reserva.hasta, reserva.motivo = ahora, motivo
+    reserva.save(update_fields=['hasta', 'motivo'])
+    return ReservaEquipo.objects.create(equipo_fase=reserva.equipo_fase, equipo=nuevo_equipo, desde=ahora, motivo=motivo)
+
+
+def bloqueo_por_equipo(fase, ahora=None):
+    """Mensaje si a la fase le falta reservar equipo o un equipo reservado no está disponible, o None."""
+    ahora = ahora or timezone.now()
+    faltan = []
+    for ef in fase.equipos.filter(activo=True).select_related('tipo').prefetch_related('reservas__equipo'):
+        vigentes = reservas_vigentes(ef)
+        if len(vigentes) < ef.cantidad:
+            faltan.append(f"{ef.cantidad - len(vigentes)} {ef.tipo.nombre}")
+        for r in vigentes:
+            motivo = r.equipo.motivo_no_reservable(ahora)
+            if motivo:
+                return f"{motivo} Cámbialo en Planificación antes de iniciar."
+    if faltan:
+        return f"Falta reservar equipo: {', '.join(faltan)}. Resérvalo en Planificación antes de iniciar."
+    return None
+
+
+def alertas_equipos(fases, ahora=None):
+    """{fase_id: [mensajes]} de reservas que, tras un ajuste, se cruzan con otra o ya no son válidas (estado o calibración)."""
+    ahora = ahora or timezone.now()
+    ids = [f.id for f in fases]
+    alertas = {}
+    reservas = ReservaEquipo.objects.filter(equipo_fase__fase_id__in=ids, equipo_fase__activo=True, activo=True,
+                                            hasta__isnull=True).select_related('equipo', 'equipo_fase__fase__operacion_maestra', 'equipo_fase__fase__lote')
+    for r in reservas:
+        inicio, fin = r.ventana()
+        if inicio is None:
+            continue
+        mensaje = r.equipo.motivo_no_reservable(fin)
+        if not mensaje:
+            conflicto = buscar_conflicto_equipo(r.equipo, inicio, fin, excluir_reserva_id=r.id, excluir_equipo_fase_id=r.equipo_fase_id)
+            if conflicto:
+                mensaje = f"[{r.equipo.id}] {r.equipo.nombre} se cruza con {describir_reserva(conflicto)}."
+        if mensaje:
+            alertas.setdefault(r.equipo_fase.fase_id, []).append(f"🏗️ {mensaje}")
+    return alertas
+
+
+def ocupacion_equipos(desde, hasta):
+    """
+    Para el monitor de equipos: tramos reservados que tocan [desde, hasta) y requerimientos de fases
+    por iniciar o en curso que aún no tienen todos sus equipos reservados.
+    """
+    tramos = []
+    reservas = ReservaEquipo.objects.filter(activo=True, equipo_fase__activo=True).exclude(
+        equipo_fase__fase__estado='OMITIDA').exclude(equipo_fase__fase__lote__estado='ABORTADO').exclude(
+        equipo_fase__fase__lote__archivado=True).select_related(
+        'equipo__tipo', 'equipo_fase__tipo', 'equipo_fase__fase__operacion_maestra', 'equipo_fase__fase__lote')
+    for r in reservas:
+        inicio, fin = r.ventana()
+        if inicio and inicio < hasta and fin > desde:
+            tramos.append(r)
+
+    pendientes = []
+    requerimientos = EquipoFase.objects.filter(activo=True, fase__estado__in=['PENDIENTE', 'EN_PROGRESO'],
+                                               fase__lote__archivado=False).exclude(fase__lote__estado='ABORTADO').select_related(
+        'tipo', 'fase__operacion_maestra', 'fase__lote').prefetch_related('reservas')
+    for ef in requerimientos:
+        inicio, fin = ef.ventana_ocupacion()
+        faltan = ef.cantidad - len(reservas_vigentes(ef))
+        if faltan > 0 and inicio and inicio < hasta and fin > desde:
+            pendientes.append((ef, faltan))
+    return tramos, pendientes

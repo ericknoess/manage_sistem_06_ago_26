@@ -162,6 +162,7 @@ function renderizarTareas(tareas) {
                 <div class="detail-item"><strong>⏱ Forecast</strong><span>${tRango} hrs</span></div>
                 <div class="detail-item"><strong>👤 Rol Requerido</strong><span>${t.rol_asignado}</span></div>
                 <div class="detail-item"><strong>⚙️ Tipo</strong><span>${t.tipo_operacion}</span></div>
+                ${t.equipos && t.equipos.length ? `<div class="detail-item detail-item--ancho"><strong>🏗️ Equipo</strong><span>${t.equipos.map(escaparTexto).join(', ')}</span></div>` : ''}
             </div>
 
             ${accionHtml}

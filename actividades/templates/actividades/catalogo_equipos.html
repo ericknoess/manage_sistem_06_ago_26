@@ -1,0 +1,175 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Equipos - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'actividades/css/catalogo_equipos.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>🏗️ Catálogo de Equipos</h2>
+            <p>Equipos críticos de planta y sus tipos. Solo un equipo disponible y con calibración vigente se puede reservar. Los equipos no se borran: se desactivan.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'monitor-equipos' %}" class="btn-secundario">📊 Monitor de equipos</a>
+            <a href="{% url 'procesos-index' %}" class="btn-secundario">🧫 Diseñador de procesos</a>
+        </nav>
+    </header>
+
+    <nav class="pestanas" role="tablist" aria-label="Secciones del catálogo">
+        <button role="tab" id="pestanaEquipos" class="pestana is-activa" aria-selected="true" onclick="mostrarSeccion('equipos')">Equipos</button>
+        <button role="tab" id="pestanaTipos" class="pestana" aria-selected="false" onclick="mostrarSeccion('tipos')">Tipos de equipo</button>
+    </nav>
+
+    <!-- EQUIPOS -->
+    <section id="seccionEquipos" class="seccion">
+        <section class="barra-herramientas" aria-label="Búsqueda y filtros">
+            <div class="grupo-filtros">
+                <input type="search" id="filtroTexto" placeholder="🔎 Código, nombre o área…" oninput="renderizarEquipos()" autofocus>
+                <select id="filtroTipo" onchange="renderizarEquipos()"><option value="">Todos los tipos</option></select>
+                <select id="filtroEstadoOperativo" onchange="renderizarEquipos()"><option value="">Cualquier estado</option></select>
+                <select id="filtroEstado" onchange="renderizarEquipos()">
+                    <option value="activos">Solo activos</option>
+                    <option value="inactivos">Solo dados de baja</option>
+                    <option value="todos">Todos</option>
+                </select>
+                <span id="conteo" class="conteo"></span>
+            </div>
+            <button class="btn-primario" data-permiso="gestionar_catalogos" onclick="abrirModalEquipo()">➕ Nuevo equipo</button>
+        </section>
+
+        <main class="panel">
+            <div class="tabla-contenedor">
+                <table class="tabla-catalogo">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Tipo</th>
+                            <th>Área</th>
+                            <th>Capacidad</th>
+                            <th>Estado</th>
+                            <th>Calibración</th>
+                            <th title="Reservas de fases por iniciar o en ejecución">Reservas</th>
+                            <th>Alta</th>
+                            <th class="col-acciones">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoEquipos">
+                        <tr><td colspan="10" class="estado-vacio">Cargando catálogo…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </section>
+
+    <!-- TIPOS DE EQUIPO -->
+    <section id="seccionTipos" class="seccion" hidden>
+        <section class="barra-herramientas">
+            <p class="nota-tipos">Las recetas piden equipos por tipo; al planear el lote se reserva un equipo concreto de ese tipo.</p>
+            <button class="btn-primario" data-permiso="gestionar_catalogos" onclick="abrirModalTipo()">➕ Nuevo tipo</button>
+        </section>
+        <main class="panel">
+            <div class="tabla-contenedor">
+                <table class="tabla-catalogo">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Equipos activos</th>
+                            <th>Actividades de receta</th>
+                            <th>Alta</th>
+                            <th class="col-acciones">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoTipos"></tbody>
+                </table>
+            </div>
+        </main>
+    </section>
+
+    <!-- MODAL ALTA / EDICIÓN DE EQUIPO -->
+    <div class="modal-overlay" id="modalEquipo" style="display: none;">
+        <form class="modal-content" id="formEquipo" onsubmit="guardarEquipo(event)">
+            <div class="modal-header">
+                <h3 id="modalEquipoTitulo">➕ Nuevo equipo</h3>
+            </div>
+            <div class="formulario">
+                <label class="campo">
+                    <span>Código *</span>
+                    <input type="text" id="campoId" maxlength="50" required placeholder="BR-03">
+                    <small id="ayudaCodigo">Único y permanente: lo referencian las reservas de los lotes.</small>
+                </label>
+                <label class="campo">
+                    <span>Tipo *</span>
+                    <select id="campoTipo" required></select>
+                </label>
+                <label class="campo campo--ancho">
+                    <span>Nombre *</span>
+                    <input type="text" id="campoNombre" maxlength="150" required placeholder="Biorreactor single-use 500 L">
+                </label>
+                <label class="campo">
+                    <span>Área / sala</span>
+                    <input type="text" id="campoArea" maxlength="100" placeholder="Upstream – Sala 2">
+                </label>
+                <label class="campo">
+                    <span>Capacidad</span>
+                    <input type="text" id="campoCapacidad" maxlength="50" placeholder="500 L">
+                </label>
+                <label class="campo">
+                    <span>Estado operativo</span>
+                    <select id="campoEstado"></select>
+                </label>
+                <label class="campo">
+                    <span>Vencimiento de calibración</span>
+                    <input type="date" id="campoCalibracion">
+                    <small>Después de esta fecha el equipo no se puede reservar.</small>
+                </label>
+            </div>
+            <div id="errorEquipo" class="error-formulario" hidden></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secundario" onclick="cerrarModal('modalEquipo')">Cancelar</button>
+                <button type="submit" class="btn-primario">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL ALTA / EDICIÓN DE TIPO -->
+    <div class="modal-overlay" id="modalTipo" style="display: none;">
+        <form class="modal-content modal-content--angosto" id="formTipo" onsubmit="guardarTipo(event)">
+            <div class="modal-header">
+                <h3 id="modalTipoTitulo">➕ Nuevo tipo de equipo</h3>
+            </div>
+            <div class="formulario">
+                <label class="campo">
+                    <span>Código *</span>
+                    <input type="text" id="campoTipoCodigo" maxlength="50" required placeholder="CENTRIFUGA">
+                    <small id="ayudaTipoCodigo">En mayúsculas y sin espacios; no se puede cambiar.</small>
+                </label>
+                <label class="campo">
+                    <span>Nombre *</span>
+                    <input type="text" id="campoTipoNombre" maxlength="100" required placeholder="Centrífuga">
+                </label>
+            </div>
+            <div id="errorTipo" class="error-formulario" hidden></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secundario" onclick="cerrarModal('modalTipo')">Cancelar</button>
+                <button type="submit" class="btn-primario">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'actividades/js/catalogo_equipos.js' %}"></script>
+</body>
+</html>
