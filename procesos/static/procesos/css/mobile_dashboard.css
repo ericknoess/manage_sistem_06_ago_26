@@ -357,3 +357,18 @@ body {
 .mat-campo .mat-texto { text-align: left; resize: vertical; }
 .firma-pin input[type="date"] { color-scheme: dark; }
 .firma-pin { max-height: calc(100vh - 2rem); overflow-y: auto; }
+
+/* --- Tareas agrupadas por día (hoy abierto, los demás plegados) --- */
+.grupo-dia { border: 1px solid var(--border-color); border-radius: 12px; background: rgba(0, 0, 0, 0.12); }
+.grupo-dia__titulo {
+    display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+    padding: 0.9rem 1.1rem; cursor: pointer; list-style: none;
+    font-size: 1.05rem; font-weight: 800; color: var(--text-main);
+}
+.grupo-dia__titulo::-webkit-details-marker { display: none; }
+.grupo-dia__titulo::before { content: '▸'; color: var(--accent); transition: transform 0.2s; }
+.grupo-dia[open] > .grupo-dia__titulo::before { transform: rotate(90deg); }
+.grupo-dia__titulo span:first-of-type { flex: 1; }
+.grupo-dia__conteo { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+.grupo-dia__tareas { display: flex; flex-direction: column; gap: 1.25rem; padding: 0 1rem 1rem; }
+.grupo-dia__vacio { padding: 0.5rem 0.25rem; color: var(--text-muted); font-style: italic; }

@@ -938,3 +938,82 @@ class SurtidoMaterialesTests(TestCase):
         ana.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_pin': '1234'}, format='json')
         restantes = self.jefa.get('/api/fases-lote/alertas/').data.get(self.fase.id, [])
         self.assertFalse(any('📦' in m for m in restantes))
+
+
+class OperadoresDisponiblesTests(TestCase):
+    """Planificación ofrece solo a quien tiene turno a la hora de la actividad y no está ocupado."""
+
+    def setUp(self):
+        from roster.models import TipoTurno
+        self.web = APIClient()
+        self.web.force_authenticate(usuario_con_rol('planeador', 'Planeador'))
+        self.proceso = ProcesoMaestro.objects.create(nombre='Proceso turnos')
+        self.t1 = OperacionProceso.objects.create(proceso=self.proceso, identificador_paso='T1', nombre='Limpieza', orden=1, duracion_horas=2)
+        self.rol = RolOperador.objects.create(nombre='Operador base')
+        cuadrilla = Cuadrilla.objects.create(identificador='A', nombre='Cuadrilla A')
+        crear = lambda nombre, codigo: Operador.objects.create(cuadrilla=cuadrilla, nombre=nombre, codigo_empleado=codigo, rol=self.rol)
+        self.dia, self.noche, self.tarde, self.descanso = crear('Diana', 'D1'), crear('Nora', 'N1'), crear('Tomás', 'T1'), crear('Raúl', 'R1')
+        self.matutino = TipoTurno.objects.create(codigo='M', nombre='Matutino', hora_inicio='07:00', hora_fin='15:00')
+        self.nocturno = TipoTurno.objects.create(codigo='N', nombre='Nocturno', hora_inicio='23:00', hora_fin='07:00')
+        self.vespertino = TipoTurno.objects.create(codigo='V', nombre='Vespertino', hora_inicio='15:00', hora_fin='23:00')
+        self.off = TipoTurno.objects.create(codigo='OFF', nombre='Descanso', es_descanso=True)
+        respuesta = self.web.post('/api/lotes/', {'identificador_lote': 'L-T', 'proceso_maestro': self.proceso.id,
+                                                  'fecha_inicio_planeada': '2026-11-03T01:30:00'}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.fase = FaseLote.objects.get(lote__identificador_lote='L-T', operacion_maestra=self.t1)
+
+    def turno(self, operador, tipo, dia):
+        from roster.models import TurnoDia
+        return TurnoDia.objects.create(operador=operador, fecha=datetime(2026, 11, dia).date(), tipo_turno=tipo)
+
+    def disponibles(self):
+        respuesta = self.web.get(f'/api/fases-lote/{self.fase.id}/disponibles/')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        return {d['nombre']: d for d in respuesta.data}
+
+    def test_solo_quien_tiene_turno_a_la_hora_de_la_actividad(self):
+        # Actividad 03/11 01:30–03:30: cubre el nocturno que empezó el 02/11; el matutino y vespertino del 03 no
+        self.turno(self.noche, self.nocturno, 2)
+        self.turno(self.dia, self.matutino, 3)
+        self.turno(self.tarde, self.vespertino, 3)
+        self.turno(self.descanso, self.off, 3)
+        self.assertEqual(set(self.disponibles()), {'Nora'})
+
+    def test_excluye_a_quien_ya_tiene_otra_tarea_a_esa_hora(self):
+        self.turno(self.noche, self.nocturno, 2)
+        otra = FaseLote.objects.create(lote=self.fase.lote, operacion_maestra=self.t1, es_subtarea_muestreo=True, indice_muestreo=1,
+                                       inicio_programado=self.fase.inicio_programado, fin_programado=self.fase.fin_programado)
+        AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.noche, rol_ejercido=self.rol)
+        self.assertEqual(self.disponibles(), {})
+
+    def test_salida_anticipada_y_turno_que_termina_antes(self):
+        from roster.models import IncidenciaTurno
+        turno = self.turno(self.noche, self.nocturno, 2)
+        self.assertTrue(self.disponibles()['Nora']['cubre_toda'])
+        IncidenciaTurno.objects.create(turno_dia=turno, horas_salida_anticipada=Decimal('4.5'))  # sale 02:30
+        self.assertFalse(self.disponibles()['Nora']['cubre_toda'])
+        IncidenciaTurno.objects.filter(turno_dia=turno).update(horas_salida_anticipada=Decimal('6'))  # sale 01:00
+        self.assertEqual(self.disponibles(), {})
+
+    def test_tarea_completada_libera_al_operador(self):
+        """Regresión: un operador seguía "ocupado" por una tarea ya terminada que estaba programada a la misma hora."""
+        self.turno(self.noche, self.nocturno, 2)
+        otra = FaseLote.objects.create(lote=self.fase.lote, operacion_maestra=self.t1, es_subtarea_muestreo=True, indice_muestreo=1,
+                                       inicio_programado=self.fase.inicio_programado, fin_programado=self.fase.fin_programado,
+                                       estado='COMPLETADA', fecha_inicio_real=self.fase.inicio_programado - timedelta(hours=3),
+                                       fecha_fin_real=self.fase.inicio_programado - timedelta(hours=1))
+        AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.noche, rol_ejercido=self.rol)
+        self.assertIn('Nora', self.disponibles())
+        respuesta = self.web.post('/api/asignaciones-operador/', {'fase_lote': self.fase.id, 'operador': self.noche.id,
+                                                                  'rol_ejercido': self.rol.id}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+
+    def test_tarea_completada_ocupa_su_horario_real(self):
+        self.turno(self.noche, self.nocturno, 2)
+        otra = FaseLote.objects.create(lote=self.fase.lote, operacion_maestra=self.t1, es_subtarea_muestreo=True, indice_muestreo=1,
+                                       inicio_programado=self.fase.inicio_programado - timedelta(hours=5),
+                                       fin_programado=self.fase.inicio_programado - timedelta(hours=4), estado='COMPLETADA',
+                                       fecha_inicio_real=self.fase.inicio_programado - timedelta(hours=1),
+                                       fecha_fin_real=self.fase.inicio_programado + timedelta(hours=1))
+        AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.noche, rol_ejercido=self.rol)
+        self.assertEqual(self.disponibles(), {})

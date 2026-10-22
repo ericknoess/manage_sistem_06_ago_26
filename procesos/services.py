@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from roster.models import TurnoDia, Operador
 from .models import (
     OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador,
@@ -353,6 +353,20 @@ def propagar_programacion(fase_origen, nota_tarea, nota_muestreo):
     return len(fases_a_actualizar)
 
 
+def filtro_ocupacion(inicio, fin):
+    """
+    Asignaciones que ocupan al operador en [inicio, fin):
+      - fase pendiente o en progreso: su ventana programada;
+      - fase completada: solo su horario real (inicio real → fin real), así que terminarla libera al operador;
+      - fase omitida: no ocupa.
+    """
+    abierta = Q(fase_lote__estado__in=['PENDIENTE', 'EN_PROGRESO'],
+                fase_lote__inicio_programado__lt=fin, fase_lote__fin_programado__gt=inicio)
+    completada = Q(fase_lote__estado='COMPLETADA', fase_lote__fecha_fin_real__gt=inicio) & (
+        Q(fase_lote__fecha_inicio_real__lt=fin) | Q(fase_lote__fecha_inicio_real__isnull=True, fase_lote__inicio_programado__lt=fin))
+    return abierta | completada
+
+
 def buscar_conflicto_operador(operador_id, fase):
     """
     Devuelve la asignación del operador cuya fase se traslapa con la ventana programada de `fase`
@@ -361,10 +375,8 @@ def buscar_conflicto_operador(operador_id, fase):
     if not fase.inicio_programado or not fase.fin_programado:
         return None
     return AsignacionFaseOperador.objects.filter(
-        operador_id=operador_id,
-        fase_lote__inicio_programado__lt=fase.fin_programado,
-        fase_lote__fin_programado__gt=fase.inicio_programado,
-    ).exclude(fase_lote=fase).exclude(fase_lote__estado='OMITIDA').select_related(
+        filtro_ocupacion(fase.inicio_programado, fase.fin_programado), operador_id=operador_id,
+    ).exclude(fase_lote=fase).select_related(
         'fase_lote', 'fase_lote__operacion_maestra'
     ).first()
 
@@ -453,26 +465,73 @@ def evaluar_inicio(fase, ahora=None):
     return resultado
 
 
-def _turnos_por_operador(operador_ids, desde, hasta):
-    """{operador_id: [(inicio, fin)]} de los turnos laborables entre dos fechas (incluye el día previo por turnos nocturnos)."""
+def ventana_turno(turno):
+    """(inicio, fin) en que la persona está en planta según su turno del día. Un turno sin horario cubre el día
+    completo; uno nocturno termina al día siguiente. Descuenta el retardo y la salida anticipada de su incidencia."""
     from datetime import datetime as dt
+    tipo = turno.tipo_turno
+    if tipo.hora_inicio is None or tipo.hora_fin is None:
+        inicio = timezone.make_aware(dt.combine(turno.fecha, dt.min.time()))
+        fin = inicio + timedelta(days=1)
+    else:
+        inicio = timezone.make_aware(dt.combine(turno.fecha, tipo.hora_inicio))
+        fin = timezone.make_aware(dt.combine(turno.fecha, tipo.hora_fin))
+        if fin <= inicio:
+            fin += timedelta(days=1)  # turno nocturno
+    incidencia = getattr(turno, 'incidencia', None)
+    if incidencia is not None:
+        inicio += timedelta(minutes=incidencia.minutos_retardo or 0)
+        fin -= timedelta(hours=float(incidencia.horas_salida_anticipada or 0))
+    return inicio, fin
+
+
+def _turnos_laborables(desde, hasta, **filtros):
+    """Turnos laborables entre dos fechas (incluye el día previo por turnos nocturnos)."""
+    return TurnoDia.objects.filter(
+        fecha__gte=desde - timedelta(days=1), fecha__lte=hasta,
+        tipo_turno__activo=True, tipo_turno__es_descanso=False, **filtros,
+    ).select_related('tipo_turno', 'incidencia')
+
+
+def _turnos_por_operador(operador_ids, desde, hasta):
+    """{operador_id: [(inicio, fin)]} de los turnos laborables entre dos fechas."""
     ventanas = {}
-    turnos = TurnoDia.objects.filter(
-        operador_id__in=operador_ids, fecha__gte=desde - timedelta(days=1), fecha__lte=hasta,
-        tipo_turno__activo=True, tipo_turno__es_descanso=False,
-    ).select_related('tipo_turno')
-    for t in turnos:
-        tipo = t.tipo_turno
-        if tipo.hora_inicio is None or tipo.hora_fin is None:
-            inicio = timezone.make_aware(dt.combine(t.fecha, dt.min.time()))
-            fin = inicio + timedelta(days=1)
-        else:
-            inicio = timezone.make_aware(dt.combine(t.fecha, tipo.hora_inicio))
-            fin = timezone.make_aware(dt.combine(t.fecha, tipo.hora_fin))
-            if fin <= inicio:
-                fin += timedelta(days=1)  # turno nocturno
-        ventanas.setdefault(t.operador_id, []).append((inicio, fin))
+    for t in _turnos_laborables(desde, hasta, operador_id__in=operador_ids):
+        ventanas.setdefault(t.operador_id, []).append(ventana_turno(t))
     return ventanas
+
+
+def operadores_disponibles(fase):
+    """
+    Personal que se puede asignar a la fase: operadores activos, aún no asignados, con un turno laborable
+    que cubre la hora de inicio de la actividad (incluye turnos nocturnos del día anterior) y sin otra
+    tarea que se traslape. `cubre_toda` avisa si su turno termina antes que la actividad.
+    """
+    if not fase.inicio_programado or not fase.fin_programado:
+        return []
+    asignados = set(fase.operadores_asignados.values_list('operador_id', flat=True))
+    dia = timezone.localtime(fase.inicio_programado).date()
+    candidatos = {}
+    for t in _turnos_laborables(dia, dia, operador__activo=True).exclude(operador_id__in=asignados).select_related('operador__rol'):
+        inicio, fin = ventana_turno(t)
+        if inicio <= fase.inicio_programado < fin:
+            candidatos[t.operador_id] = (t, inicio, fin)
+
+    ocupados = set(AsignacionFaseOperador.objects.filter(
+        filtro_ocupacion(fase.inicio_programado, fase.fin_programado), operador_id__in=candidatos,
+    ).exclude(fase_lote=fase).values_list('operador_id', flat=True))
+
+    disponibles = []
+    for operador_id, (t, inicio, fin) in candidatos.items():
+        if operador_id in ocupados:
+            continue
+        disponibles.append({
+            'id': operador_id, 'nombre': t.operador.nombre, 'rol': t.operador.rol_id,
+            'rol_nombre': t.operador.rol.nombre if t.operador.rol else '',
+            'codigo_turno': t.tipo_turno.codigo, 'turno_inicio': inicio, 'turno_fin': fin,
+            'cubre_toda': fin >= fase.fin_programado,
+        })
+    return sorted(disponibles, key=lambda d: (not d['cubre_toda'], d['nombre']))
 
 
 def alertas_programacion(fases, ahora=None):

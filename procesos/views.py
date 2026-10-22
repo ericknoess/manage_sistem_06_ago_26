@@ -51,7 +51,7 @@ from .services import (
     liberar_reserva, cambiar_equipo, validar_cambio_equipo, equipos_candidatos, ocupacion_equipos, ErrorEquipoFase,
     registrar_entrega, recibir_entrega, rechazar_entrega, registrar_devolucion, materiales_por_surtir,
     advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
-    ErrorSurtido,
+    ErrorSurtido, operadores_disponibles,
 )
 
 
@@ -434,6 +434,11 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
             response_data['mensaje_cascada'] = mensaje
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='disponibles')
+    def disponibles(self, request, pk=None):
+        """Operadores con turno a la hora de la actividad y sin otra tarea encimada (panel de Planificación)."""
+        return Response(operadores_disponibles(self.get_object()))
 
     @action(detail=False, methods=['get'], url_path='alertas')
     def alertas(self, request):

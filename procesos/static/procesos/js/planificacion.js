@@ -325,6 +325,35 @@ function seleccionarFase(faseId) {
 }
 
 // Traslape por fecha-hora completas (detecta cruces de medianoche y fases de varios días); misma regla que el servidor
+// Personal con turno que cubre la hora de inicio de la actividad y sin otra tarea encimada (lo calcula el servidor,
+// con la misma regla que la alerta "no tiene turno a las…"; considera turnos nocturnos, retardos y salidas anticipadas).
+async function cargarDisponibles(fase) {
+    let lista;
+    try {
+        const res = await fetch(`/api/fases-lote/${fase.id}/disponibles/`);
+        if (!res.ok) throw new Error();
+        lista = await res.json();
+    } catch (e) {
+        lista = null;
+    }
+    const caja = document.getElementById('listaDisponibles');
+    if (!caja || faseSeleccionadaId !== fase.id) return;  // el usuario ya eligió otra fase
+    if (lista === null) { caja.innerHTML = '<div class="empty-state">⚠️ No se pudo consultar el personal disponible.</div>'; return; }
+    if (!lista.length) { caja.innerHTML = '<div class="empty-state">⚠️ Nadie tiene turno libre a la hora de esta actividad.</div>'; return; }
+    const hora = (iso) => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    caja.innerHTML = lista.map(op => `
+        <div class="op-availability-card available">
+            <div class="op-header">
+                <div>
+                    <div class="op-name">${escaparHtml(op.nombre)}</div>
+                    <div class="op-status-text">Turno: <strong>${escaparHtml(op.codigo_turno)}</strong> · ${hora(op.turno_inicio)} – ${hora(op.turno_fin)}</div>
+                    ${op.cubre_toda ? '' : `<div class="op-aviso-turno">⚠️ Su turno termina a las ${hora(op.turno_fin)}, antes de que acabe la actividad.</div>`}
+                </div>
+            </div>
+            <button class="btn-assign" data-permiso="asignar_personal" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
+        </div>`).join('');
+}
+
 function checkConflictosOperador(operadorId, fase) {
     if (!fase.inicio_programado || !fase.fin_programado) return null;
     const inicio = new Date(fase.inicio_programado);
@@ -333,7 +362,11 @@ function checkConflictosOperador(operadorId, fase) {
     for (const f of fasesGlobales) {
         if (f.id === fase.id || f.estado === 'OMITIDA' || !f.inicio_programado || !f.fin_programado) continue;
         if (!(f.operadores_asignados || []).some(a => a.operador === operadorId)) continue;
-        if (inicio < new Date(f.fin_programado) && fin > new Date(f.inicio_programado)) {
+        // Una fase completada solo ocupa su horario real: terminarla libera al operador (igual que el servidor)
+        const desde = new Date(f.estado === 'COMPLETADA' ? (f.fecha_inicio_real || f.inicio_programado) : f.inicio_programado);
+        const hasta = f.estado === 'COMPLETADA' ? (f.fecha_fin_real ? new Date(f.fecha_fin_real) : null) : new Date(f.fin_programado);
+        if (!hasta) continue;
+        if (inicio < hasta && fin > desde) {
             return `Cruce con: [${f.operacion_id_paso}] ${f.lote_codigo}`;
         }
     }
@@ -437,31 +470,9 @@ function renderPanelDetalle(faseId) {
     `;
 
     if (!estaIniciada) {
-        html += `<div style="font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem;">Disponibles (${fase.fecha_programada}):</div>`;
-        const opsDisp = operadoresGlobales.filter(op => {
-            if (operadoresAsignadosIds.includes(op.id)) return false;
-            const tDia = (op.turnos || []).find(t => t.fecha === fase.fecha_programada);
-            if (!tDia || !tDia.codigo_turno || tDia.codigo_turno === 'OFF') return false;
-            if (checkConflictosOperador(op.id, fase)) return false;
-            return true;
-        });
-
-        if (opsDisp.length === 0) html += `<div class="empty-state">⚠️ Nadie disponible.</div>`;
-
-        opsDisp.forEach(op => {
-            const tDia = op.turnos.find(t => t.fecha === fase.fecha_programada);
-            html += `
-                <div class="op-availability-card available">
-                    <div class="op-header">
-                        <div>
-                            <div class="op-name">${op.nombre}</div>
-                            <div class="op-status-text">Turno: <strong>${tDia.codigo_turno}</strong></div>
-                        </div>
-                    </div>
-                    <button class="btn-assign" data-permiso="asignar_personal" onclick="asignarOperadorFase(${fase.id}, ${op.id}, ${op.rol || 1})">Asignar</button>
-                </div>
-            `;
-        });
+        html += `<div class="disponibles-titulo">Disponibles a las ${formatearRangoFase(fase.inicio_programado, fase.fin_programado)} (${fase.fecha_programada}):</div>
+                 <div id="listaDisponibles"><div class="empty-state">Buscando personal con turno a esa hora…</div></div>`;
+        cargarDisponibles(fase);
     }
     panel.innerHTML = html;
     if (equiposEditables) cargarCandidatosEquipos(panel);

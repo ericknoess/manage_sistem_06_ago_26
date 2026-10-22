@@ -136,6 +136,46 @@ async function cargarTareasPendientes() {
     }
 }
 
+// --- AGRUPACIÓN POR DÍA ---
+// "Hoy" incluye lo atrasado y lo que está en progreso, para que no quede escondido en un día plegado.
+// Los demás días se muestran plegados; lo que el operador abre se conserva al recargar la lista.
+const gruposAbiertos = new Set(['hoy']);
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+function inicioDelDiaLocal(fecha) {
+    const d = new Date(fecha);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+function claveGrupoTarea(t) {
+    if (!t.inicio_programado || t.estado === 'EN_PROGRESO') return 'hoy';
+    const dias = Math.round((inicioDelDiaLocal(t.inicio_programado) - inicioDelDiaLocal(new Date())) / 86400000);
+    if (dias <= 0) return 'hoy';
+    const d = inicioDelDiaLocal(t.inicio_programado);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function tituloGrupo(clave) {
+    if (clave === 'hoy') return 'Hoy';
+    const [a, m, d] = clave.split('-').map(Number);
+    const fecha = new Date(a, m - 1, d);
+    const dias = Math.round((fecha - inicioDelDiaLocal(new Date())) / 86400000);
+    const etiqueta = fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+    return dias === 1 ? `Mañana · ${etiqueta}` : `${DIAS_SEMANA[fecha.getDay()]} · ${etiqueta}`;
+}
+
+function agruparTareasPorDia(tareas) {
+    const grupos = new Map();
+    tareas.forEach(t => {
+        const clave = claveGrupoTarea(t);
+        if (!grupos.has(clave)) grupos.set(clave, { clave, titulo: tituloGrupo(clave), tareas: [] });
+        grupos.get(clave).tareas.push(t);
+    });
+    // "Hoy" primero; luego los días en orden
+    return [...grupos.values()].sort((x, y) => (x.clave === 'hoy' ? -1 : y.clave === 'hoy' ? 1 : x.clave.localeCompare(y.clave)));
+}
+
 function renderizarTareas(tareas, sobrantes = []) {
     window.tareasActuales = tareas;  // para mostrar la tarea en el modal de firma
     const container = document.getElementById('taskListContainer');
@@ -151,6 +191,29 @@ function renderizarTareas(tareas, sobrantes = []) {
         `;
         return;
     }
+
+    const grupos = agruparTareasPorDia(tareas);
+    if (!grupos.some(g => g.clave === 'hoy')) {
+        grupos.unshift({ clave: 'hoy', titulo: 'Hoy', tareas: [] });
+    }
+    const cuerpos = {};
+    grupos.forEach(g => {
+        const grupo = document.createElement('details');
+        grupo.className = 'grupo-dia';
+        grupo.open = gruposAbiertos.has(g.clave);
+        grupo.addEventListener('toggle', () => {
+            if (grupo.open) gruposAbiertos.add(g.clave); else gruposAbiertos.delete(g.clave);
+        });
+        const enProgreso = g.tareas.filter(t => t.estado === 'EN_PROGRESO').length;
+        grupo.innerHTML = `
+            <summary class="grupo-dia__titulo">
+                <span>${escaparTexto(g.titulo)}</span>
+                <span class="grupo-dia__conteo">${g.tareas.length} tarea${g.tareas.length === 1 ? '' : 's'}${enProgreso ? ` · ${enProgreso} en progreso` : ''}</span>
+            </summary>
+            <div class="grupo-dia__tareas">${g.tareas.length ? '' : '<div class="grupo-dia__vacio">Sin tareas para hoy.</div>'}</div>`;
+        container.appendChild(grupo);
+        cuerpos[g.clave] = grupo.querySelector('.grupo-dia__tareas');
+    });
 
     tareas.forEach(t => {
         const card = document.createElement('div');
@@ -201,11 +264,11 @@ function renderizarTareas(tareas, sobrantes = []) {
             ${htmlMaterialesTarea(t)}
             ${accionHtml}
         `;
-        container.appendChild(card);
+        cuerpos[claveGrupoTarea(t)].appendChild(card);
     });
 
-    // Animación de cascada suave (Stagger)
-    gsap.from(".task-card", {
+    // Animación de cascada suave (Stagger), solo en los días abiertos
+    gsap.from(".grupo-dia[open] .task-card", {
         y: 30, 
         opacity: 0, 
         duration: 0.4, 

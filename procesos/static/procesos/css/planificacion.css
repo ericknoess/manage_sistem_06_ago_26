@@ -231,3 +231,7 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 .alertas-programacion ul { margin: 0; padding-left: 1rem; list-style: disc; }
 .badge-equipos { font-size: 0.6rem; color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.6); background: rgba(167, 139, 250, 0.1); border-radius: 3px; padding: 1px 4px; font-weight: bold; }
 .badge-equipos--falta { color: #fbbf24; border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+
+/* Personal disponible a la hora de la actividad (planificacion.js → cargarDisponibles) */
+.disponibles-titulo { font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem; }
+.op-aviso-turno { margin-top: 0.2rem; font-size: 0.65rem; color: #fcd34d; }
