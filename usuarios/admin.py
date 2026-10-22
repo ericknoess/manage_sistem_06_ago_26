@@ -18,7 +18,7 @@ class PerfilInline(admin.StackedInline):
 
 class UsuarioAdmin(UserAdmin):
     inlines = (PerfilInline,)
-    list_display = ('username', 'first_name', 'last_name', 'roles', 'is_active', 'bloqueada', 'last_login')
+    list_display = ('username', 'first_name', 'last_name', 'roles', 'registro_roster', 'is_active', 'bloqueada', 'last_login')
     list_filter = ('groups', 'is_active', 'is_superuser', 'perfil__bloqueado')
     actions = ['desbloquear_cuentas']
 
@@ -34,6 +34,12 @@ class UsuarioAdmin(UserAdmin):
             desbloquear_usuario(usuario)
             registrar(request, 'SESION', 'CUENTA_DESBLOQUEADA', f"Cuenta {usuario.get_username()} desbloqueada", objeto=usuario)
         self.message_user(request, f"{len(bloqueadas)} cuenta(s) desbloqueada(s).")
+
+    @admin.display(description='Registro en el roster')
+    def registro_roster(self, obj):
+        # Sin registro ligado, la persona no puede usar en la tablet los permisos de su usuario web (ej. surtir)
+        operador = getattr(getattr(obj, 'perfil', None), 'operador', None)
+        return f"{operador.codigo_empleado} · {operador.nombre}" if operador else '—'
 
     @admin.display(description='Roles')
     def roles(self, obj):

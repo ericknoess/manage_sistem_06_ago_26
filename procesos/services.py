@@ -1,6 +1,7 @@
 # procesos/services.py
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 from django.db.models import Count, Max
@@ -480,7 +481,7 @@ def alertas_programacion(fases, ahora=None):
     tras reprogramaciones o ajustes automáticos:
       - operador asignado con otra tarea que se traslapa
       - operador sin turno laborable a la hora de inicio
-      - material que, por el adelanto, debía estar listo antes de ahora
+      - material sin recibir completo cuya hora requerida ya pasó (o que, por un adelanto, debía estar listo)
       - equipo reservado que se cruza con otra reserva, o que ya no está disponible o calificado
     """
     ahora = ahora or timezone.now()
@@ -498,7 +499,7 @@ def alertas_programacion(fases, ahora=None):
         operador_id__in=operador_ids, fase_lote__inicio_programado__lt=fin_rango, fase_lote__fin_programado__gt=inicio_rango,
     ).exclude(fase_lote__estado__in=['OMITIDA', 'COMPLETADA']).select_related('fase_lote', 'fase_lote__operacion_maestra', 'fase_lote__lote'))
     turnos = _turnos_por_operador(operador_ids, timezone.localtime(inicio_rango).date(), timezone.localtime(fin_rango).date())
-    materiales = MaterialFase.objects.filter(fase_id__in=ids, activo=True).select_related('material')
+    materiales = MaterialFase.objects.filter(fase_id__in=ids, activo=True).select_related('material').prefetch_related('entregas')
 
     alertas = {}
     por_fase = {f.id: f for f in fases}
@@ -517,13 +518,21 @@ def alertas_programacion(fases, ahora=None):
             alertas.setdefault(fase.id, []).append(f"🕒 {a.operador.nombre} no tiene turno a las {formatear_hora(fase.inicio_programado)}.")
 
     for m in materiales:
+        # Solo avisa si el material aún no se recibe completo y su hora requerida ya pasó
+        if resumen_surtido(m)['estado'] == 'COMPLETO':
+            continue
         fase = por_fase[m.fase_id]
         adelantada = fase.inicio_base_cpm and fase.inicio_programado < fase.inicio_base_cpm
         momento = fase.inicio_programado - timedelta(hours=m.anticipacion_horas or 0)
-        if adelantada and m.anticipacion_horas and momento < ahora < fase.inicio_programado:
+        if momento >= ahora:
+            continue
+        if adelantada and m.anticipacion_horas and ahora < fase.inicio_programado:
             alertas.setdefault(fase.id, []).append(
                 f"📦 La actividad se adelantó: {m.material.nombre} debía estar listo desde las {formatear_hora(momento)} "
                 f"({m.anticipacion_horas:g} h de anticipación).")
+        else:
+            alertas.setdefault(fase.id, []).append(
+                f"📦 {m.material.nombre} debía estar surtido desde las {formatear_hora(momento)} y aún no se recibe completo.")
 
     for fase_id, mensajes in alertas_equipos(fases, ahora).items():
         alertas.setdefault(fase_id, []).extend(mensajes)
@@ -635,7 +644,9 @@ def requerimientos_materiales(desde, hasta):
     margen = timedelta(hours=base.aggregate(m=Max('anticipacion_horas'))['m'] or 0)
     candidatos = base.filter(
         fase__inicio_programado__gte=desde, fase__inicio_programado__lt=hasta + margen,
-    ).select_related('material', 'fase__lote', 'fase__operacion_maestra')
+    ).select_related('material', 'fase__lote', 'fase__operacion_maestra').prefetch_related(
+        'entregas__devoluciones', 'entregas__material_fase__material', 'entregas__material_fase__fase__lote',
+    )
 
     filas = [mf for mf in candidatos if desde <= mf.momento_requerido < hasta]
     filas.sort(key=lambda mf: (mf.momento_requerido, mf.material.nombre))
@@ -940,3 +951,239 @@ def ocupacion_equipos(desde, hasta):
         if faltan > 0 and inicio and inicio < hasta and fin > desde:
             pendientes.append((ef, faltan))
     return tramos, pendientes
+
+
+# ==============================================================================
+# SURTIDO DE MATERIALES: ENTREGA, RECEPCIÓN, RECHAZO Y DEVOLUCIÓN (DOBLE FIRMA)
+# ==============================================================================
+
+class ErrorSurtido(Exception):
+    """Regla de negocio violada al entregar, recibir o devolver material."""
+
+
+def _personas(usuario, operador):
+    """Claves de identidad de quien actúa. Un usuario web y su registro del roster (Perfil.operador) son la misma persona."""
+    claves = set()
+    if usuario is not None:
+        claves.add(('usuario', usuario.pk))
+        perfil = getattr(usuario, 'perfil', None)
+        if perfil is not None and perfil.operador_id:
+            claves.add(('operador', perfil.operador_id))
+    if operador is not None:
+        claves.add(('operador', operador.pk))
+        vinculado = getattr(operador, 'usuario_sistema', None)
+        if vinculado is not None:
+            claves.add(('usuario', vinculado.usuario_id))
+    return claves
+
+
+def misma_persona(usuario_a, operador_a, usuario_b, operador_b):
+    return bool(_personas(usuario_a, operador_a) & _personas(usuario_b, operador_b))
+
+
+def actor_tiene_permiso(usuario, operador, codigo):
+    """Permiso de negocio de quien actúa. En la terminal (PIN) vale el del usuario web ligado a su registro del roster."""
+    if usuario is not None and usuario.is_authenticated:
+        return usuario.has_perm(f'usuarios.{codigo}')
+    vinculado = getattr(operador, 'usuario_sistema', None) if operador is not None else None
+    return bool(vinculado and vinculado.usuario.is_active and vinculado.usuario.has_perm(f'usuarios.{codigo}'))
+
+
+def en_turno(operador_ids, ahora=None):
+    """True si alguno de esos operadores tiene un turno laborable que cubre este momento."""
+    ahora = ahora or timezone.now()
+    hoy = timezone.localtime(ahora).date()
+    ventanas = _turnos_por_operador(operador_ids, hoy, hoy)
+    return any(i <= ahora < f for lista in ventanas.values() for i, f in lista)
+
+
+def puede_recibir_material(usuario, operador, fase, ahora=None):
+    """
+    Quién recibe una entrega (o devuelve el sobrante) de la fase. No tiene que ser quien ejecuta la actividad:
+      - un rol con `ejecutar_fase` (supervisor de turno, jefatura), en web o en la terminal con su registro ligado;
+      - un operador asignado a la fase;
+      - cualquier operador que esté en turno en este momento.
+    """
+    if actor_tiene_permiso(usuario, operador, 'ejecutar_fase'):
+        return True
+    operador_ids = {clave for tipo, clave in _personas(usuario, operador) if tipo == 'operador'}
+    if not operador_ids:
+        return False
+    return fase.operadores_asignados.filter(operador_id__in=operador_ids).exists() or en_turno(operador_ids, ahora)
+
+
+def _suma(entregas, tipo, estado):
+    return sum((e.cantidad for e in entregas if e.tipo == tipo and e.estado == estado), Decimal('0'))
+
+
+def resumen_surtido(material_fase):
+    """
+    Avance del surtido de un material: recibido neto (entregas recibidas menos devoluciones recibidas),
+    lo que está en tránsito y el estado: SIN_SURTIR, EN_TRANSITO, PARCIAL o COMPLETO.
+    Usa `material_fase.entregas.all()` (aprovecha el prefetch).
+    """
+    entregas = list(material_fase.entregas.all())
+    recibido = _suma(entregas, 'ENTREGA', 'RECIBIDA') - _suma(entregas, 'DEVOLUCION', 'RECIBIDA')
+    en_transito = _suma(entregas, 'ENTREGA', 'EN_TRANSITO')
+    devolucion_en_transito = _suma(entregas, 'DEVOLUCION', 'EN_TRANSITO')
+    requerido = material_fase.cantidad
+    if recibido >= requerido:
+        estado = 'COMPLETO'
+    elif recibido > 0:
+        estado = 'PARCIAL'
+    elif en_transito > 0:
+        estado = 'EN_TRANSITO'
+    else:
+        estado = 'SIN_SURTIR'
+    return {
+        'estado': estado, 'requerido': requerido, 'recibido': recibido, 'en_transito': en_transito,
+        'devolucion_en_transito': devolucion_en_transito, 'faltante': max(requerido - recibido - en_transito, Decimal('0')),
+        'excedente': max(recibido - requerido, Decimal('0')),
+    }
+
+
+def disponible_para_devolver(entrega):
+    """Lo que queda de una entrega recibida que aún puede devolverse (descuenta devoluciones no rechazadas)."""
+    devuelto = sum((d.cantidad for d in entrega.devoluciones.all() if d.estado != 'RECHAZADA'), Decimal('0'))
+    return max(entrega.cantidad - devuelto, Decimal('0'))
+
+
+def _texto_cantidad(cantidad, unidad):
+    return f"{format(Decimal(cantidad).normalize(), 'f')} {unidad}"
+
+
+def advertencias_surtido(fase):
+    """Mensajes de los materiales vigentes de la fase que no se han recibido completos (no bloquean el inicio)."""
+    mensajes = []
+    for mf in fase.materiales.filter(activo=True).select_related('material').prefetch_related('entregas'):
+        r = resumen_surtido(mf)
+        if r['estado'] == 'COMPLETO':
+            continue
+        detalle = 'sin surtir' if r['estado'] == 'SIN_SURTIR' else \
+            f"recibido {_texto_cantidad(r['recibido'], mf.unidad_medida)} de {_texto_cantidad(mf.cantidad, mf.unidad_medida)}"
+        if r['en_transito']:
+            detalle += f" ({_texto_cantidad(r['en_transito'], mf.unidad_medida)} por recibir)"
+        mensajes.append(f"📦 {mf.material.nombre}: {detalle}.")
+    return mensajes
+
+
+def _validar_caducidad(caducidad, fase, hoy):
+    if caducidad < hoy:
+        raise ErrorSurtido(f"El lote caducó el {caducidad:%d/%m/%Y}; no se puede usar.")
+    if fase.inicio_programado and caducidad < timezone.localtime(fase.inicio_programado).date():
+        raise ErrorSurtido(f"El lote caduca el {caducidad:%d/%m/%Y}, antes de su uso programado "
+                           f"({formatear_hora(fase.inicio_programado, '%d/%m/%Y')}).")
+
+
+def _validar_fase_para_surtir(fase):
+    if fase.lote.archivado or fase.lote.estado in ('COMPLETADO', 'ABORTADO'):
+        raise ErrorSurtido(f"El lote {fase.lote.identificador_lote} está cerrado; ya no recibe material.")
+    if fase.estado in ('COMPLETADA', 'OMITIDA'):
+        raise ErrorSurtido(f"La fase está {fase.get_estado_display().lower()}; ya no recibe material.")
+
+
+def registrar_entrega(material_fase, cantidad, lote_material, caducidad, observaciones, actor, ahora=None):
+    """
+    Almacén o planeación entrega material a la fase; queda EN_TRANSITO hasta que el personal de la fase lo reciba.
+    `actor` = {'usuario', 'operador', 'nombre'}. Devuelve (entrega, avisos).
+    """
+    from .models import EntregaMaterial
+    ahora = ahora or timezone.now()
+    fase = material_fase.fase
+    if not material_fase.activo:
+        raise ErrorSurtido("Este material fue retirado de la fase; ya no se surte.")
+    _validar_fase_para_surtir(fase)
+    if cantidad is None or cantidad <= 0:
+        raise ErrorSurtido("La cantidad entregada debe ser mayor que cero.")
+    lote_material = (lote_material or '').strip()
+    if not lote_material:
+        raise ErrorSurtido("Indica el lote del material entregado.")
+    if caducidad is None:
+        raise ErrorSurtido("Indica la caducidad del lote entregado.")
+    _validar_caducidad(caducidad, fase, timezone.localtime(ahora).date())
+
+    antes = resumen_surtido(material_fase)
+    entrega = EntregaMaterial.objects.create(
+        material_fase=material_fase, tipo='ENTREGA', cantidad=cantidad, unidad_medida=material_fase.unidad_medida,
+        lote_material=lote_material[:80], caducidad=caducidad, observaciones=(observaciones or '').strip(),
+        entregado_por_usuario=actor['usuario'], entregado_por_operador=actor['operador'],
+        entregado_por_nombre=actor['nombre'][:150], entregado_en=ahora,
+    )
+    avisos = []
+    if not fase.operadores_asignados.exists():
+        avisos.append("La fase aún no tiene personal asignado: nadie la verá en la tablet para recibirla "
+                      "hasta que se asigne en Planificación (o la reciba un supervisor desde /materiales/).")
+    exceso = antes['recibido'] + antes['en_transito'] + cantidad - material_fase.cantidad
+    if exceso > 0:
+        avisos.append(f"Se entrega {_texto_cantidad(exceso, material_fase.unidad_medida)} más de lo requerido; "
+                      "el sobrante se devuelve al almacén.")
+    return entrega, avisos
+
+
+def _cerrar_recepcion(entrega, estado, actor, ahora, motivo=''):
+    entrega.estado = estado
+    entrega.recibido_por_usuario, entrega.recibido_por_operador = actor['usuario'], actor['operador']
+    entrega.recibido_por_nombre = actor['nombre'][:150]
+    entrega.recibido_en = ahora
+    entrega.motivo_rechazo = motivo
+    entrega.save()
+    return entrega
+
+
+def _validar_recepcion(entrega, actor):
+    if entrega.estado != 'EN_TRANSITO':
+        raise ErrorSurtido(f"Esta {entrega.get_tipo_display().lower()} ya fue {entrega.get_estado_display().lower()}.")
+    if misma_persona(entrega.entregado_por_usuario, entrega.entregado_por_operador, actor['usuario'], actor['operador']):
+        raise ErrorSurtido("Quien entrega no puede recibir ni rechazar su propia entrega (regla de cuatro ojos). "
+                           "Pide a otra persona que la reciba.")
+
+
+def recibir_entrega(entrega, actor, ahora=None):
+    """Recepción conforme de una entrega (personal de la fase) o de una devolución (almacén)."""
+    ahora = ahora or timezone.now()
+    _validar_recepcion(entrega, actor)
+    if entrega.tipo == 'ENTREGA':
+        _validar_fase_para_surtir(entrega.material_fase.fase)
+        if entrega.caducidad < timezone.localtime(ahora).date():
+            raise ErrorSurtido(f"El lote {entrega.lote_material} caducó el {entrega.caducidad:%d/%m/%Y}; recházalo.")
+    return _cerrar_recepcion(entrega, 'RECIBIDA', actor, ahora)
+
+
+def rechazar_entrega(entrega, motivo, actor, ahora=None):
+    """Quien recibe no acepta el material (cantidad, lote, caducidad o estado incorrectos); exige motivo."""
+    ahora = ahora or timezone.now()
+    motivo = (motivo or '').strip()
+    if len(motivo) < 10:
+        raise ErrorSurtido("Escribe el motivo del rechazo (mínimo 10 caracteres).")
+    _validar_recepcion(entrega, actor)
+    return _cerrar_recepcion(entrega, 'RECHAZADA', actor, ahora, motivo)
+
+
+def registrar_devolucion(entrega, cantidad, observaciones, actor, ahora=None):
+    """El personal de la fase devuelve al almacén el sobrante de una entrega recibida (mismo lote y caducidad)."""
+    from .models import EntregaMaterial
+    ahora = ahora or timezone.now()
+    if entrega.tipo != 'ENTREGA' or entrega.estado != 'RECIBIDA':
+        raise ErrorSurtido("Solo se devuelve el sobrante de una entrega recibida.")
+    if entrega.material_fase.fase.lote.archivado:
+        raise ErrorSurtido("El lote está archivado; ya no registra devoluciones.")
+    if cantidad is None or cantidad <= 0:
+        raise ErrorSurtido("La cantidad devuelta debe ser mayor que cero.")
+    disponible = disponible_para_devolver(entrega)
+    if cantidad > disponible:
+        raise ErrorSurtido(f"De esta entrega solo puedes devolver hasta {_texto_cantidad(disponible, entrega.unidad_medida)}.")
+    return EntregaMaterial.objects.create(
+        material_fase=entrega.material_fase, tipo='DEVOLUCION', devolucion_de=entrega, cantidad=cantidad,
+        unidad_medida=entrega.unidad_medida, lote_material=entrega.lote_material, caducidad=entrega.caducidad,
+        observaciones=(observaciones or '').strip(),
+        entregado_por_usuario=actor['usuario'], entregado_por_operador=actor['operador'],
+        entregado_por_nombre=actor['nombre'][:150], entregado_en=ahora,
+    )
+
+
+def materiales_por_surtir(ahora=None, horas=48):
+    """Requerimientos sin surtir completos cuyo momento requerido cae en los próximos `horas` (o ya pasó, hasta 3 días)."""
+    ahora = ahora or timezone.now()
+    filas = requerimientos_materiales(ahora - timedelta(days=3), ahora + timedelta(hours=horas))
+    filas = [mf for mf in filas if mf.fase.estado in ('PENDIENTE', 'EN_PROGRESO') and mf.fase.lote.estado in ('PLANEADO', 'EN_PROGRESO')]
+    return [mf for mf in filas if resumen_surtido(mf)['estado'] != 'COMPLETO']

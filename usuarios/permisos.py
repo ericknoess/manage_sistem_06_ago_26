@@ -10,6 +10,7 @@ NOMBRES_PERMISO = {
     'asignar_personal': 'asignar personal o equipos',
     'ejecutar_fase': 'iniciar o completar fases',
     'ajustar_material_lote': 'ajustar materiales o equipos de un lote',
+    'surtir_material': 'surtir materiales',
     'editar_receta': 'editar recetas',
     'archivar_receta': 'archivar recetas',
     'gestionar_catalogos': 'modificar catálogos',
@@ -105,3 +106,20 @@ class PermisoFaseLote(PermisoPorAccion):
                 # Se lanza directo: devolviendo False, DRF respondería 401 al no haber usuario de Django
                 raise exceptions.PermissionDenied("Solo puedes iniciar o completar tareas que tienes asignadas.")
         return True
+
+
+class PermisoSurtido(permissions.BasePermission):
+    """
+    Surtido de materiales: entra el usuario web o la persona que ingresó con su PIN en /mobile/.
+    Quién puede cada paso (almacén o personal de la fase) lo decide la vista con la regla de cuatro ojos.
+    """
+
+    def has_permission(self, request, view):
+        if request.user and request.user.is_authenticated:
+            return True
+        if operador_de_sesion(request):
+            if request.method not in permissions.SAFE_METHODS:
+                # Sin usuario de Django, DRF no revisa CSRF por su cuenta
+                SesionAutenticacion().enforce_csrf(request)
+            return True
+        return False

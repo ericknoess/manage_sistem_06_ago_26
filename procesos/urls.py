@@ -13,6 +13,7 @@ from .views import (
     AsignacionFaseOperadorViewSet,
     MaterialFaseViewSet,
     EquipoFaseViewSet,
+    EntregaMaterialViewSet,
     MobileeBRViewSet  # [NUEVO] Importamos la vista de la API móvil para piso de planta
 )
 
@@ -30,6 +31,7 @@ router.register(r'fases-lote', FaseLoteViewSet, basename='fase-lote')
 router.register(r'asignaciones-operador', AsignacionFaseOperadorViewSet, basename='asignacion-operador')
 router.register(r'materiales-fase', MaterialFaseViewSet, basename='material-fase')
 router.register(r'equipos-fase', EquipoFaseViewSet, basename='equipo-fase')
+router.register(r'surtido', EntregaMaterialViewSet, basename='surtido')
 
 # 3. [NUEVO] Rutas de la API Móvil para Operadores (Autenticación rápida y tareas)
 router.register(r'mobile', MobileeBRViewSet, basename='mobile-ebr')

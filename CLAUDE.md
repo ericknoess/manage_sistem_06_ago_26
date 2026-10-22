@@ -38,6 +38,14 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Materiales: `MaterialOperacion` (receta: cantidad, anticipación, actividad o cada muestreo) se copia a `MaterialFase`
   al instanciar el lote; los ajustes por lote exigen motivo y los retiros son bajas lógicas. El momento requerido es
   `inicio_programado - anticipacion_horas`, así que sigue a las reprogramaciones. Buscador compartido en `static/core/js/materiales.js`.
+- Surtido de materiales (`EntregaMaterial`, API `/api/surtido/`): entrega con lote y caducidad (`surtir_material`: rol Almacén,
+  Planeador, Jefatura) → queda EN_TRANSITO → la recibe o rechaza (con motivo) un operador en turno, el asignado a la fase o un
+  rol con `ejecutar_fase` (`puede_recibir_material`); el sobrante se devuelve y lo recibe el almacén. Cada paso se firma (ENTREGAR/RECIBIR/RECHAZAR/DEVOLVER_MATERIAL) y quien entrega no puede recibir
+  (regla de cuatro ojos; un usuario web y su `Perfil.operador` son la misma persona). En la terminal, los permisos son los del
+  usuario web ligado al operador. No se entrega material caducado ni que vence antes del uso programado. Iniciar una fase con
+  material incompleto solo advierte (queda en la bitácora); Planificación alerta el material sin surtir a su hora.
+  Lógica en `procesos/services.py` (sección SURTIDO); front web en `static/core/js/surtido.js` (monitor /materiales/),
+  tablet en `procesos/static/procesos/js/mobile_surtido.js` (materiales por tarea, sobrantes, pestañas "Recibir" y "Surtir").
 - Equipos: la receta pide equipos por tipo (`EquipoOperacion`: cantidad, horas de preparación y limpieza, actividad o cada muestreo);
   se copia a `EquipoFase` al instanciar el lote (ajustes con motivo, retiros como baja lógica) y en Planificación se reservan equipos
   concretos (`ReservaEquipo`). La ocupación es `inicio - preparación` a `fin + limpieza` y sigue al forecast. No se reserva un equipo
@@ -45,7 +53,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   se cambia con motivo y firma (`CAMBIAR_EQUIPO`): la reserva anterior se cierra en `hasta` y la nueva abre en `desde`.
   Lógica en `procesos/services.py`; API `/api/equipos-fase/`; front compartido en `static/core/js/equipos.js`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
-  Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta) creados por la migración 0002; los permisos
+  Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
   Toda pantalla pide sesión (`LoginRequeridoMiddleware`), salvo `/mobile/` (PIN del operador, guardado en la sesión del servidor).
   API: `PermisoPorAccion` deja leer a cualquier usuario con sesión y para escribir exige el permiso que declara cada ViewSet en

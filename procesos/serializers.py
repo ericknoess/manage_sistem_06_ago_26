@@ -6,7 +6,7 @@ from rest_framework import serializers
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
     LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase,
-    EquipoOperacion, EquipoFase, ReservaEquipo,
+    EquipoOperacion, EquipoFase, ReservaEquipo, EntregaMaterial,
 )
 from roster.models import RolOperador
 
@@ -224,24 +224,59 @@ class AsignacionFaseOperadorSerializer(serializers.ModelSerializer):
         ]
 
 
+class EntregaMaterialSerializer(serializers.ModelSerializer):
+    """Entrega o devolución de material, con quién la hizo y quién la recibió o rechazó."""
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    material = serializers.CharField(source='material_fase.material_id', read_only=True)
+    material_nombre = serializers.CharField(source='material_fase.material.nombre', read_only=True)
+    fase = serializers.IntegerField(source='material_fase.fase_id', read_only=True)
+    lote_codigo = serializers.CharField(source='material_fase.fase.lote.identificador_lote', read_only=True)
+    disponible_devolver = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EntregaMaterial
+        fields = [
+            'id', 'material_fase', 'material', 'material_nombre', 'fase', 'lote_codigo', 'tipo', 'tipo_display',
+            'devolucion_de', 'cantidad', 'unidad_medida', 'lote_material', 'caducidad', 'observaciones',
+            'estado', 'estado_display', 'entregado_por_nombre', 'entregado_en',
+            'recibido_por_nombre', 'recibido_en', 'motivo_rechazo', 'disponible_devolver',
+        ]
+        read_only_fields = fields
+
+    def get_disponible_devolver(self, obj):
+        from .services import disponible_para_devolver
+        if obj.tipo != 'ENTREGA' or obj.estado != 'RECIBIDA':
+            return None
+        return disponible_para_devolver(obj)
+
+
 class MaterialFaseSerializer(serializers.ModelSerializer):
     material_nombre = serializers.CharField(source='material.nombre', read_only=True)
     categoria = serializers.CharField(source='material.categoria', read_only=True)
     condicion_almacenamiento = serializers.CharField(source='material.condicion_almacenamiento', read_only=True)
     momento_requerido = serializers.DateTimeField(read_only=True)
     ajustado = serializers.SerializerMethodField()
+    # Avance del surtido (recibido, en tránsito, estado) y sus entregas y devoluciones
+    surtido = serializers.SerializerMethodField()
+    entregas = EntregaMaterialSerializer(many=True, read_only=True)
 
     class Meta:
         model = MaterialFase
         fields = [
             'id', 'fase', 'material', 'material_nombre', 'unidad_medida', 'categoria', 'condicion_almacenamiento',
             'cantidad', 'cantidad_receta', 'anticipacion_horas', 'momento_requerido',
-            'activo', 'ajustado', 'motivo_ajuste', 'ajustado_en',
+            'activo', 'ajustado', 'motivo_ajuste', 'ajustado_en', 'surtido', 'entregas',
         ]
         read_only_fields = fields
 
     def get_ajustado(self, obj):
         return obj.ajustado_en is not None
+
+    def get_surtido(self, obj):
+        from .services import resumen_surtido
+        r = resumen_surtido(obj)
+        return {k: (str(v) if not isinstance(v, str) else v) for k, v in r.items()}
 
 
 class RequerimientoMaterialSerializer(MaterialFaseSerializer):

@@ -1,0 +1,69 @@
+/* static/core/css/surtido.css — Surtido de materiales: estado, entregas y botones (ver static/core/js/surtido.js) */
+
+.surtido { margin-top: 0.4rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.surtido__cabecera { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.surtido__entregas { display: flex; flex-direction: column; gap: 0.25rem; }
+
+.surtido-chip { padding: 0.08rem 0.5rem; border: 1px solid; border-radius: 999px; font-size: 0.66rem; font-weight: 700; }
+.surtido--sin { color: #fca5a5; border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.08); }
+.surtido--transito { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.6); background: rgba(56, 189, 248, 0.08); }
+.surtido--parcial { color: #fcd34d; border-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.08); }
+.surtido--completo { color: #86efac; border-color: rgba(34, 197, 94, 0.6); background: rgba(34, 197, 94, 0.08); }
+
+.surtido-entrega {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.6rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #334155;
+    border-left: 3px solid #64748b;
+    border-radius: 5px;
+    background: rgba(15, 23, 42, 0.5);
+    font-size: 0.68rem;
+    color: #94a3b8;
+}
+.surtido-entrega--en_transito { border-left-color: #38bdf8; }
+.surtido-entrega--recibida { border-left-color: #22c55e; }
+.surtido-entrega--rechazada { border-left-color: #ef4444; opacity: 0.75; }
+.surtido-entrega__tipo { font-weight: 800; color: #f8fafc; }
+.surtido-entrega__lote strong { color: #e2e8f0; font-family: ui-monospace, monospace; }
+.surtido-entrega__estado { font-weight: 700; color: #cbd5e1; }
+.surtido-entrega__quien { flex-basis: 100%; }
+.surtido-entrega__botones { display: flex; gap: 0.3rem; flex-basis: 100%; }
+
+.btn-surtido {
+    height: 24px;
+    padding: 0 0.6rem;
+    border: 1px solid #475569;
+    border-radius: 5px;
+    background: rgba(15, 23, 42, 0.7);
+    color: #e2e8f0;
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.btn-surtido:hover { border-color: #38bdf8; color: #38bdf8; }
+.btn-surtido--entregar { border-color: rgba(56, 189, 248, 0.6); color: #7dd3fc; }
+.btn-surtido--ok { border-color: rgba(34, 197, 94, 0.6); color: #86efac; }
+.btn-surtido--no { border-color: rgba(239, 68, 68, 0.6); color: #fca5a5; }
+
+.surtido-devolucion { padding: 0.5rem 0.9rem; border-bottom: 1px solid rgba(51, 65, 85, 0.5); }
+.surtido-devolucion__material { margin-bottom: 0.25rem; font-size: 0.78rem; font-weight: 700; color: #f8fafc; }
+.surtido-devolucion__material span { font-weight: 500; color: #94a3b8; }
+
+.surtido-toast {
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    z-index: 2600;
+    transform: translateX(-50%);
+    padding: 0.6rem 1rem;
+    border: 1px solid rgba(34, 197, 94, 0.6);
+    border-radius: 8px;
+    background: #14532d;
+    color: #dcfce7;
+    font-size: 0.8rem;
+    font-weight: 600;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}

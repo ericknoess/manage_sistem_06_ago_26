@@ -84,7 +84,7 @@ class AccesoSinSesionTests(BaseRoles):
     def test_sesion_expone_roles_y_permisos(self):
         datos = self.cliente('Planeador').get('/api/sesion/').data
         self.assertEqual(datos['roles'], ['Planeador'])
-        self.assertEqual(set(datos['permisos']), {'instanciar_lote', 'reprogramar_fase', 'asignar_personal', 'ajustar_material_lote'})
+        self.assertEqual(set(datos['permisos']), {'instanciar_lote', 'reprogramar_fase', 'asignar_personal', 'ajustar_material_lote', 'surtir_material'})
 
 
 class PermisosPorRolTests(BaseRoles):
@@ -353,3 +353,14 @@ class TerminalCompartidaTests(BaseRoles):
         self.tablet.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
         self.assertTrue(self.tablet.login(username='supervisor', password='clave-de-prueba'))
         self.assertNotIn('operador_id', self.tablet.session)
+
+    def test_firma_con_pin_tras_login_web_pide_volver_a_ingresar(self):
+        """Regresión: tras iniciar sesión web en el navegador de la tablet, el PIN se rechazaba sin explicar por qué."""
+        self.tablet.logout()
+        self.tablet.post('/api/mobile/login/', {'codigo_empleado': 'OP-1', 'pin_acceso': '1234'}, format='json')
+        self.assertEqual(self.tablet.get('/api/mobile/sesion/').data['operador_id'], self.operador.id)
+        self.assertTrue(self.tablet.login(username='supervisor', password='clave-de-prueba'))
+        self.assertEqual(self.tablet.get('/api/mobile/sesion/').data, {'operador_id': None, 'usuario_web': 'supervisor'})
+        respuesta = self.tablet.post(f'/api/fases-lote/{self.fase.id}/cambiar-estado/',
+                                     {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json')
+        self.assertEqual((respuesta.status_code, respuesta.data['codigo']), (401, 'TERMINAL_CERRADA'))

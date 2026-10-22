@@ -21,6 +21,10 @@ SIGNIFICADOS = {
     'FASE_PENDIENTE': 'Autorizo regresar la fase a pendiente',
     'FASE_OMITIDA': 'Autorizo omitir la fase',
     'CAMBIAR_EQUIPO': 'Autorizo el cambio de equipo durante la ejecución',
+    'ENTREGAR_MATERIAL': 'Entrego el material indicado',
+    'RECIBIR_MATERIAL': 'Recibo el material conforme',
+    'RECHAZAR_MATERIAL': 'Rechazo el material entregado',
+    'DEVOLVER_MATERIAL': 'Devuelvo el material sobrante',
 }
 
 
@@ -115,6 +119,10 @@ def verificar_firma(request, accion):
     usuario = request.user
 
     if usuario.is_authenticated:
+        if request.data.get('firma_pin') and not request.data.get('firma_password'):
+            # La tablet firma con PIN, pero en este navegador se abrió una sesión web que cerró la terminal del operador
+            raise FirmaRechazada(f"En este navegador se inició sesión web como «{usuario.get_username()}» y eso cerró la terminal. "
+                                 "Vuelve a ingresar con tu número de empleado y PIN.", 'TERMINAL_CERRADA', 401)
         contrasena = request.data.get('firma_password')
         if not contrasena:
             raise FirmaRechazada(f"Esta acción requiere tu firma electrónica: «{significado}».", 'FIRMA_REQUERIDA')

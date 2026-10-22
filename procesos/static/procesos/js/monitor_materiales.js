@@ -1,6 +1,7 @@
 // procesos/static/procesos/js/monitor_materiales.js
 // Monitor de materiales: requerimientos de los lotes agrupados por día y hora (hora local),
 // con totales por material. Los datos vienen de /api/materiales-fase/requerimientos/.
+// Cada requerimiento muestra su surtido (entregar, recibir, rechazar, devolver: static/core/js/surtido.js).
 
 const NOMBRES_DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -97,6 +98,18 @@ async function cargarRequerimientos() {
     } catch (err) {
         document.getElementById('lineaTiempo').innerHTML = `<div class="estado-vacio estado-vacio--error">⚠️ No se pudieron cargar los requerimientos: ${escaparHtml(err.message)}</div>`;
     }
+    cargarDevoluciones();
+}
+
+async function cargarDevoluciones() {
+    const caja = document.getElementById('devolucionesPendientes');
+    try {
+        const res = await fetch('/api/surtido/?tipo=DEVOLUCION&estado=EN_TRANSITO');
+        if (!res.ok) throw new Error('Error del servidor');
+        caja.innerHTML = htmlDevolucionesPendientes(await res.json());
+    } catch (err) {
+        caja.innerHTML = `<div class="estado-vacio estado-vacio--error">⚠️ No se pudieron cargar las devoluciones.</div>`;
+    }
 }
 
 function filtrar() {
@@ -125,12 +138,14 @@ function renderizarIndicadores(filas) {
     const enFrio = filas.filter(r => r.condicion_almacenamiento !== 'AMBIENTE').length;
     const ahora = new Date();
     const atrasados = filas.filter(r => new Date(r.momento_requerido) < ahora && r.fase_estado === 'PENDIENTE').length;
+    const sinSurtir = filas.filter(r => new Date(r.momento_requerido) < ahora && r.surtido && r.surtido.estado !== 'COMPLETO').length;
     const indicadores = [
         { valor: filas.length, etiqueta: 'Requerimientos' },
         { valor: new Set(filas.map(r => r.material)).size, etiqueta: 'Materiales distintos' },
         { valor: new Set(filas.map(r => r.lote_codigo)).size, etiqueta: 'Lotes' },
         { valor: enFrio, etiqueta: 'En cadena de frío', clase: enFrio ? 'indicador--frio' : '' },
         { valor: atrasados, etiqueta: 'Hora ya pasada (fase pendiente)', clase: atrasados ? 'indicador--alerta' : '' },
+        { valor: sinSurtir, etiqueta: 'Sin surtir completo a su hora', clase: sinSurtir ? 'indicador--alerta' : '' },
     ];
     document.getElementById('indicadores').innerHTML = indicadores.map(i => `
         <div class="indicador ${i.clase || ''}">
@@ -211,6 +226,7 @@ function tarjetaRequerimiento(r) {
                 Lote <strong>${escaparHtml(r.lote_codigo)}</strong> · [${escaparHtml(r.paso)}] ${escaparHtml(r.actividad)} · ${anticipacion}
             </div>
             ${etiquetas.length ? `<div class="tarjeta__etiquetas">${etiquetas.join('')}</div>` : ''}
+            ${htmlSurtido(r)}
         </article>`;
 }
 
@@ -255,6 +271,7 @@ function renderizarTotales(filas) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    configurarSurtido({ alActualizar: cargarRequerimientos });
     await cargarOpciones();
     cargarRequerimientos();
     // Refresca cada 5 minutos: los requerimientos siguen a las reprogramaciones de las fases

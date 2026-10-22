@@ -34,6 +34,7 @@ class Perfil(models.Model):
             ('asignar_personal', 'Asignar operadores y equipos a fases'),
             ('ejecutar_fase', 'Iniciar y completar fases'),
             ('ajustar_material_lote', 'Agregar, ajustar y retirar materiales de un lote'),
+            ('surtir_material', 'Entregar materiales a las fases y recibir devoluciones'),
             ('editar_receta', 'Crear y editar recetas maestras'),
             ('archivar_receta', 'Archivar y restaurar recetas maestras'),
             ('gestionar_catalogos', 'Gestionar catálogos de materiales y equipos'),

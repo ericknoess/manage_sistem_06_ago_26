@@ -19,6 +19,10 @@ const SIGNIFICADOS_POR_DEFECTO = {
     FASE_EN_PROGRESO: 'Inicio la ejecución de la fase',
     FASE_COMPLETADA: 'Ejecución completada y verificada',
     CAMBIAR_EQUIPO: 'Autorizo el cambio de equipo durante la ejecución',
+    ENTREGAR_MATERIAL: 'Entrego el material indicado',
+    RECIBIR_MATERIAL: 'Recibo el material conforme',
+    RECHAZAR_MATERIAL: 'Rechazo el material entregado',
+    DEVOLVER_MATERIAL: 'Devuelvo el material sobrante',
 };
 
 function escaparFirma(texto) {

@@ -28,6 +28,7 @@
                 <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
                 <div class="login-title">eBR Terminal</div>
                 <div class="login-subtitle">Firma Electrónica (21 CFR Part 11)</div>
+                <div class="task-aviso task-aviso--retraso" id="avisoTerminal" hidden></div>
                 
                 <form id="loginForm" onsubmit="handleLogin(event)">
                     <div class="input-group">
@@ -60,9 +61,18 @@
                 </div>
             </div>
 
+            <!-- "Surtir" solo aparece para quien surte materiales (almacén o planeación) -->
+            <nav class="pestanas-terminal" id="pestanasTerminal">
+                <button type="button" data-pestana="tareas" onclick="mostrarPestana('tareas')">📋 Mis tareas</button>
+                <button type="button" data-pestana="recibir" onclick="mostrarPestana('recibir')">📥 Recibir material</button>
+                <button type="button" data-pestana="surtir" onclick="mostrarPestana('surtir')" hidden>📦 Surtir materiales</button>
+            </nav>
+
             <div class="task-list" id="taskListContainer">
                 <!-- Tareas inyectadas vía JS -->
             </div>
+            <div class="task-list" id="recibirContainer" hidden></div>
+            <div class="task-list" id="surtirContainer" hidden></div>
         </div>
 
     </div>
@@ -96,5 +106,6 @@
 
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'procesos/js/mobile_dashboard.js' %}"></script>
+    <script src="{% static 'procesos/js/mobile_surtido.js' %}"></script>
 </body>
 </html>

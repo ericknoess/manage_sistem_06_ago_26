@@ -14,11 +14,11 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from auditoria.mixins import AuditoriaMixin
-from auditoria.services import diferencias, firmar, registrar
+from auditoria.services import diferencias, firmar, quien, registrar
 from usuarios.firmas import (
     FirmaRechazada, registrar_fallo_pin, reiniciar_intentos_pin, verificar_firma, SIGNIFICADOS,
 )
-from usuarios.permisos import PermisoFaseLote, SOLO_SESION, operador_de_sesion
+from usuarios.permisos import PermisoFaseLote, PermisoSurtido, SOLO_SESION, operador_de_sesion
 
 
 def _firma_o_respuesta(request, accion):
@@ -31,7 +31,7 @@ def _firma_o_respuesta(request, accion):
 from .models import (
     ProcesoMaestro, EtapaProceso, OperacionProceso, RequerimientoPersonalFase,
     LoteProduccion, FaseLote, AsignacionFaseOperador, MaterialOperacion, MaterialFase,
-    EquipoOperacion, EquipoFase, ReservaEquipo,
+    EquipoOperacion, EquipoFase, ReservaEquipo, EntregaMaterial,
 )
 from actividades.models import Equipo, MaterialInsumo, TipoEquipo
 from roster.models import Operador
@@ -39,6 +39,7 @@ from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
     LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer,
     MaterialFaseSerializer, RequerimientoMaterialSerializer, EquipoFaseSerializer, ReservaEquipoSerializer,
+    EntregaMaterialSerializer,
 )
 from .services import (
     CPMCalculatorService, validar_disponibilidad_personal_fase, construir_fases_lote,
@@ -48,6 +49,9 @@ from .services import (
     requerimientos_materiales, ErrorMaterialFase,
     generar_equipos_lote, ajustar_equipo_fase, agregar_equipo_fase, retirar_equipo_fase, reservar_equipo,
     liberar_reserva, cambiar_equipo, validar_cambio_equipo, equipos_candidatos, ocupacion_equipos, ErrorEquipoFase,
+    registrar_entrega, recibir_entrega, rechazar_entrega, registrar_devolucion, materiales_por_surtir,
+    advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
+    ErrorSurtido,
 )
 
 
@@ -223,7 +227,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo').order_by('-created_at')
+        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo').order_by('-created_at')
 
     serializer_class = LoteProduccionSerializer
     permisos_por_accion = {
@@ -315,7 +319,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
 
     def get_queryset(self):
         return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related(
-            'materiales__material', 'operadores_asignados__operador', 'operadores_asignados__rol_ejercido',
+            'materiales__material', 'materiales__entregas__devoluciones', 'materiales__entregas__material_fase__material', 'materiales__entregas__material_fase__fase__lote',
+            'operadores_asignados__operador', 'operadores_asignados__rol_ejercido',
             'equipos__tipo', 'equipos__reservas__equipo',
         ).filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
 
@@ -357,6 +362,9 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         firmante, error = _firma_o_respuesta(request, f"FASE_{nuevo_estado}")
         if error:
             return error
+
+        # El material incompleto no impide iniciar: se avisa y queda en la bitácora
+        advertencia_materiales = advertencias_surtido(fase) if evaluacion is not None else []
 
         ejecutar_auto_ajuste = False
         estado_anterior = fase.estado
@@ -400,6 +408,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         cambios = {'estado': [estado_anterior, nuevo_estado]}
         if fases_actualizadas_count:
             cambios['sucesoras_reajustadas'] = [None, fases_actualizadas_count]
+        if advertencia_materiales:
+            cambios['materiales_incompletos'] = [None, advertencia_materiales]
         motivo = firmante['comentario']
         if evaluacion and evaluacion['desviacion']:
             cambios['desviacion_inicio'] = [None, evaluacion['mensaje']]
@@ -412,6 +422,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
                       objeto=lote, lote=lote, cambios={'estado': [lote_estado_anterior, lote.estado]})
 
         response_data = self.get_serializer(fase).data
+        if advertencia_materiales:
+            response_data['advertencia_materiales'] = advertencia_materiales
         if ejecutar_auto_ajuste and fases_actualizadas_count > 0:
             mensaje = f"Se auto-ajustaron {fases_actualizadas_count} tareas posteriores."
             # Lo que el ajuste dejó mal (cruces, turnos, materiales) se avisa aquí y Planificación lo marca
@@ -571,7 +583,9 @@ class MaterialFaseViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
     permiso_escritura = 'ajustar_material_lote'
 
     def get_queryset(self):
-        qs = MaterialFase.objects.select_related('material', 'fase').order_by('fase', 'material__nombre')
+        qs = MaterialFase.objects.select_related('material', 'fase').prefetch_related(
+            'entregas__devoluciones', 'entregas__material_fase__material', 'entregas__material_fase__fase__lote',
+        ).order_by('fase', 'material__nombre')
         if self.request.query_params.get('fase'):
             qs = qs.filter(fase_id=self.request.query_params['fase'])
         return qs
@@ -903,9 +917,18 @@ class MobileeBRViewSet(viewsets.ViewSet):
         registrar(request, 'SESION', 'PIN_LOGIN', f"Ingreso a la terminal de {operador.nombre} ({codigo})", objeto=operador)
         return Response({
             "firmas": SIGNIFICADOS,
+            # Permisos del usuario web ligado a esta persona (ej. un planeador que también surte desde la tablet)
+            "permisos": [c for c in ('surtir_material',) if actor_tiene_permiso(None, operador, c)],
             "operador_id": operador.id, "codigo_empleado": operador.codigo_empleado, "nombre": operador.nombre,
             "rol": operador.rol.nombre if operador.rol else "Operativo Base", "cuadrilla": operador.cuadrilla.nombre
         }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='sesion')
+    def sesion(self, request):
+        """Operador con terminal abierta en esta sesión del servidor (la tablet lo compara con el que muestra)."""
+        operador = operador_de_sesion(request)
+        return Response({'operador_id': operador.id if operador else None,
+                         'usuario_web': request.user.get_username() if request.user.is_authenticated else None})
 
     @action(detail=False, methods=['post'], url_path='logout')
     def logout(self, request):
@@ -928,7 +951,9 @@ class MobileeBRViewSet(viewsets.ViewSet):
             operador=operador, fase_lote__lote__archivado=False, fase_lote__lote__estado__in=['PLANEADO', 'EN_PROGRESO']
         ).exclude(fase_lote__estado__in=['COMPLETADA', 'OMITIDA']).select_related(
             'fase_lote', 'fase_lote__lote', 'fase_lote__operacion_maestra', 'fase_lote__lote__proceso_maestro'
-        ).prefetch_related('fase_lote__equipos__reservas__equipo').order_by('fase_lote__inicio_programado')
+        ).prefetch_related(
+            'fase_lote__equipos__reservas__equipo', 'fase_lote__materiales__material', 'fase_lote__materiales__entregas__devoluciones',
+        ).order_by('fase_lote__inicio_programado')
         
         tareas_data = []
         ahora = timezone.now()
@@ -948,6 +973,246 @@ class MobileeBRViewSet(viewsets.ViewSet):
                 "rol_asignado": asig.rol_ejercido.nombre, **disponibilidad,
                 "equipos": [f"[{r.equipo_id}] {r.equipo.nombre}" for ef in fase.equipos.all() if ef.activo
                             for r in ef.reservas.all() if r.vigente],
+                "materiales": [_material_terminal(mf) for mf in fase.materiales.all() if mf.activo],
             })
-            
-        return Response({"tareas_pendientes": tareas_data}, status=status.HTTP_200_OK)
+
+        # Sobrantes por devolver de tareas que ya terminó (últimos 7 días); los de tareas abiertas van en cada tarjeta
+        recibidas = EntregaMaterial.objects.filter(
+            tipo='ENTREGA', estado='RECIBIDA', material_fase__fase__estado='COMPLETADA',
+            material_fase__fase__operadores_asignados__operador=operador, material_fase__fase__lote__archivado=False,
+            material_fase__fase__fecha_fin_real__gte=ahora - timedelta(days=7),
+        ).select_related('material_fase__material', 'material_fase__fase__lote', 'material_fase__fase__operacion_maestra'
+                         ).prefetch_related('devoluciones').distinct()
+        sobrantes = []
+        for e in recibidas:
+            disponible = disponible_para_devolver(e)
+            if disponible > 0:
+                fase = e.material_fase.fase
+                sobrantes.append({**EntregaMaterialSerializer(e).data, 'disponible_devolver': str(disponible),
+                                  'actividad': f"[{fase.operacion_maestra.identificador_paso}] {FaseLoteViewSet._nombre_fase(fase)}"})
+
+        return Response({"tareas_pendientes": tareas_data, "sobrantes": sobrantes}, status=status.HTTP_200_OK)
+
+
+def _material_terminal(mf):
+    """Material de una tarea para la tablet: avance del surtido y entregas por recibir o con sobrante."""
+    r = resumen_surtido(mf)
+    entregas = []
+    for e in mf.entregas.all():
+        disponible = disponible_para_devolver(e) if e.tipo == 'ENTREGA' and e.estado == 'RECIBIDA' else None
+        entregas.append({
+            'id': e.id, 'tipo': e.tipo, 'estado': e.estado, 'estado_display': e.get_estado_display(),
+            'cantidad': str(e.cantidad), 'unidad_medida': e.unidad_medida, 'lote_material': e.lote_material,
+            'caducidad': e.caducidad, 'entregado_por_nombre': e.entregado_por_nombre, 'entregado_en': e.entregado_en,
+            'recibido_por_nombre': e.recibido_por_nombre, 'motivo_rechazo': e.motivo_rechazo,
+            'disponible_devolver': str(disponible) if disponible is not None else None,
+        })
+    return {
+        'id': mf.id, 'material': mf.material_id, 'material_nombre': mf.material.nombre, 'cantidad': str(mf.cantidad),
+        'unidad_medida': mf.unidad_medida, 'momento_requerido': mf.momento_requerido,
+        'surtido': {k: (str(v) if not isinstance(v, str) else v) for k, v in r.items()}, 'entregas': entregas,
+    }
+
+
+# ==============================================================================
+# 4. SURTIDO DE MATERIALES (ENTREGA Y RECEPCIÓN CON DOBLE FIRMA)
+# ==============================================================================
+
+def _validar_sin_guardar(funcion):
+    """Corre la regla de negocio y deshace lo que guarde: valida antes de pedir la firma, para no
+    contar como intento fallido algo que no es de la contraseña. Lanza ErrorSurtido si no procede."""
+    with transaction.atomic():
+        funcion()
+        transaction.set_rollback(True)
+
+
+def _fecha(valor):
+    try:
+        return datetime.strptime(str(valor or ''), '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+class EntregaMaterialViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Surtido de materiales a las fases. Cada paso se firma (contraseña en web, PIN en la terminal):
+      - `entregar` (almacén o planeación, permiso `surtir_material`): material, cantidad, lote y caducidad.
+      - `recibir` / `rechazar`: la entrega la recibe un operador en turno, el asignado a la fase o un rol con
+        `ejecutar_fase` (supervisor, jefatura); la devolución, el almacén (`surtir_material`). Quien entrega no recibe.
+      - `devolver` (mismas personas que reciben): sobrante de una entrega recibida.
+    Filtros: ?fase, ?material_fase, ?lote, ?tipo, ?estado. `por-surtir` lista lo pendiente de las próximas horas;
+    `por-recibir`, las entregas que quien consulta puede recibir.
+    """
+    serializer_class = EntregaMaterialSerializer
+    # Entra el usuario web o la persona con PIN; cada acción revisa `surtir_material` o si es personal de la fase
+    permission_classes = [PermisoSurtido]
+
+    def get_queryset(self):
+        qs = EntregaMaterial.objects.select_related(
+            'material_fase__material', 'material_fase__fase__lote', 'material_fase__fase__operacion_maestra',
+        ).prefetch_related('devoluciones').order_by('-entregado_en', '-id')
+        p = self.request.query_params
+        filtros = {'fase': 'material_fase__fase_id', 'material_fase': 'material_fase_id', 'lote': 'material_fase__fase__lote_id',
+                   'tipo': 'tipo', 'estado': 'estado'}
+        for param, campo in filtros.items():
+            if p.get(param):
+                qs = qs.filter(**{campo: p[param]})
+        return qs
+
+    def _error(self, mensaje, estado=status.HTTP_400_BAD_REQUEST):
+        return Response({"error": mensaje}, status=estado)
+
+    def _actor(self, request):
+        usuario = request.user if request.user.is_authenticated else None
+        operador = None if usuario else operador_de_sesion(request)
+        _, _, nombre, _ = quien(request)
+        return {'usuario': usuario, 'operador': operador, 'nombre': nombre}
+
+    def _puede_surtir(self, actor):
+        return actor_tiene_permiso(actor['usuario'], actor['operador'], 'surtir_material')
+
+    def _registrar(self, request, accion, descripcion, entrega, firmante, cambios=None, motivo=''):
+        registro = registrar(request, 'MATERIAL_LOTE', accion, descripcion, objeto=entrega, fase=entrega.material_fase.fase,
+                             cambios=cambios or {}, motivo=motivo or firmante['comentario'])
+        firmar(registro, firmante)
+
+    @staticmethod
+    def _detalle(e):
+        return f"{_cantidad(e)} de {e.material_fase.material.nombre} (lote {e.lote_material}, cad. {e.caducidad:%d/%m/%Y})"
+
+    @action(detail=False, methods=['get'], url_path='por-surtir')
+    def por_surtir(self, request):
+        """?horas=48: requerimientos por surtir (o ya atrasados) y devoluciones por recibir en el almacén."""
+        try:
+            horas = min(max(int(request.query_params.get('horas', 48)), 1), 24 * 14)
+        except ValueError:
+            horas = 48
+        devoluciones = self.get_queryset().filter(tipo='DEVOLUCION', estado='EN_TRANSITO')
+        return Response({
+            'requerimientos': RequerimientoMaterialSerializer(materiales_por_surtir(horas=horas), many=True).data,
+            'devoluciones': self.get_serializer(devoluciones, many=True).data,
+        })
+
+    @action(detail=False, methods=['get'], url_path='por-recibir')
+    def por_recibir(self, request):
+        """Entregas pendientes de recibir en lotes abiertos que quien consulta puede recibir (pestaña de la tablet).
+        `puede_recibir` indica si está en turno o tiene rol de supervisión; si no, solo ve las de sus fases asignadas."""
+        actor = self._actor(request)
+        qs = self.get_queryset().filter(
+            tipo='ENTREGA', estado='EN_TRANSITO', material_fase__fase__estado__in=['PENDIENTE', 'EN_PROGRESO'],
+            material_fase__fase__lote__estado__in=['PLANEADO', 'EN_PROGRESO'], material_fase__fase__lote__archivado=False,
+        ).order_by('entregado_en', 'id')
+        operador_ids = {actor['operador'].id} if actor['operador'] else set()
+        general = actor_tiene_permiso(actor['usuario'], actor['operador'], 'ejecutar_fase') or (operador_ids and en_turno(operador_ids))
+        if not general:
+            qs = qs.filter(material_fase__fase__operadores_asignados__operador_id__in=operador_ids).distinct()
+        datos = []
+        for e in qs:
+            fase = e.material_fase.fase
+            datos.append({**self.get_serializer(e).data, 'actividad': FaseLoteViewSet._nombre_fase(fase),
+                          'inicio_actividad': fase.inicio_programado, 'momento_requerido': e.material_fase.momento_requerido})
+        return Response({'puede_recibir': bool(general), 'entregas': datos})
+
+    @action(detail=False, methods=['post'], url_path='entregar')
+    @transaction.atomic
+    def entregar(self, request):
+        actor = self._actor(request)
+        if not self._puede_surtir(actor):
+            return self._error("Tu rol no permite surtir materiales.", status.HTTP_403_FORBIDDEN)
+        try:
+            mf = MaterialFase.objects.select_related('material', 'fase__lote').get(id=request.data.get('material_fase'))
+        except (MaterialFase.DoesNotExist, ValueError, TypeError):
+            return self._error("El material de la fase no existe.")
+        cantidad, caducidad = _decimal(request.data.get('cantidad')), _fecha(request.data.get('caducidad'))
+        try:
+            _validar_sin_guardar(lambda: registrar_entrega(mf, cantidad, request.data.get('lote_material'), caducidad, '', actor))
+        except ErrorSurtido as e:
+            return self._error(str(e))
+        firmante, error = _firma_o_respuesta(request, 'ENTREGAR_MATERIAL')
+        if error:
+            return error
+        entrega, avisos = registrar_entrega(mf, cantidad, request.data.get('lote_material'), caducidad,
+                                            request.data.get('observaciones'), actor)
+        self._registrar(request, 'ENTREGAR', f"Entrega de {self._detalle(entrega)} a {FaseLoteViewSet._nombre_fase(mf.fase)}",
+                        entrega, firmante, cambios={'material': [None, mf.material.nombre], 'cantidad': [None, _cantidad(entrega)],
+                                                    'lote_material': [None, entrega.lote_material],
+                                                    'caducidad': [None, entrega.caducidad], 'estado': [None, 'EN_TRANSITO']},
+                        motivo=entrega.observaciones)
+        datos = self.get_serializer(entrega).data
+        if avisos:
+            datos['avisos'] = avisos
+        return Response(datos, status=status.HTTP_201_CREATED)
+
+    def _validar_quien_recibe(self, entrega, actor):
+        if entrega.tipo == 'DEVOLUCION':
+            if not self._puede_surtir(actor):
+                return "La devolución la recibe el almacén (permiso para surtir materiales)."
+        elif not puede_recibir_material(actor['usuario'], actor['operador'], entrega.material_fase.fase):
+            return ("Recibe el material un operador en turno, el personal asignado a la fase, "
+                    "un supervisor o jefatura. No tienes turno en este momento.")
+        return None
+
+    def _recepcion(self, request, accion_firma, aplicar):
+        entrega = self.get_object()
+        actor = self._actor(request)
+        negado = self._validar_quien_recibe(entrega, actor)
+        if negado:
+            return self._error(negado, status.HTTP_403_FORBIDDEN)
+        try:
+            _validar_sin_guardar(lambda: aplicar(entrega, actor))
+        except ErrorSurtido as e:
+            return self._error(str(e))
+        entrega.refresh_from_db()
+        firmante, error = _firma_o_respuesta(request, accion_firma)
+        if error:
+            return error
+        aplicar(entrega, actor)
+        return entrega, firmante
+
+    @action(detail=True, methods=['post'], url_path='recibir')
+    @transaction.atomic
+    def recibir(self, request, pk=None):
+        resultado = self._recepcion(request, 'RECIBIR_MATERIAL', lambda e, a: recibir_entrega(e, a))
+        if isinstance(resultado, Response):
+            return resultado
+        entrega, firmante = resultado
+        que = 'Devolución' if entrega.tipo == 'DEVOLUCION' else 'Entrega'
+        self._registrar(request, 'RECIBIR_DEVOLUCION' if entrega.tipo == 'DEVOLUCION' else 'RECIBIR',
+                        f"{que} recibida: {self._detalle(entrega)} · entregó {entrega.entregado_por_nombre}",
+                        entrega, firmante, cambios={'estado': ['EN_TRANSITO', 'RECIBIDA']})
+        return Response(self.get_serializer(entrega).data)
+
+    @action(detail=True, methods=['post'], url_path='rechazar')
+    @transaction.atomic
+    def rechazar(self, request, pk=None):
+        motivo = request.data.get('motivo')
+        resultado = self._recepcion(request, 'RECHAZAR_MATERIAL', lambda e, a: rechazar_entrega(e, motivo, a))
+        if isinstance(resultado, Response):
+            return resultado
+        entrega, firmante = resultado
+        que = 'Devolución' if entrega.tipo == 'DEVOLUCION' else 'Entrega'
+        self._registrar(request, 'RECHAZAR', f"{que} rechazada: {self._detalle(entrega)} · entregó {entrega.entregado_por_nombre}",
+                        entrega, firmante, cambios={'estado': ['EN_TRANSITO', 'RECHAZADA']}, motivo=entrega.motivo_rechazo)
+        return Response(self.get_serializer(entrega).data)
+
+    @action(detail=True, methods=['post'], url_path='devolver')
+    @transaction.atomic
+    def devolver(self, request, pk=None):
+        entrega = self.get_object()
+        actor = self._actor(request)
+        if not puede_recibir_material(actor['usuario'], actor['operador'], entrega.material_fase.fase):
+            return self._error("El sobrante lo devuelve un operador en turno, el personal asignado a la fase, "
+                               "un supervisor o jefatura.", status.HTTP_403_FORBIDDEN)
+        cantidad = _decimal(request.data.get('cantidad'))
+        try:
+            _validar_sin_guardar(lambda: registrar_devolucion(entrega, cantidad, '', actor))
+        except ErrorSurtido as e:
+            return self._error(str(e))
+        firmante, error = _firma_o_respuesta(request, 'DEVOLVER_MATERIAL')
+        if error:
+            return error
+        devolucion = registrar_devolucion(entrega, cantidad, request.data.get('observaciones'), actor)
+        self._registrar(request, 'DEVOLVER', f"Devolución de {self._detalle(devolucion)} de {FaseLoteViewSet._nombre_fase(entrega.material_fase.fase)}",
+                        devolucion, firmante, cambios={'cantidad': [None, _cantidad(devolucion)], 'estado': [None, 'EN_TRANSITO']},
+                        motivo=devolucion.observaciones)
+        return Response(self.get_serializer(devolucion).data, status=status.HTTP_201_CREATED)

@@ -91,7 +91,7 @@ input[type="date"] { color-scheme: dark; }
 .etiqueta-periodo { font-size: 0.85rem; font-weight: 700; margin-left: 0.3rem; }
 
 /* --- Indicadores ------------------------------------------------------------- */
-.indicadores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; }
+.indicadores { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.6rem; }
 .indicador { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.9rem; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; }
 .indicador-valor { font-size: 1.4rem; font-weight: 800; }
 .indicador-etiqueta { font-size: 0.7rem; color: var(--text-muted); }
@@ -148,6 +148,10 @@ input[type="date"] { color-scheme: dark; }
 .etiqueta--ajuste { color: #fcd34d; border-color: rgba(245, 158, 11, 0.6); cursor: help; }
 .etiqueta--progreso { color: var(--accent); border-color: rgba(56, 189, 248, 0.5); }
 .etiqueta--alerta { color: #fca5a5; border-color: rgba(239, 68, 68, 0.6); }
+
+/* Columna lateral: devoluciones por recibir y totales */
+.columna-lateral { display: flex; flex-direction: column; gap: 0.75rem; }
+#devolucionesPendientes { max-height: 260px; overflow-y: auto; }
 
 /* Totales por material */
 .totales { max-height: calc(100vh - 290px); overflow-y: auto; }

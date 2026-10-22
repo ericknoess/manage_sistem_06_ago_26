@@ -4,13 +4,42 @@
 
 let session = JSON.parse(localStorage.getItem('ebr_session')) || null;
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (session && session.operador_id) {
+document.addEventListener('DOMContentLoaded', async () => {
+    if (session && session.operador_id && await terminalVigente()) {
         mostrarDashboard();
     } else {
         mostrarLogin();
     }
 });
+
+// La tablet guarda al operador en el navegador, pero quien firma es la sesión del servidor. Si en este navegador
+// se inició sesión web (o la sesión venció), la terminal ya no es del operador: se pide volver a ingresar.
+async function terminalVigente() {
+    try {
+        const res = await fetch('/api/mobile/sesion/');
+        const datos = await res.json();
+        if (datos.operador_id === session.operador_id) return true;
+        terminalCerrada(datos.usuario_web
+            ? `En este navegador se inició sesión web como «${datos.usuario_web}» y eso cerró la terminal. Vuelve a ingresar con tu PIN.`
+            : 'Tu sesión en la terminal terminó. Vuelve a ingresar con tu número de empleado y PIN.', false);
+        return false;
+    } catch (e) {
+        return true;  // sin red: se deja ver; el servidor valida al firmar
+    }
+}
+
+function terminalCerrada(mensaje, avisar = true) {
+    localStorage.removeItem('ebr_session');
+    session = null;
+    document.getElementById('taskListContainer').innerHTML = '';
+    document.getElementById('surtirContainer').innerHTML = '';
+    document.getElementById('recibirContainer').innerHTML = '';
+    const aviso = document.getElementById('avisoTerminal');
+    aviso.textContent = '🔒 ' + mensaje;
+    aviso.hidden = false;
+    mostrarLogin();
+    if (avisar) alert('🔒 ' + mensaje);
+}
 
 function mostrarLoader(texto = "Procesando...") {
     document.getElementById('loaderText').innerText = texto;
@@ -37,6 +66,7 @@ function mostrarDashboard() {
     dashView.style.display = 'flex';
     gsap.fromTo(dashView, {opacity: 0}, {opacity: 1, duration: 0.3});
 
+    prepararPestanasSurtido();
     cargarTareasPendientes();
 }
 
@@ -58,6 +88,7 @@ async function handleLogin(e) {
         const data = await res.json();
 
         if (res.ok) {
+            document.getElementById('avisoTerminal').hidden = true;
             session = data;
             localStorage.setItem('ebr_session', JSON.stringify(session));
             document.getElementById('loginForm').reset();
@@ -79,6 +110,8 @@ function handleLogout() {
     localStorage.removeItem('ebr_session');
     session = null;
     document.getElementById('taskListContainer').innerHTML = '';
+    document.getElementById('surtirContainer').innerHTML = '';
+    document.getElementById('recibirContainer').innerHTML = '';
     mostrarLogin();
 }
 
@@ -91,7 +124,7 @@ async function cargarTareasPendientes() {
         const res = await fetch(`/api/mobile/${session.operador_id}/tareas-pendientes/`);
         if (res.ok) {
             const data = await res.json();
-            renderizarTareas(data.tareas_pendientes);
+            renderizarTareas(data.tareas_pendientes, data.sobrantes);
         } else {
             alert("Error al cargar tareas. Inicie sesión nuevamente.");
             handleLogout();
@@ -103,13 +136,13 @@ async function cargarTareasPendientes() {
     }
 }
 
-function renderizarTareas(tareas) {
+function renderizarTareas(tareas, sobrantes = []) {
     window.tareasActuales = tareas;  // para mostrar la tarea en el modal de firma
     const container = document.getElementById('taskListContainer');
-    container.innerHTML = '';
+    container.innerHTML = htmlSobrantes(sobrantes);
 
     if (!tareas || tareas.length === 0) {
-        container.innerHTML = `
+        container.innerHTML += `
             <div class="empty-state">
                 <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
                 <h3>¡Excelente trabajo!</h3>
@@ -165,6 +198,7 @@ function renderizarTareas(tareas) {
                 ${t.equipos && t.equipos.length ? `<div class="detail-item detail-item--ancho"><strong>🏗️ Equipo</strong><span>${t.equipos.map(escaparTexto).join(', ')}</span></div>` : ''}
             </div>
 
+            ${htmlMaterialesTarea(t)}
             ${accionHtml}
         `;
         container.appendChild(card);
@@ -271,6 +305,7 @@ async function enviarFirmaPin(evento) {
             gsap.to(card, {
                 x: -50, opacity: 0, height: 0, marginBottom: 0, padding: 0, duration: 0.3,
                 onComplete: () => {
+                    if (data.advertencia_materiales) alert("⚠️ Iniciaste con material incompleto:\n\n" + data.advertencia_materiales.join("\n"));
                     if (data.mensaje_cascada) alert("✨ Inteligencia Operativa MES:\n\n" + data.mensaje_cascada);
                     cargarTareasPendientes();
                 }
@@ -284,6 +319,9 @@ async function enviarFirmaPin(evento) {
             cerrarFirmaPin();
             alert("⏳ " + data.error);
             cargarTareasPendientes();
+        } else if (data.codigo === 'TERMINAL_CERRADA') {
+            cerrarFirmaPin();
+            terminalCerrada(data.error);
         } else if (data.codigo === 'CUENTA_BLOQUEADA') {
             cerrarFirmaPin();
             alert("🔒 " + data.error);

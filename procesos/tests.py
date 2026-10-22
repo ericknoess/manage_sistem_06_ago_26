@@ -740,3 +740,201 @@ class EstaticosVersionadosTests(TestCase):
             self.assertNotEqual(version_de(archivo.name), antes)
         finally:
             os.remove(archivo.name)
+
+
+class SurtidoMaterialesTests(TestCase):
+    """
+    Entrega y recepción de materiales con doble firma, regla de cuatro ojos, caducidad y devoluciones.
+    Receta: T1 (2 h) usa 2 L de medio con 12 h de anticipación. Ana (OP-1) está asignada a T1.
+    """
+
+    def setUp(self):
+        from usuarios.models import Perfil
+        self.medio = MaterialInsumo.objects.create(id='MAT-01', nombre='Medio CHO', unidad_medida='L', categoria='MEDIO')
+        self.proceso = ProcesoMaestro.objects.create(nombre='Receta con surtido')
+        self.t1 = OperacionProceso.objects.create(proceso=self.proceso, identificador_paso='T1', nombre='Preparación', orden=1,
+                                                  duracion_horas=2, tolerancia_antes_horas=2, tolerancia_despues_horas=2)
+        MaterialOperacion.objects.create(operacion=self.t1, material=self.medio, cantidad=Decimal('2'), anticipacion_horas=12)
+
+        self.rol = RolOperador.objects.create(nombre='Operador base')
+        cuadrilla = Cuadrilla.objects.create(identificador='A', nombre='Cuadrilla A')
+        self.ana = Operador.objects.create(cuadrilla=cuadrilla, nombre='Ana', codigo_empleado='OP-1', rol=self.rol, pin_acceso='1234')
+        self.beto = Operador.objects.create(cuadrilla=cuadrilla, nombre='Beto', codigo_empleado='OP-2', rol=self.rol, pin_acceso='2222')
+        # Planeadora que también surte desde la tablet: su registro del roster está ligado a su usuario web
+        self.pla_operador = Operador.objects.create(cuadrilla=cuadrilla, nombre='Paola', codigo_empleado='PL-1', pin_acceso='5678')
+        planeadora = usuario_con_rol('planeadora', 'Planeador')
+        Perfil.objects.create(usuario=planeadora, operador=self.pla_operador)
+
+        self.almacen = APIClient()
+        self.almacen.force_authenticate(usuario_con_rol('almacenista', 'Almacén'))
+        self.jefa = APIClient()
+        self.jefa.force_authenticate(usuario_con_rol('jefa', 'Jefatura'))
+
+        inicio = timezone.localtime(timezone.now()).replace(second=0, microsecond=0, tzinfo=None)
+        respuesta = self.jefa.post('/api/lotes/', {'identificador_lote': 'L-S', 'proceso_maestro': self.proceso.id,
+                                                   'fecha_inicio_planeada': inicio.isoformat()}, format='json')
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.lote = LoteProduccion.objects.get(identificador_lote='L-S')
+        self.fase = FaseLote.objects.get(lote=self.lote, operacion_maestra=self.t1)
+        AsignacionFaseOperador.objects.create(fase_lote=self.fase, operador=self.ana, rol_ejercido=self.rol)
+        self.mf = MaterialFase.objects.get(fase=self.fase)
+        self.vence = (timezone.localdate() + timedelta(days=30)).isoformat()
+
+    def terminal(self, codigo, pin):
+        movil = APIClient()
+        respuesta = movil.post('/api/mobile/login/', {'codigo_empleado': codigo, 'pin_acceso': pin}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        return movil, respuesta.data
+
+    def entregar(self, cliente=None, cantidad='2', firma=None, **extra):
+        cliente = cliente or self.almacen
+        datos = {'material_fase': self.mf.id, 'cantidad': cantidad, 'lote_material': 'MC-2026-118', 'caducidad': self.vence, **extra}
+        datos.update(firma or {'firma_password': 'clave-de-prueba'})
+        return cliente.post('/api/surtido/entregar/', datos, format='json')
+
+    def surtido(self):
+        return self.jefa.get(f'/api/materiales-fase/{self.mf.id}/').data['surtido']
+
+    # --- Entrega y recepción ------------------------------------------------------
+
+    def test_almacen_entrega_y_el_operador_recibe_con_su_pin(self):
+        from auditoria.models import RegistroAuditoria
+        respuesta = self.entregar()
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.assertEqual(respuesta.data['estado'], 'EN_TRANSITO')
+        self.assertEqual(self.surtido()['estado'], 'EN_TRANSITO')
+
+        ana, _ = self.terminal('OP-1', '1234')
+        tarea = ana.get(f'/api/mobile/{self.ana.id}/tareas-pendientes/').data['tareas_pendientes'][0]
+        self.assertEqual(tarea['materiales'][0]['entregas'][0]['estado'], 'EN_TRANSITO')
+
+        recibida = ana.post(f"/api/surtido/{respuesta.data['id']}/recibir/", {'firma_pin': '1234'}, format='json')
+        self.assertEqual(recibida.status_code, 200, recibida.data)
+        self.assertEqual(recibida.data['recibido_por_nombre'], 'Ana (OP-1)')
+        self.assertEqual(self.surtido()['estado'], 'COMPLETO')
+
+        registros = RegistroAuditoria.objects.filter(categoria='MATERIAL_LOTE', accion__in=['ENTREGAR', 'RECIBIR'])
+        self.assertEqual(registros.count(), 2)
+        self.assertEqual([r.firma.significado for r in registros.order_by('id')],
+                         ['Entrego el material indicado', 'Recibo el material conforme'])
+
+    def test_avisa_si_la_fase_no_tiene_quien_reciba(self):
+        AsignacionFaseOperador.objects.filter(fase_lote=self.fase).delete()
+        respuesta = self.entregar()
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.assertIn('no tiene personal asignado', respuesta.data['avisos'][0])
+
+    def test_firma_incorrecta_no_registra_la_entrega(self):
+        respuesta = self.entregar(firma={'firma_password': 'equivocada'})
+        self.assertEqual(respuesta.data['codigo'], 'FIRMA_INVALIDA')
+        self.assertFalse(self.mf.entregas.exists())
+
+    def test_no_se_entrega_material_caducado_o_que_vence_antes_de_usarse(self):
+        ayer = (timezone.localdate() - timedelta(days=1)).isoformat()
+        self.assertIn('caducó', self.entregar(caducidad=ayer).data['error'])
+        self.fase.inicio_programado = timezone.now() + timedelta(days=10)
+        self.fase.fin_programado = self.fase.inicio_programado + timedelta(hours=2)
+        self.fase.save()
+        pronto = (timezone.localdate() + timedelta(days=2)).isoformat()
+        self.assertIn('antes de su uso', self.entregar(caducidad=pronto).data['error'])
+        self.assertFalse(self.mf.entregas.exists())
+
+    def test_quien_entrega_no_puede_recibir(self):
+        entrega = self.entregar(self.jefa).data  # Jefatura puede surtir y ejecutar fases
+        respuesta = self.jefa.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_password': 'clave-de-prueba'}, format='json')
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('cuatro ojos', respuesta.data['error'])
+
+    def dar_turno(self, operador):
+        from roster.models import TipoTurno, TurnoDia
+        tipo, _ = TipoTurno.objects.get_or_create(codigo='D', defaults={'nombre': 'Día completo', 'hora_inicio': None, 'hora_fin': None})
+        TurnoDia.objects.create(operador=operador, fecha=timezone.localdate(), tipo_turno=tipo)
+
+    def test_sin_turno_ni_asignacion_no_recibe(self):
+        entrega = self.entregar().data
+        beto, _ = self.terminal('OP-2', '2222')
+        respuesta = beto.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_pin': '2222'}, format='json')
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertEqual(beto.get('/api/surtido/por-recibir/').data, {'puede_recibir': False, 'entregas': []})
+        # El almacén tampoco recibe como si fuera personal de planta
+        self.assertEqual(self.almacen.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_password': 'clave-de-prueba'},
+                                           format='json').status_code, 403)
+
+    def test_operador_en_turno_recibe_aunque_no_ejecute_la_actividad(self):
+        entrega = self.entregar().data
+        self.dar_turno(self.beto)
+        beto, _ = self.terminal('OP-2', '2222')
+        pendientes = beto.get('/api/surtido/por-recibir/').data
+        self.assertTrue(pendientes['puede_recibir'])
+        self.assertEqual([e['id'] for e in pendientes['entregas']], [entrega['id']])
+        respuesta = beto.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_pin': '2222'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['recibido_por_nombre'], 'Beto (OP-2)')
+
+    def test_supervision_recibe_desde_la_web(self):
+        entrega = self.entregar().data
+        supervisor = APIClient()
+        supervisor.force_authenticate(usuario_con_rol('supervisor', 'Supervisor de turno'))
+        respuesta = supervisor.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_password': 'clave-de-prueba'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+
+    def test_planeadora_surte_desde_la_terminal_con_su_pin(self):
+        paola, datos = self.terminal('PL-1', '5678')
+        self.assertIn('surtir_material', datos['permisos'])
+        respuesta = self.entregar(paola, firma={'firma_pin': '5678'})
+        self.assertEqual(respuesta.status_code, 201, respuesta.data)
+        self.assertEqual(respuesta.data['entregado_por_nombre'], 'Paola (PL-1)')
+
+        ana, datos_ana = self.terminal('OP-1', '1234')
+        self.assertEqual(datos_ana['permisos'], [])
+        self.assertEqual(self.entregar(ana, firma={'firma_pin': '1234'}).status_code, 403)
+
+    def test_rechazo_exige_motivo_y_no_cuenta_como_surtido(self):
+        entrega = self.entregar().data
+        ana, _ = self.terminal('OP-1', '1234')
+        url = f"/api/surtido/{entrega['id']}/rechazar/"
+        self.assertEqual(ana.post(url, {'firma_pin': '1234', 'motivo': 'mal'}, format='json').status_code, 400)
+        respuesta = ana.post(url, {'firma_pin': '1234', 'motivo': 'La bolsa llegó con fuga'}, format='json')
+        self.assertEqual(respuesta.data['estado'], 'RECHAZADA')
+        self.assertEqual(self.surtido()['estado'], 'SIN_SURTIR')
+
+    def test_devolucion_del_sobrante(self):
+        entrega = self.entregar(cantidad='2.5').data
+        ana, _ = self.terminal('OP-1', '1234')
+        ana.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_pin': '1234'}, format='json')
+        self.assertEqual(Decimal(self.surtido()['excedente']), Decimal('0.5'))
+
+        url = f"/api/surtido/{entrega['id']}/devolver/"
+        self.assertIn('hasta 2.5 L', ana.post(url, {'firma_pin': '1234', 'cantidad': '3'}, format='json').data['error'])
+        devolucion = ana.post(url, {'firma_pin': '1234', 'cantidad': '0.5'}, format='json')
+        self.assertEqual(devolucion.status_code, 201, devolucion.data)
+        self.assertEqual((devolucion.data['tipo'], devolucion.data['lote_material']), ('DEVOLUCION', 'MC-2026-118'))
+
+        pendientes = self.almacen.get('/api/surtido/por-surtir/').data['devoluciones']
+        self.assertEqual([d['id'] for d in pendientes], [devolucion.data['id']])
+        recibida = self.almacen.post(f"/api/surtido/{devolucion.data['id']}/recibir/", {'firma_password': 'clave-de-prueba'}, format='json')
+        self.assertEqual(recibida.status_code, 200, recibida.data)
+        surtido = self.surtido()
+        self.assertEqual((surtido['estado'], Decimal(surtido['recibido'])), ('COMPLETO', Decimal('2')))
+
+    # --- Avisos -------------------------------------------------------------------
+
+    def test_inicia_sin_material_completo_pero_lo_advierte(self):
+        programar_ahora(self.fase)
+        ana, _ = self.terminal('OP-1', '1234')
+        respuesta = ana.post(f'/api/fases-lote/{self.fase.id}/cambiar-estado/', {'estado': 'EN_PROGRESO', 'firma_pin': '1234'}, format='json')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertIn('Medio CHO: sin surtir', respuesta.data['advertencia_materiales'][0])
+
+    def test_planificacion_alerta_material_sin_surtir_a_su_hora(self):
+        self.fase.inicio_programado = timezone.now() + timedelta(hours=1)  # requerido 12 h antes: ya pasó
+        self.fase.fin_programado = self.fase.inicio_programado + timedelta(hours=2)
+        self.fase.save()
+        alertas = self.jefa.get('/api/fases-lote/alertas/').data
+        self.assertTrue(any('aún no se recibe completo' in m for m in alertas[self.fase.id]))
+
+        entrega = self.entregar().data
+        ana, _ = self.terminal('OP-1', '1234')
+        ana.post(f"/api/surtido/{entrega['id']}/recibir/", {'firma_pin': '1234'}, format='json')
+        restantes = self.jefa.get('/api/fases-lote/alertas/').data.get(self.fase.id, [])
+        self.assertFalse(any('📦' in m for m in restantes))

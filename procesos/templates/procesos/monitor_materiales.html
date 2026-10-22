@@ -7,6 +7,8 @@
     <title>Monitor de Materiales - MES Bioprocesos</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/surtido.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/firma.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/monitor_materiales.css' %}">
     <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
     <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
@@ -18,7 +20,8 @@
         <div class="header-title">
             <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
             <h2>📦 Monitor de Materiales</h2>
-            <p>Qué material se necesita, cuánto y a qué hora, según el forecast vigente de los lotes (incluye la anticipación de cada material).</p>
+            <p>Qué material se necesita, cuánto y a qué hora, según el forecast vigente de los lotes (incluye la anticipación de cada material).
+               El almacén entrega desde aquí y la fase lo recibe en la tablet; cada paso se firma.</p>
         </div>
         <nav class="header-enlaces">
             <a href="{% url 'catalogo-materiales' %}" class="btn-secundario">📚 Catálogo de materiales</a>
@@ -56,14 +59,22 @@
             </div>
         </section>
 
-        <aside class="panel">
-            <div class="panel-titulo">Σ Totales del periodo por material</div>
-            <div class="totales" id="totales"></div>
+        <aside class="columna-lateral">
+            <section class="panel">
+                <div class="panel-titulo">↩ Devoluciones por recibir en el almacén</div>
+                <div id="devolucionesPendientes"><div class="estado-vacio">Cargando…</div></div>
+            </section>
+            <section class="panel">
+                <div class="panel-titulo">Σ Totales del periodo por material</div>
+                <div class="totales" id="totales"></div>
+            </section>
         </aside>
     </main>
 
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'core/js/materiales.js' %}"></script>
+    <script src="{% static 'core/js/firma.js' %}"></script>
+    <script src="{% static 'core/js/surtido.js' %}"></script>
     <script src="{% static 'procesos/js/monitor_materiales.js' %}"></script>
 </body>
 </html>

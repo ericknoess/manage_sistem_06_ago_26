@@ -327,6 +327,49 @@ class MaterialFase(models.Model):
         return self.fase.inicio_programado - timedelta(hours=self.anticipacion_horas or 0)
 
 
+class EntregaMaterial(models.Model):
+    """
+    Surtido de un material de fase con doble firma: quien entrega y quien recibe (nunca la misma persona).
+      - ENTREGA: almacén o planeación → personal de la fase.
+      - DEVOLUCION: personal de la fase → almacén (sobrante de una entrega recibida; hereda su lote y caducidad).
+    Los registros no se borran: el estado avanza de EN_TRANSITO a RECIBIDA o RECHAZADA (con motivo).
+    """
+    TIPO_CHOICES = [('ENTREGA', 'Entrega'), ('DEVOLUCION', 'Devolución')]
+    ESTADO_CHOICES = [('EN_TRANSITO', 'Por recibir'), ('RECIBIDA', 'Recibida'), ('RECHAZADA', 'Rechazada')]
+
+    material_fase = models.ForeignKey(MaterialFase, on_delete=models.PROTECT, related_name='entregas')
+    tipo = models.CharField(max_length=12, choices=TIPO_CHOICES, default='ENTREGA')
+    devolucion_de = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='devoluciones',
+                                      help_text="Entrega de la que se devuelve el sobrante")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    unidad_medida = models.CharField(max_length=10)
+    lote_material = models.CharField(max_length=80, help_text="Lote del insumo (proveedor o almacén)")
+    caducidad = models.DateField(help_text="Caducidad del lote del insumo")
+    observaciones = models.TextField(blank=True, default='')
+    estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default='EN_TRANSITO')
+
+    # Quién entrega: usuario web o persona con PIN en la terminal (el nombre se guarda tal como era)
+    entregado_por_usuario = models.ForeignKey('auth.User', on_delete=models.PROTECT, null=True, blank=True, related_name='entregas_material')
+    entregado_por_operador = models.ForeignKey(Operador, on_delete=models.PROTECT, null=True, blank=True, related_name='entregas_material')
+    entregado_por_nombre = models.CharField(max_length=150)
+    entregado_en = models.DateTimeField()
+
+    # Quién recibe o rechaza
+    recibido_por_usuario = models.ForeignKey('auth.User', on_delete=models.PROTECT, null=True, blank=True, related_name='recepciones_material')
+    recibido_por_operador = models.ForeignKey(Operador, on_delete=models.PROTECT, null=True, blank=True, related_name='recepciones_material')
+    recibido_por_nombre = models.CharField(max_length=150, blank=True, default='')
+    recibido_en = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.TextField(blank=True, default='')
+
+    class Meta:
+        verbose_name = "Entrega de material"
+        verbose_name_plural = "Entregas de material"
+        ordering = ['entregado_en', 'id']
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.cantidad} {self.unidad_medida} {self.material_fase.material_id} ({self.get_estado_display()})"
+
+
 class AsignacionFaseOperador(models.Model):
     fase_lote = models.ForeignKey(FaseLote, on_delete=models.CASCADE, related_name='operadores_asignados')
     operador = models.ForeignKey(Operador, on_delete=models.RESTRICT, related_name='fases_lote_ejecutadas')

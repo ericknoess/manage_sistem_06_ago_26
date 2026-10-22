@@ -13,6 +13,7 @@ const NOMBRES_CAMPO = {
     momento_del_cambio: 'Momento del cambio', estado_display: 'Estado', calificacion_vence: 'Calificación vence', calibracion_vence: 'Calificación vence', area: 'Área', capacidad: 'Capacidad',
     operador: 'Operador', rol: 'Rol', receta: 'Receta', inicio_planeado: 'Inicio planeado', fases: 'Fases',
     archivado: 'Archivado', nombre: 'Nombre', turno: 'Turno', cuadrilla: 'Cuadrilla', operadores: 'Operadores',
+    lote_material: 'Lote del material', caducidad: 'Caducidad', materiales_incompletos: 'Materiales incompletos',
     fase: 'Fase', material: 'Material', origen: 'Origen', actividades: 'Actividades', estrategia: 'Estrategia', registros: 'Registros',
 };
 

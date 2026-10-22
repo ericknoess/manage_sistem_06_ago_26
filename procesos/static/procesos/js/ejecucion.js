@@ -374,7 +374,10 @@ async function cambiarEstadoFase(faseId, estadoActual) {
     });
     if (!r) return;
     if (r.ok) {
-        if (r.data.mensaje_cascada) alert(r.data.mensaje_cascada);
+        const avisos = [];
+        if (r.data.advertencia_materiales) avisos.push('⚠️ Se inició con material incompleto:\n' + r.data.advertencia_materiales.join('\n'));
+        if (r.data.mensaje_cascada) avisos.push(r.data.mensaje_cascada);
+        if (avisos.length) alert(avisos.join('\n\n'));
         await cargarCatalogos();
     } else alert(r.data.error || r.data.detail || 'No se pudo cambiar el estado.');
 }
