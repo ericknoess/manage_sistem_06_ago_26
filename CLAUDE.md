@@ -19,7 +19,8 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
-- `core/`: settings, URLs raíz y la vista de la página de inicio (`/`)
+- `core/`: settings, URLs raíz y la vista de la página de inicio (`/`). `core/estaticos.py` agrega `?v=<hash>` a cada `{% static %}`
+  (evita que el navegador use JS/CSS viejos tras una actualización); no escribir rutas `/static/...` a mano.
 - `templates/inicio.html` + `static/core/`: página central y recursos compartidos (base.css, utils.js)
 - `roster/`: cuadrillas, operadores, roles, tipos de turno, turnos diarios, incidencias,
   secuencias de rotación y carga masiva (`roster/services.py`)

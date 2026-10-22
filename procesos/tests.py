@@ -718,3 +718,25 @@ class EquiposTests(TestCase):
         respuesta = ingeniera.post(f'/api/procesos-maestros/{self.proceso.id}/clonar/', {'nuevo_nombre': 'Copia'}, format='json')
         self.assertIn(respuesta.status_code, (200, 201), respuesta.data)
         self.assertTrue(EquipoOperacion.objects.filter(operacion__proceso_id=respuesta.data['nuevo_id'], tipo=self.biorreactor).exists())
+
+
+class EstaticosVersionadosTests(TestCase):
+    """Cada {% static %} lleva ?v=<hash del contenido> para que el navegador no use copias viejas."""
+
+    def test_la_url_cambia_solo_si_cambia_el_archivo(self):
+        import os, tempfile
+        from core.estaticos import version_de
+        from django.templatetags.static import static
+        self.assertRegex(static('core/js/utils.js'), r'^/static/core/js/utils\.js\?v=[0-9a-f]{8}$')
+        self.assertEqual(static('no/existe.js'), '/static/no/existe.js')
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as archivo:
+            archivo.write('uno')
+        try:
+            antes = version_de(archivo.name)
+            self.assertEqual(version_de(archivo.name), antes)
+            with open(archivo.name, 'w') as f:
+                f.write('dos')
+            os.utime(archivo.name, (0, os.path.getmtime(archivo.name) + 5))
+            self.assertNotEqual(version_de(archivo.name), antes)
+        finally:
+            os.remove(archivo.name)

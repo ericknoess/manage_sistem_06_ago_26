@@ -130,6 +130,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']  # Recursos compartidos (static/core/)
 
+# Cada {% static %} lleva ?v=<hash del contenido>: tras una actualización el navegador baja la versión nueva
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'core.estaticos.EstaticosVersionados'},
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
