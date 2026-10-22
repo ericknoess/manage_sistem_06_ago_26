@@ -24,7 +24,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - `templates/inicio.html` + `static/core/`: página central y recursos compartidos (base.css, utils.js)
 - `roster/`: cuadrillas, operadores, roles, tipos de turno, turnos diarios, incidencias,
   secuencias de rotación y carga masiva (`roster/services.py`)
-- `actividades/`: catálogos de Equipos (con `TipoEquipo`, estado operativo y vencimiento de calibración) y Materiales. `ActividadSemanal` es el histórico del
+- `actividades/`: catálogos de Equipos (con `TipoEquipo`, estado operativo y vencimiento de calificación) y Materiales. `ActividadSemanal` es el histórico del
   tablero semanal retirado (solo lectura; `/tablero/` redirige a Planificación, único lugar para asignar personal)
 - `procesos/`: ProcesoMaestro → EtapaProceso → OperacionProceso; lotes, fases y asignaciones.
   Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
@@ -41,7 +41,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Equipos: la receta pide equipos por tipo (`EquipoOperacion`: cantidad, horas de preparación y limpieza, actividad o cada muestreo);
   se copia a `EquipoFase` al instanciar el lote (ajustes con motivo, retiros como baja lógica) y en Planificación se reservan equipos
   concretos (`ReservaEquipo`). La ocupación es `inicio - preparación` a `fin + limpieza` y sigue al forecast. No se reserva un equipo
-  ocupado, de otro tipo, no disponible o con calibración vencida, y una fase no inicia sin su equipo. Con la fase en ejecución el equipo
+  ocupado, de otro tipo, no disponible o con calificación vencida, y una fase no inicia sin su equipo. Con la fase en ejecución el equipo
   se cambia con motivo y firma (`CAMBIAR_EQUIPO`): la reserva anterior se cierra en `hasta` y la nueva abre en `desde`.
   Lógica en `procesos/services.py`; API `/api/equipos-fase/`; front compartido en `static/core/js/equipos.js`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,

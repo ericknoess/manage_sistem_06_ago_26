@@ -19,7 +19,7 @@ urlpatterns = [
     # Catálogo maestro de materiales (alta, edición, búsqueda y baja lógica)
     path('materiales/catalogo/', TemplateView.as_view(template_name='actividades/catalogo_materiales.html'), name='catalogo-materiales'),
 
-    # Catálogo maestro de equipos y sus tipos (alta, edición, estado, calibración y baja lógica)
+    # Catálogo maestro de equipos y sus tipos (alta, edición, estado, calificación y baja lógica)
     path('equipos/catalogo/', TemplateView.as_view(template_name='actividades/catalogo_equipos.html'), name='catalogo-equipos'),
 
     # Tablero semanal retirado: la asignación se hace solo en Planificación. Se redirige para no romper marcadores.

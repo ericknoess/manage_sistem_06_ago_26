@@ -605,10 +605,10 @@ class EquiposTests(TestCase):
         self.br1.estado = 'MANTENIMIENTO'
         self.br1.save()
         self.assertIn('mantenimiento', self.reservar(ef, self.br1).data['error'])
-        self.br2.calibracion_vence = timezone.localdate() - timedelta(days=1)
+        self.br2.calificacion_vence = timezone.localdate() - timedelta(days=1)
         self.br2.save()
-        self.assertIn('calibración', self.reservar(ef, self.br2).data['error'])
-        self.br2.calibracion_vence = None
+        self.assertIn('calificación', self.reservar(ef, self.br2).data['error'])
+        self.br2.calificacion_vence = None
         self.br2.save()
         self.assertEqual(self.reservar(ef, self.br2).status_code, 201)
         self.br1.estado = 'DISPONIBLE'

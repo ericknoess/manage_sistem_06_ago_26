@@ -35,7 +35,7 @@ class EquipoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     Sin DELETE: un equipo se da de baja con `activo=false` (sus reservas pasadas siguen en el registro del lote).
     """
     auditoria_categoria, auditoria_nombre = 'CATALOGO', 'equipo'
-    auditoria_excluir = ('reservas_vigentes', 'dias_calibracion')
+    auditoria_excluir = ('reservas_vigentes', 'dias_calificacion')
     http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
     serializer_class = EquipoSerializer
     permiso_escritura = 'gestionar_catalogos'

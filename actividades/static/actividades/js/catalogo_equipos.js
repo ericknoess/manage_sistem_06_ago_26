@@ -1,8 +1,8 @@
 // actividades/static/actividades/js/catalogo_equipos.js
 // Catálogo maestro de equipos y tipos de equipo: búsqueda, filtros, alta, edición, estado operativo,
-// calibración y baja lógica (activo=false). Los cambios quedan en la bitácora (AuditoriaMixin).
+// calificación y baja lógica (activo=false). Los cambios quedan en la bitácora (AuditoriaMixin).
 
-const DIAS_AVISO_CALIBRACION = 30;
+const DIAS_AVISO_CALIFICACION = 30;
 
 let equipos = [];
 let tipos = [];
@@ -68,12 +68,12 @@ function insigniaEstado(e) {
     return `<span class="estado-equipo estado-equipo--${clase}">${escaparHtml(e.estado_display)}</span>`;
 }
 
-function celdaCalibracion(e) {
-    if (!e.calibracion_vence) return '<span class="sin-dato">—</span>';
-    const fecha = new Date(e.calibracion_vence + 'T00:00:00').toLocaleDateString('es-MX');
-    if (e.dias_calibracion < 0) return `<span class="calibracion calibracion--vencida" title="No se puede reservar">⛔ ${fecha} · vencida</span>`;
-    if (e.dias_calibracion <= DIAS_AVISO_CALIBRACION) return `<span class="calibracion calibracion--proxima">⚠️ ${fecha} · ${e.dias_calibracion} d</span>`;
-    return `<span class="calibracion">${fecha}</span>`;
+function celdaCalificacion(e) {
+    if (!e.calificacion_vence) return '<span class="sin-dato">—</span>';
+    const fecha = new Date(e.calificacion_vence + 'T00:00:00').toLocaleDateString('es-MX');
+    if (e.dias_calificacion < 0) return `<span class="calificacion calificacion--vencida" title="No se puede reservar">⛔ ${fecha} · vencida</span>`;
+    if (e.dias_calificacion <= DIAS_AVISO_CALIFICACION) return `<span class="calificacion calificacion--proxima">⚠️ ${fecha} · ${e.dias_calificacion} d</span>`;
+    return `<span class="calificacion">${fecha}</span>`;
 }
 
 function renderizarEquipos() {
@@ -92,7 +92,7 @@ function renderizarEquipos() {
             <td>${escaparHtml(e.area) || '<span class="sin-dato">—</span>'}</td>
             <td>${escaparHtml(e.capacidad) || '<span class="sin-dato">—</span>'}</td>
             <td>${insigniaEstado(e)}</td>
-            <td>${celdaCalibracion(e)}</td>
+            <td>${celdaCalificacion(e)}</td>
             <td>${e.reservas_vigentes || '<span class="sin-dato">0</span>'}</td>
             <td><span class="estado ${e.activo ? 'estado--activo' : 'estado--inactivo'}">${e.activo ? 'Activo' : 'Baja'}</span></td>
             <td class="col-acciones">
@@ -119,7 +119,7 @@ function abrirModalEquipo(id = null) {
     document.getElementById('campoArea').value = e ? e.area : '';
     document.getElementById('campoCapacidad').value = e ? e.capacidad : '';
     document.getElementById('campoEstado').value = e ? e.estado : 'DISPONIBLE';
-    document.getElementById('campoCalibracion').value = e && e.calibracion_vence ? e.calibracion_vence : '';
+    document.getElementById('campoCalificacion').value = e && e.calificacion_vence ? e.calificacion_vence : '';
     document.getElementById('errorEquipo').hidden = true;
     document.getElementById('modalEquipo').style.display = 'flex';
     document.getElementById(e ? 'campoNombre' : 'campoId').focus();
@@ -133,7 +133,7 @@ async function guardarEquipo(evento) {
         area: document.getElementById('campoArea').value.trim(),
         capacidad: document.getElementById('campoCapacidad').value.trim(),
         estado: document.getElementById('campoEstado').value,
-        calibracion_vence: document.getElementById('campoCalibracion').value || null,
+        calificacion_vence: document.getElementById('campoCalificacion').value || null,
     };
     if (!equipoEnEdicion) {
         datos.id = document.getElementById('campoId').value.trim();
@@ -214,7 +214,7 @@ function cerrarModal(id) {
 
 function mostrarError(idCaja, datos) {
     const caja = document.getElementById(idCaja);
-    const etiquetas = { id: 'Código', codigo: 'Código', calibracion_vence: 'Calibración', tipo: 'Tipo', nombre: 'Nombre' };
+    const etiquetas = { id: 'Código', codigo: 'Código', calificacion_vence: 'Calificación', tipo: 'Tipo', nombre: 'Nombre' };
     const mensajes = typeof datos === 'object'
         ? Object.entries(datos).map(([campo, errores]) => `${etiquetas[campo] || campo}: ${[].concat(errores).join(' ')}`)
         : [String(datos)];

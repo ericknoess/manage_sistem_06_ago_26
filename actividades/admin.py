@@ -10,7 +10,7 @@ class TipoEquipoAdmin(admin.ModelAdmin):
 
 @admin.register(Equipo)
 class EquipoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre', 'tipo', 'area', 'estado', 'calibracion_vence', 'activo')
+    list_display = ('id', 'nombre', 'tipo', 'area', 'estado', 'calificacion_vence', 'activo')
     search_fields = ('id', 'nombre', 'tipo__nombre', 'area')
     list_filter = ('tipo', 'estado', 'activo')
 

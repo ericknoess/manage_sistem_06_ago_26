@@ -10,7 +10,7 @@ const NOMBRES_CAMPO = {
     inicio_programado: 'Inicio', estado: 'Estado', cantidad: 'Cantidad', anticipacion_horas: 'Anticipación (h)',
     sucesoras_reajustadas: 'Sucesoras reajustadas', equipos_asignados: 'Equipos', activo: 'Activo',
     equipo: 'Equipo', tipo: 'Tipo', horas_preparacion: 'Preparación (h)', horas_limpieza: 'Limpieza (h)', ocupacion: 'Ocupación',
-    momento_del_cambio: 'Momento del cambio', estado_display: 'Estado', calibracion_vence: 'Calibración vence', area: 'Área', capacidad: 'Capacidad',
+    momento_del_cambio: 'Momento del cambio', estado_display: 'Estado', calificacion_vence: 'Calificación vence', calibracion_vence: 'Calificación vence', area: 'Área', capacidad: 'Capacidad',
     operador: 'Operador', rol: 'Rol', receta: 'Receta', inicio_planeado: 'Inicio planeado', fases: 'Fases',
     archivado: 'Archivado', nombre: 'Nombre', turno: 'Turno', cuadrilla: 'Cuadrilla', operadores: 'Operadores',
     fase: 'Fase', material: 'Material', origen: 'Origen', actividades: 'Actividades', estrategia: 'Estrategia', registros: 'Registros',

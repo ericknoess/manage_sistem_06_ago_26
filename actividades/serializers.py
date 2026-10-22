@@ -25,19 +25,19 @@ class TipoEquipoSerializer(serializers.ModelSerializer):
 class EquipoSerializer(serializers.ModelSerializer):
     tipo_nombre = serializers.CharField(source='tipo.nombre', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    # Días para el vencimiento de la calibración (negativo si ya venció; None si no aplica)
-    dias_calibracion = serializers.SerializerMethodField()
+    # Días para el vencimiento de la calificación (negativo si ya venció; None si no aplica)
+    dias_calificacion = serializers.SerializerMethodField()
     reservas_vigentes = serializers.IntegerField(read_only=True, default=None)
 
     class Meta:
         model = Equipo
         fields = ['id', 'nombre', 'tipo', 'tipo_nombre', 'area', 'capacidad', 'estado', 'estado_display',
-                  'calibracion_vence', 'dias_calibracion', 'activo', 'reservas_vigentes']
+                  'calificacion_vence', 'dias_calificacion', 'activo', 'reservas_vigentes']
 
-    def get_dias_calibracion(self, obj):
-        if not obj.calibracion_vence:
+    def get_dias_calificacion(self, obj):
+        if not obj.calificacion_vence:
             return None
-        return (obj.calibracion_vence - timezone.localdate()).days
+        return (obj.calificacion_vence - timezone.localdate()).days
 
     def validate_id(self, valor):
         # El código es la llave primaria y lo referencian las reservas de los lotes: no se renombra

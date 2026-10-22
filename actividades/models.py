@@ -39,8 +39,8 @@ class Equipo(models.Model):
     capacidad = models.CharField(max_length=50, blank=True, default='', help_text="Capacidad o tamaño (Ej: 500 L)")
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='DISPONIBLE',
                               help_text="Solo un equipo disponible se puede reservar")
-    calibracion_vence = models.DateField(null=True, blank=True,
-                                         help_text="Vencimiento de la calibración o calificación; después de esa fecha no se reserva")
+    calificacion_vence = models.DateField(null=True, blank=True,
+                                         help_text="Vencimiento de la calificación; después de esa fecha no se reserva")
     activo = models.BooleanField(default=True, help_text="Disponibilidad operativa en planta (baja lógica)")
 
     class Meta:
@@ -55,8 +55,8 @@ class Equipo(models.Model):
             return f"El equipo [{self.id}] está dado de baja."
         if self.estado != 'DISPONIBLE':
             return f"El equipo [{self.id}] está {self.get_estado_display().lower()}."
-        if self.calibracion_vence and hasta and self.calibracion_vence < hasta.date():
-            return f"La calibración de [{self.id}] vence el {self.calibracion_vence:%d/%m/%Y}, antes de terminar la reserva."
+        if self.calificacion_vence and hasta and self.calificacion_vence < hasta.date():
+            return f"La calificación de [{self.id}] vence el {self.calificacion_vence:%d/%m/%Y}, antes de terminar la reserva."
         return None
 
 

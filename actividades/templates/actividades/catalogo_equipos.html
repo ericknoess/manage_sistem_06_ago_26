@@ -18,7 +18,7 @@
         <div class="header-title">
             <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
             <h2>🏗️ Catálogo de Equipos</h2>
-            <p>Equipos críticos de planta y sus tipos. Solo un equipo disponible y con calibración vigente se puede reservar. Los equipos no se borran: se desactivan.</p>
+            <p>Equipos críticos de planta y sus tipos. Solo un equipo disponible y con calificación vigente se puede reservar. Los equipos no se borran: se desactivan.</p>
         </div>
         <nav class="header-enlaces">
             <a href="{% url 'monitor-equipos' %}" class="btn-secundario">📊 Monitor de equipos</a>
@@ -59,7 +59,7 @@
                             <th>Área</th>
                             <th>Capacidad</th>
                             <th>Estado</th>
-                            <th>Calibración</th>
+                            <th>Calificación</th>
                             <th title="Reservas de fases por iniciar o en ejecución">Reservas</th>
                             <th>Alta</th>
                             <th class="col-acciones">Acciones</th>
@@ -131,8 +131,8 @@
                     <select id="campoEstado"></select>
                 </label>
                 <label class="campo">
-                    <span>Vencimiento de calibración</span>
-                    <input type="date" id="campoCalibracion">
+                    <span>Vencimiento de calificación</span>
+                    <input type="date" id="campoCalificacion">
                     <small>Después de esta fecha el equipo no se puede reservar.</small>
                 </label>
             </div>

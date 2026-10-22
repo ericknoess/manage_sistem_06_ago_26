@@ -481,7 +481,7 @@ def alertas_programacion(fases, ahora=None):
       - operador asignado con otra tarea que se traslapa
       - operador sin turno laborable a la hora de inicio
       - material que, por el adelanto, debía estar listo antes de ahora
-      - equipo reservado que se cruza con otra reserva, o que ya no está disponible o calibrado
+      - equipo reservado que se cruza con otra reserva, o que ya no está disponible o calificado
     """
     ahora = ahora or timezone.now()
     fases = [f for f in fases if f.estado == 'PENDIENTE' and f.inicio_programado and f.fin_programado and f.fin_programado > ahora]
@@ -787,7 +787,7 @@ def describir_reserva(reserva):
 
 
 def motivo_no_disponible(equipo, inicio, fin, excluir_reserva_id=None, excluir_equipo_fase_id=None):
-    """Por qué el equipo no sirve para ocuparlo en [inicio, fin): estado, calibración o un cruce; None si está libre."""
+    """Por qué el equipo no sirve para ocuparlo en [inicio, fin): estado, calificación o un cruce; None si está libre."""
     motivo = equipo.motivo_no_reservable(fin)
     if motivo:
         return motivo
@@ -895,7 +895,7 @@ def bloqueo_por_equipo(fase, ahora=None):
 
 
 def alertas_equipos(fases, ahora=None):
-    """{fase_id: [mensajes]} de reservas que, tras un ajuste, se cruzan con otra o ya no son válidas (estado o calibración)."""
+    """{fase_id: [mensajes]} de reservas que, tras un ajuste, se cruzan con otra o ya no son válidas (estado o calificación)."""
     ahora = ahora or timezone.now()
     ids = [f.id for f in fases]
     alertas = {}

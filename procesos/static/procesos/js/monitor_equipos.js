@@ -4,7 +4,7 @@
 // Datos: /api/equipos/, /api/tipos-equipo/ y /api/equipos-fase/ocupacion/.
 
 const NOMBRES_DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-const DIAS_AVISO_CALIBRACION = 30;
+const DIAS_AVISO_CALIFICACION = 30;
 
 let fechaInicio = inicioDelDia(new Date());
 let duracionDias = 3;
@@ -167,15 +167,15 @@ function renderizar() {
                     </div>`;
         }).join('');
         const noDisponible = e.estado !== 'DISPONIBLE';
-        const calibracion = e.dias_calibracion === null ? '' : e.dias_calibracion < 0
-            ? '<span class="aviso aviso--rojo">⛔ Calibración vencida</span>'
-            : e.dias_calibracion <= DIAS_AVISO_CALIBRACION ? `<span class="aviso">⚠️ Calibración en ${e.dias_calibracion} d</span>` : '';
+        const calificacion = e.dias_calificacion === null ? '' : e.dias_calificacion < 0
+            ? '<span class="aviso aviso--rojo">⛔ Calificación vencida</span>'
+            : e.dias_calificacion <= DIAS_AVISO_CALIFICACION ? `<span class="aviso">⚠️ Calificación en ${e.dias_calificacion} d</span>` : '';
         return `
             <div class="fila ${noDisponible ? 'fila--no-disponible' : ''}">
                 <div class="fila__equipo">
                     <div><span class="codigo">${escaparHtml(e.id)}</span> ${escaparHtml(e.nombre)}</div>
                     <div class="fila__meta">${escaparHtml(e.tipo_nombre)}${e.area ? ` · ${escaparHtml(e.area)}` : ''}
-                        ${noDisponible ? `<span class="aviso aviso--rojo">${escaparHtml(e.estado_display)}</span>` : ''} ${calibracion}</div>
+                        ${noDisponible ? `<span class="aviso aviso--rojo">${escaparHtml(e.estado_display)}</span>` : ''} ${calificacion}</div>
                 </div>
                 <div class="fila__pista">${bloques}</div>
             </div>`;
@@ -198,14 +198,14 @@ function renderizarIndicadores(lista, inicio, fin) {
     const horasPeriodo = lista.length * (fin - inicio) / 3600000;
     const uso = horasPeriodo ? Math.round((horasOcupadas / horasPeriodo) * 100) : 0;
     const noDisponibles = lista.filter(e => e.estado !== 'DISPONIBLE').length;
-    const calibraciones = lista.filter(e => e.dias_calibracion !== null && e.dias_calibracion <= DIAS_AVISO_CALIBRACION).length;
+    const calificaciones = lista.filter(e => e.dias_calificacion !== null && e.dias_calificacion <= DIAS_AVISO_CALIFICACION).length;
     const pendientes = ocupacion.pendientes.reduce((suma, p) => suma + p.faltan, 0);
     const indicadores = [
         { valor: lista.length, etiqueta: 'Equipos' },
         { valor: `${uso}%`, etiqueta: 'Ocupación del periodo' },
         { valor: tramos.length, etiqueta: 'Reservas en el periodo' },
         { valor: pendientes, etiqueta: 'Equipos por reservar', clase: pendientes ? 'indicador--alerta' : '' },
-        { valor: noDisponibles + calibraciones, etiqueta: 'No disponibles o calibración por vencer', clase: noDisponibles + calibraciones ? 'indicador--aviso' : '' },
+        { valor: noDisponibles + calificaciones, etiqueta: 'No disponibles o calificación por vencer', clase: noDisponibles + calificaciones ? 'indicador--aviso' : '' },
     ];
     document.getElementById('indicadores').innerHTML = indicadores.map(i => `
         <div class="indicador ${i.clase || ''}">
