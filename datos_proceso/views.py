@@ -250,7 +250,8 @@ class IndicadorProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
 class AnalisisProcesoViewSet(viewsets.ViewSet):
     """
     Gráficas de proceso (solo lectura):
-      GET /api/analisis-proceso/?proceso=<id>&lotes=1,2,3[&etapa=<id>]   series por parámetro, curvas e indicadores
+      GET /api/analisis-proceso/?proceso=<id>&lotes=1,2,3[&etapa=<id>][&completos=1,2]
+          series por parámetro, curvas e indicadores; con muchos lotes, los que no están en `completos` van reducidos
       GET /api/analisis-proceso/lotes/?proceso=<id>                       lotes de la receta con cuántas tomas tienen
       GET /api/analisis-proceso/recetas/                                  plantillas con etapas, actividades y lotes
     """
@@ -266,6 +267,7 @@ class AnalisisProcesoViewSet(viewsets.ViewSet):
         try:
             ids = [int(x) for x in request.query_params.get('lotes', '').split(',') if x.strip()]
             etapa = int(request.query_params['etapa']) if request.query_params.get('etapa') else None
+            completos = [int(x) for x in request.query_params.get('completos', '').split(',') if x.strip()]
         except ValueError:
             return Response({'error': "Lotes o etapa no válidos."}, status=status.HTTP_400_BAD_REQUEST)
         ids = list(dict.fromkeys(ids))
@@ -274,7 +276,7 @@ class AnalisisProcesoViewSet(viewsets.ViewSet):
         if etapa and not proceso.etapas.filter(pk=etapa).exists():
             return Response({'error': "La etapa no es de esta receta."}, status=status.HTTP_400_BAD_REQUEST)
         lotes = {l.id: l for l in LoteProduccion.objects.filter(proceso_maestro=proceso, pk__in=ids)}
-        return Response(analisis_lotes(proceso, [lotes[i] for i in ids if i in lotes], etapa))
+        return Response(analisis_lotes(proceso, [lotes[i] for i in ids if i in lotes], etapa, completos))
 
     @action(detail=False, methods=['get'])
     def recetas(self, request):
@@ -378,6 +380,7 @@ class InformeProcesoViewSet(viewsets.ViewSet):
             proceso = ProcesoMaestro.objects.get(pk=int(request.query_params.get('proceso', '')))
             ids = list(dict.fromkeys(int(x) for x in request.query_params.get('lotes', '').split(',') if x.strip()))
             etapa = int(request.query_params['etapa']) if request.query_params.get('etapa') else None
+            completos = [int(x) for x in request.query_params.get('completos', '').split(',') if x.strip()]
         except (ValueError, ProcesoMaestro.DoesNotExist):
             return Response({'error': "Receta, lotes o etapa no válidos."}, status=status.HTTP_400_BAD_REQUEST)
         if not ids or len(ids) > MAX_LOTES_ANALISIS:

@@ -41,7 +41,10 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   `PlanParametros` (huella SHA-256, inmutable) y fases/tomas guardan `parametros_ref`; leer siempre con
   `_parametros_de_plan`/`parametros_de_seccion` o `expandir_plan`, y guardar con `compactar_plan(es)`.
   Medido en PostgreSQL con 300 lotes de ~1000 tareas (303 mil tareas, 1.4 M valores, 588 MB): Planificación semana 0.5 s,
-  lote en Piso de planta 0.2 s, lista de lotes 0.6 s, Gantt 0.3 s, gráficas de 50 lotes 1.7 s y de 200 lotes 7.7 s (35 MB).
+  lote en Piso de planta 0.2 s, lista de lotes 0.6 s, Gantt 0.3 s, gráficas de 50 lotes 1.2 s y de 200 lotes 6.9 s (21 MB).
+  Gráficas con más de 20 lotes (`UMBRAL_REDUCIR`): los no destacados llegan reducidos (`reducir_puntos`: hasta 120 puntos por
+  serie, con mínimos, máximos y valores fuera de límites); `&completos=` = destacados; al destacar uno reducido, el front pide
+  solo ese lote (`completarLote`). Los indicadores siempre usan todos los datos.
 - Inicio en planta (`evaluar_inicio` en `procesos/services.py`): la dependencia con la predecesora debe cumplirse (FS completada,
   SS iniciada; el muestreo espera a su incubación) y la ventana `OperacionProceso.tolerancia_antes_horas`/`tolerancia_despues_horas`
   (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige

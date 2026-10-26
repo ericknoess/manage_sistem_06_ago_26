@@ -514,6 +514,20 @@ class AnalisisTests(AnalisisBase):
         self.assertEqual(temp['limites']['especificacion_max'], '38')
         self.assertTrue(RegistroAuditoria.objects.filter(categoria='RECETA', accion='CREAR', descripcion__icontains='indicador').exists())
 
+    def test_con_muchos_lotes_los_no_destacados_van_reducidos(self):
+        from unittest import mock
+        self.crear_indicadores()
+        url = f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={self.lote.id}'
+        with mock.patch('datos_proceso.services.UMBRAL_REDUCIR', 0), mock.patch('datos_proceso.services.MAX_PUNTOS_REDUCIDOS', 1):
+            r = self.web.get(url).data
+            completo = self.web.get(url + f'&completos={self.lote.id}').data
+        celulas = lambda d: next(p for p in d['parametros'] if p['codigo'] == 'celulas')['series'][str(self.lote.id)]
+        self.assertTrue(r['lotes'][0]['reducido'])
+        self.assertEqual(r['max_puntos_reducidos'], 1)
+        self.assertEqual(len(celulas(r)), 2)              # 2 puntos: se conservan el primero y el último
+        self.assertFalse(completo['lotes'][0]['reducido'])
+        self.assertEqual(r['valores_indicadores'], completo['valores_indicadores'])   # indicadores con todos los datos
+
     def test_sin_curva_o_sin_datos_explica_por_que(self):
         self.indicador(codigo='apego_glu', nombre='Apego glucosa', tipo='APEGO', parametro=self.glucosa.id)
         self.indicador(codigo='abc_temp', nombre='ABC T3', tipo='AREA', parametro=self.temp.id, etapa=EtapaProceso.objects.create(
@@ -756,3 +770,18 @@ class ImportacionCultivoTests(TestCase):
         r = self.imp.importar(self.datos())['lotes'][0]
         self.assertIn('Ya existe', r['aviso'])
         self.assertFalse(TomaDatos.objects.exists())
+
+
+class ReduccionPuntosTests(TestCase):
+
+    def test_conserva_forma_extremos_y_fuera_de_limites(self):
+        from .services import reducir_puntos
+        puntos = [{'valor': float(i % 50), 'fuera_especificacion': i == 333, 'fuera_alerta': False} for i in range(1000)]
+        reducidos = reducir_puntos(puntos, 120)
+        self.assertLessEqual(len(reducidos), 125)
+        self.assertIs(reducidos[0], puntos[0])
+        self.assertIs(reducidos[-1], puntos[-1])
+        self.assertIn(puntos[333], reducidos)
+        self.assertEqual(max(p['valor'] for p in reducidos), 49.0)
+        self.assertEqual(min(p['valor'] for p in reducidos), 0.0)
+        self.assertEqual(reducir_puntos(puntos[:50], 120), puntos[:50])

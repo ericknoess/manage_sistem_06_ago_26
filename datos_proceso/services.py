@@ -783,11 +783,19 @@ def series_lotes(lotes, parametro_ids=None, etapa_id=None, fases=None):
         'toma__fase__lote_id', 'toma__fase__operacion_maestra__etapa_id', 'toma__fase__es_subtarea_muestreo',
         'toma__fase__nombre_tarea_dinamica', 'toma__fase__operacion_maestra__nombre', 'toma__fase__operacion_maestra__identificador_paso'))
     series = {lote.id: {} for lote in lotes}
+    # Edad 0 de cada lote y etapa como instante (segundos): con cientos de miles de puntos, se evita una llamada por punto
+    instantes = {lote_id: {k: (v['momento'].timestamp() if v and v.get('momento') else None) for k, v in c.items()}
+                 for lote_id, c in ceros.items()}
+
+    def edad(t, cero):
+        return None if cero is None else round((t - cero) / 3600, 2)
+
     for (pid, valor, fuera_esp, fuera_ale, toma_id, momento, adicional, lote_id, etapa, es_muestreo,
          nombre_dinamico, nombre_op, paso) in filas:
-        cero = ceros[lote_id]
+        cero = instantes[lote_id]
+        t = momento.timestamp()
         series[lote_id].setdefault(pid, []).append({
-            'edad_etapa_h': edad_horas(momento, cero.get(etapa)), 'edad_lote_h': edad_horas(momento, cero.get('lote')),
+            'edad_etapa_h': edad(t, cero.get(etapa)), 'edad_lote_h': edad(t, cero.get('lote')),
             'valor': float(valor), 'tarea': f"[{paso}] {nombre_dinamico if es_muestreo and nombre_dinamico else nombre_op}",
             'momento': momento, 'adicional': adicional, 'toma': toma_id, 'etapa_id': etapa,
             'fuera_especificacion': fuera_esp, 'fuera_alerta': fuera_ale,
@@ -1010,17 +1018,52 @@ def _compactar(puntos, tareas):
     return salida
 
 
-def analisis_lotes(proceso, lotes, etapa_id=None):
+UMBRAL_REDUCIR = 20        # con más lotes elegidos, los que no se piden completos van reducidos
+MAX_PUNTOS_REDUCIDOS = 120 # puntos por serie de un lote reducido
+
+
+def reducir_puntos(puntos, maximo=MAX_PUNTOS_REDUCIDOS):
+    """
+    Menos puntos con la misma forma, para dibujar muchos lotes: en cada tramo (en orden de toma) se conservan el
+    mínimo y el máximo, además del primero, el último y todo valor fuera de especificación o de alerta.
+    """
+    if len(puntos) <= maximo:
+        return puntos
+    tramos = max(1, maximo // 2)
+    tamano = len(puntos) / tramos
+    elegidos = {0, len(puntos) - 1}
+    for t in range(tramos):
+        tramo = range(int(t * tamano), min(len(puntos), int((t + 1) * tamano)))
+        if tramo:
+            elegidos.add(min(tramo, key=lambda i: puntos[i]['valor']))
+            elegidos.add(max(tramo, key=lambda i: puntos[i]['valor']))
+    elegidos.update(i for i, p in enumerate(puntos) if p['fuera_especificacion'] or p['fuera_alerta'])
+    return [puntos[i] for i in sorted(elegidos)]
+
+
+def analisis_lotes(proceso, lotes, etapa_id=None, completos=None):
     """
     Datos de la pantalla de gráficas: por cada parámetro numérico de la receta (en la etapa), una serie por lote
     (puntos compactos, ver `_compactar`), con sus límites y curva esperada, y los indicadores de cada lote.
+    Con más de UMBRAL_REDUCIR lotes, los que no están en `completos` (los destacados) llevan sus series reducidas
+    (`reducir_puntos`); los indicadores siempre se calculan con todos los datos.
     """
     from .models import IndicadorProceso
     lotes = list(lotes)[:MAX_LOTES_ANALISIS]
+    completos = set(completos or [])
+    reducidos = {l.id for l in lotes if l.id not in completos} if len(lotes) > UMBRAL_REDUCIR else set()
     estructura = estructura_receta(proceso, etapa_id)
     fases = fases_por_lote(lotes)
     series, ceros = series_lotes(lotes, fases=fases)   # todas las etapas: los indicadores pueden ser de otra etapa
     indicadores = list(IndicadorProceso.objects.filter(proceso=proceso, activo=True).select_related('parametro', 'etapa'))
+
+    # Puntos de cada lote por (parámetro, etapa), agrupados una sola vez
+    por_etapa = {}
+    for lote in lotes:
+        grupos = por_etapa[lote.id] = {}
+        for pid, puntos in series[lote.id].items():
+            for p in puntos:
+                grupos.setdefault((pid, p['etapa_id']), []).append(p)
 
     tareas = {}
     parametros = []
@@ -1030,8 +1073,10 @@ def analisis_lotes(proceso, lotes, etapa_id=None):
                 pid = ref['parametro']
                 por_lote = {}
                 for lote in lotes:
-                    puntos = [p for p in series[lote.id].get(pid, []) if p['etapa_id'] == grupo['etapa_id']]
+                    puntos = por_etapa[lote.id].get((pid, grupo['etapa_id']))
                     if puntos:
+                        if lote.id in reducidos:
+                            puntos = reducir_puntos(puntos)
                         por_lote[str(lote.id)] = _compactar(puntos, tareas)
                 parametros.append({
                     'clave': f"{grupo['etapa_id'] or 0}-{pid}", 'etapa_id': grupo['etapa_id'], 'etapa': grupo['etapa'],
@@ -1050,9 +1095,11 @@ def analisis_lotes(proceso, lotes, etapa_id=None):
             'id': lote.id, 'identificador': lote.identificador_lote, 'estado': lote.estado,
             'estado_display': lote.get_estado_display(),
             'edad_actual_h': edad_horas(ahora, ceros[lote.id].get('lote')) if abierto else None,
+            'reducido': lote.id in reducidos,
         })
     return {
         'proceso': proceso.id, 'etapa': etapa_id, 'lotes': lotes_json, 'parametros': parametros,
+        'max_puntos_reducidos': MAX_PUNTOS_REDUCIDOS if reducidos else None,
         'etapas': [{'id': g['etapa_id'], 'nombre': g['etapa']} for g in estructura],
         'tareas': list(tareas),   # en orden de índice
         'indicadores': [{

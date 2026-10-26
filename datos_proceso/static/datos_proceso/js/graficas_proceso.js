@@ -184,7 +184,9 @@ async function cargarAnalisis() {
     if (!analisis) rejilla.innerHTML = '<div class="panel estado-vacio">Cargando datos de los lotes…</div>';
     const etapa = document.getElementById('filtroEtapa').value;
     try {
-        const res = await fetch(`/api/analisis-proceso/?proceso=${proceso}&lotes=${[...elegidos].join(',')}${etapa ? `&etapa=${etapa}` : ''}`);
+        // Los destacados van completos; con muchos lotes, el resto llega reducido (misma forma, menos puntos)
+        const res = await fetch(`/api/analisis-proceso/?proceso=${proceso}&lotes=${[...elegidos].join(',')}`
+            + `&completos=${destacados.join(',')}${etapa ? `&etapa=${etapa}` : ''}`);
         const data = await res.json();
         if (numero !== peticionAnalisis) return;  // llegó una respuesta más nueva
         if (!res.ok) throw new Error(data.error || data.detail || 'No se pudo cargar el análisis.');
@@ -266,7 +268,41 @@ function alternarDestacado(id) {
     guardarSeleccion();
     pintarTablaLotes();
     if (!analisisVigente && pestana !== 'lotes') cargarAnalisis();
-    else { pintarGraficas(); pintarIndicadores(); pintarComparar(); }
+    else {
+        pintarGraficas(); pintarIndicadores(); pintarComparar();
+        if (destacados.includes(id)) completarLote(id);
+    }
+}
+
+// Un lote que llegó reducido y ahora se destaca: se piden solo sus datos completos y se mezclan
+async function completarLote(id) {
+    const info = analisis && analisis.lotes.find(l => l.id === id);
+    if (!info || !info.reducido) return;
+    const proceso = document.getElementById('filtroProceso').value;
+    const etapa = document.getElementById('filtroEtapa').value;
+    const numero = peticionAnalisis;
+    try {
+        const res = await fetch(`/api/analisis-proceso/?proceso=${proceso}&lotes=${id}&completos=${id}${etapa ? `&etapa=${etapa}` : ''}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (numero !== peticionAnalisis || !analisis) return;  // mientras tanto se recargó todo
+        // Los puntos traen el índice de su tarea en la lista de la respuesta: se pasa a la lista vigente
+        const indice = new Map(analisis.tareas.map((t, i) => [t, i]));
+        const mapa = data.tareas.map(t => {
+            if (!indice.has(t)) { indice.set(t, analisis.tareas.length); analisis.tareas.push(t); }
+            return indice.get(t);
+        });
+        const porClave = new Map(analisis.parametros.map(p => [p.clave, p]));
+        for (const p of data.parametros) {
+            const destino = porClave.get(p.clave);
+            const serie = p.series[String(id)];
+            if (destino && serie) destino.series[String(id)] = serie.map(pt => { const c = pt.slice(); c[6] = mapa[pt[6]]; return c; });
+        }
+        info.reducido = false;
+        pintarGraficas(); pintarComparar();
+    } catch (err) {
+        console.warn('No se pudieron traer los datos completos del lote', err);
+    }
 }
 
 function pintarTablaLotes() {
@@ -467,6 +503,13 @@ function pintarGraficas() {
         return;
     }
     if (!analisis) return;
+    const reducidos = analisis.lotes.filter(l => l.reducido).length;
+    const aviso = document.getElementById('avisoReducidos');
+    aviso.hidden = !reducidos;
+    aviso.textContent = reducidos
+        ? `⚡ Con muchos lotes, ${reducidos} lotes en gris se dibujan con hasta ${analisis.max_puntos_reducidos} puntos por gráfica `
+          + '(se conservan máximos, mínimos y valores fuera de límites). Los destacados van completos; destaca un lote para ver todos sus datos.'
+        : '';
     const parametros = parametrosVisibles();
     if (!parametros.length) {
         const conDatos = analisis.parametros.some(p => Object.keys(p.series).length);
