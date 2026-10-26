@@ -4,6 +4,7 @@
 #   Catálogo:  ParametroProceso (uno para toda la planta; puede ser calculado con fórmula)
 #   Receta:    SeccionCaptura (por actividad: cuándo se captura) → ParametroSeccion (qué parámetros y sus límites)
 #   Lote:      TomaDatos (un evento de captura en una fase) → ValorParametro (un valor; las correcciones lo reemplazan)
+#   Análisis:  IndicadorProceso (por receta: área bajo la curva, apego a la curva esperada, último, máximo o fórmula)
 # Lo capturado no se borra ni se edita: corregir crea un valor nuevo que reemplaza al anterior (con motivo y firma).
 
 from django.conf import settings
@@ -194,3 +195,45 @@ class ValorParametro(_SoloAgregar):
         if self.valor_numero is not None:
             return format(self.valor_numero.normalize(), 'f')
         return self.valor_texto
+
+
+class IndicadorProceso(models.Model):
+    """
+    Indicador que se calcula para cada lote de una receta a partir de sus datos vigentes (no se guarda: se calcula al consultar).
+    Ej. ABC de células (AREA), % de apego a la curva esperada (APEGO), gramos estimados = abc_cel / 1000 - 5.5 (FORMULA).
+    """
+    TIPO_CHOICES = [
+        ('AREA', 'Área bajo la curva'),
+        ('APEGO', 'Apego a la curva esperada (%)'),
+        ('ULTIMO', 'Último valor'),
+        ('MAXIMO', 'Valor máximo'),
+        ('FORMULA', 'Fórmula con otros indicadores'),
+    ]
+    proceso = models.ForeignKey('procesos.ProcesoMaestro', on_delete=models.CASCADE, related_name='indicadores')
+    codigo = models.CharField(max_length=40, help_text="Código corto para usarlo en fórmulas (ej. abc_cel)")
+    nombre = models.CharField(max_length=120)
+    unidad = models.CharField(max_length=30, blank=True, default='')
+    decimales = models.PositiveSmallIntegerField(default=1)
+    orden = models.PositiveIntegerField(default=0)
+    tipo = models.CharField(max_length=8, choices=TIPO_CHOICES)
+    parametro = models.ForeignKey(ParametroProceso, on_delete=models.PROTECT, null=True, blank=True, related_name='indicadores',
+                                  help_text="Parámetro numérico que se analiza (todos los tipos salvo fórmula)")
+    etapa = models.ForeignKey('procesos.EtapaProceso', on_delete=models.CASCADE, null=True, blank=True, related_name='indicadores',
+                              help_text="Solo datos de esta etapa (vacío = todo el lote)")
+    eje_edad = models.CharField(max_length=5, choices=ParametroSeccion.EJES_EDAD, default='LOTE',
+                                help_text="Edad contra la que se integra el área (el apego usa la de la curva esperada)")
+    formula = models.TextField(blank=True, default='', help_text="Solo tipo fórmula: usa los códigos de otros indicadores")
+    meta_min = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)
+    meta_max = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['proceso', 'orden', 'id']
+        verbose_name = "Indicador de proceso"
+        verbose_name_plural = "Indicadores de proceso"
+        constraints = [
+            models.UniqueConstraint(fields=['proceso', 'codigo'], name='unique_codigo_indicador_por_receta'),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.proceso})"

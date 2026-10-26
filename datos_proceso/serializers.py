@@ -6,8 +6,8 @@ import re
 from rest_framework import serializers
 
 from .formulas import ErrorFormula
-from .models import ParametroProceso, SeccionCaptura, ParametroSeccion
-from .services import LIMITES, validar_formula_parametro
+from .models import IndicadorProceso, ParametroProceso, SeccionCaptura, ParametroSeccion
+from .services import LIMITES, validar_formula_indicador, validar_formula_parametro
 
 MAX_PUNTOS_CURVA = 500
 PATRON_CODIGO = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
@@ -228,3 +228,68 @@ def validar_secciones_de_operacion(secciones, captura, es_incubacion, frecuencia
         else:
             s['frecuencia'], s['cada_horas'], s['horas'] = 'TODOS', 0, []
     return None
+
+
+class IndicadorProcesoSerializer(serializers.ModelSerializer):
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    parametro_nombre = serializers.CharField(source='parametro.nombre', read_only=True, default='')
+    parametro_unidad = serializers.CharField(source='parametro.unidad', read_only=True, default='')
+    etapa_nombre = serializers.CharField(source='etapa.nombre', read_only=True, default='')
+
+    class Meta:
+        model = IndicadorProceso
+        fields = ['id', 'proceso', 'codigo', 'nombre', 'unidad', 'decimales', 'orden', 'tipo', 'tipo_display',
+                  'parametro', 'parametro_nombre', 'parametro_unidad', 'etapa', 'etapa_nombre', 'eje_edad',
+                  'formula', 'meta_min', 'meta_max', 'activo']
+        validators = []  # el código repetido se revisa en validate() con un mensaje claro
+
+    def validate_codigo(self, valor):
+        valor = (valor or '').strip()
+        if self.instance and valor != self.instance.codigo:
+            raise serializers.ValidationError("El código no se puede cambiar: lo pueden usar otras fórmulas.")
+        if not PATRON_CODIGO.match(valor):
+            raise serializers.ValidationError("Usa minúsculas, números y guion bajo, empezando con letra (ej. abc_cel).")
+        from .formulas import FUNCIONES
+        if valor in FUNCIONES:
+            raise serializers.ValidationError(f"«{valor}» es el nombre de una función de las fórmulas; elige otro código.")
+        return valor
+
+    def validate_decimales(self, valor):
+        if valor > 6:
+            raise serializers.ValidationError("Máximo 6 decimales.")
+        return valor
+
+    def validate(self, data):
+        actual = lambda campo, defecto=None: data.get(campo, getattr(self.instance, campo, defecto) if self.instance else defecto)
+        proceso, tipo, codigo = actual('proceso'), actual('tipo'), actual('codigo')
+        if self.instance and proceso != self.instance.proceso:
+            raise serializers.ValidationError({'proceso': "Un indicador no se cambia de receta."})
+        otros = IndicadorProceso.objects.filter(proceso=proceso)
+        if self.instance:
+            otros = otros.exclude(pk=self.instance.pk)
+        if 'codigo' in data and otros.filter(codigo=codigo).exists():
+            raise serializers.ValidationError({'codigo': f"Ya hay un indicador «{codigo}» en esta receta."})
+        etapa = actual('etapa')
+        if etapa and etapa.proceso_id != proceso.id:
+            raise serializers.ValidationError({'etapa': "La etapa no es de esta receta."})
+        mm, mx = actual('meta_min'), actual('meta_max')
+        if mm is not None and mx is not None and mm > mx:
+            raise serializers.ValidationError({'meta_min': "La meta mínima es mayor que la máxima."})
+
+        if tipo == 'FORMULA':
+            formula = (actual('formula', '') or '').strip()
+            if not formula:
+                raise serializers.ValidationError({'formula': "Escribe la fórmula (ej. abc_cel / 1000 - 5.5)."})
+            try:
+                validar_formula_indicador(formula, codigo, {i.codigo: (i.formula if i.tipo == 'FORMULA' else '') for i in otros})
+            except ErrorFormula as e:
+                raise serializers.ValidationError({'formula': str(e)})
+            data.update(formula=formula, parametro=None, etapa=None)
+        else:
+            parametro = actual('parametro')
+            if not parametro:
+                raise serializers.ValidationError({'parametro': "Elige el parámetro que se analiza."})
+            if parametro.tipo_dato != 'NUMERO':
+                raise serializers.ValidationError({'parametro': "El parámetro debe ser numérico."})
+            data['formula'] = ''
+        return data

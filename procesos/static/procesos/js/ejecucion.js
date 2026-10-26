@@ -101,6 +101,8 @@ async function renderizarDetalleLote() {
     headerTitle.innerHTML = `
         <span>⚡ eBR - Lote: <strong style="color: var(--text);">${loteSeleccionado.identificador_lote}</strong></span>
         <span class="encabezado-lote-acciones">
+            <a class="btn-secondary btn-historial" href="/graficas/?proceso=${loteSeleccionado.proceso_maestro}&lotes=${loteSeleccionado.id}"
+               title="Parámetros contra la edad, curva esperada e indicadores de este lote">📉 Gráficas</a>
             <button class="btn-secondary btn-historial" onclick="abrirHistorialLote()" title="Quién hizo qué con este lote">📜 Historial</button>
             <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
         </span>

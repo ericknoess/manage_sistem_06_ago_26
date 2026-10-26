@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ParametroProceso, SeccionCaptura, ParametroSeccion, TomaDatos, ValorParametro
+from .models import IndicadorProceso, ParametroProceso, SeccionCaptura, ParametroSeccion, TomaDatos, ValorParametro
 
 
 @admin.register(ParametroProceso)
@@ -44,3 +44,9 @@ class TomaDatosAdmin(SoloLecturaAdmin):
 class ValorParametroAdmin(SoloLecturaAdmin):
     list_display = ['id', 'toma', 'parametro', 'valor_numero', 'valor_texto', 'calculado', 'vigente', 'fuera_especificacion']
     list_filter = ['vigente', 'calculado', 'fuera_especificacion']
+
+
+@admin.register(IndicadorProceso)
+class IndicadorProcesoAdmin(admin.ModelAdmin):
+    list_display = ['codigo', 'nombre', 'proceso', 'tipo', 'parametro', 'etapa', 'activo']
+    list_filter = ['tipo', 'activo', 'proceso']

@@ -9,6 +9,7 @@
 // Al enfocar un parámetro numérico se muestra su gráfica de tendencia (como en Cultivo): los datos anteriores de la
 // etapa contra la edad, el valor que se está escribiendo, los límites y el valor esperado (fijo o curva de la receta).
 // API: /api/captura/<fase>/ (ver datos_proceso/views.py). Estilos en static/core/css/captura.css.
+// Requiere static/core/js/graficas.js y static/core/css/graficas.css.
 
 (function () {
     const esc = (texto) => {
@@ -116,25 +117,14 @@
     }
 
     // ------------------------------------------------------------------
-    // Gráfica de tendencia (SVG propio: funciona sin internet en la tablet)
+    // Gráfica de tendencia (dibujo en static/core/js/graficas.js)
     // ------------------------------------------------------------------
-    const SVG = 'http://www.w3.org/2000/svg';
     const num = (v) => (v === null || v === undefined || v === '') ? null : Number(String(v).replace(',', '.'));
-
-    function marcas(min, max, cuantas = 5) {
-        const paso0 = (max - min) / cuantas || 1;
-        const base = Math.pow(10, Math.floor(Math.log10(paso0)));
-        const paso = [1, 2, 2.5, 5, 10].map(m => m * base).find(p => p >= paso0) || paso0;
-        const lista = [];
-        for (let v = Math.ceil(min / paso) * paso; v <= max + paso * 1e-9; v += paso) lista.push(Number(v.toFixed(10)));
-        return lista;
-    }
-    const corto = (v) => Math.abs(v) >= 1000 ? v.toFixed(0) : Number(v.toPrecision(4)).toString();
 
     function htmlPanelTendencia() {
         return `<aside class="captura-tendencia">
             <div class="captura-tendencia__titulo">📈 Tendencia</div>
-            <div class="captura-tendencia__leyenda"></div>
+            <div class="tg-leyenda"></div>
             <div class="captura-tendencia__lienzo"><div class="captura-tendencia__vacio">Toca un parámetro numérico para ver sus datos anteriores y el valor esperado.</div></div>
             <div class="captura-tendencia__nota"></div>
         </aside>`;
@@ -148,132 +138,34 @@
     function dibujarTendencia(panel, { p, historial, vivo = null, tomaActual = null }) {
         const ref = p.referencia || {};
         const eje = ref.eje_edad === 'ETAPA' ? 'edad_etapa_h' : 'edad_lote_h';
-        const textoEje = ref.eje_edad === 'ETAPA' ? 'Edad de la etapa (h)' : 'Edad del lote (h)';
-        const lim = p.limites || {};
-        const puntos = (historial || []).filter(h => h[eje] !== null && h[eje] !== undefined).map(h => ({ ...h, x: h[eje], y: h.valor }));
+        const unidad = p.unidad ? ` ${esc(p.unidad)}` : '';
+        const corto = window.numeroCorto;
+        const puntos = (historial || []).filter(h => h[eje] !== null && h[eje] !== undefined).map(h => ({
+            x: h[eje], y: h.valor, resaltado: !!tomaActual && h.toma === tomaActual,
+            estado: h.fuera_especificacion ? 'fuera' : h.fuera_alerta ? 'alerta' : '',
+            texto: `<strong>${esc(corto(h.valor))}${unidad}</strong> a ${esc(corto(h[eje]))} h<br>${esc(h.tarea)}${h.adicional ? ' · adicional' : ''}<br>${fechaHora(h.momento)}${h.fuera_especificacion ? '<br>🚨 Fuera de especificación' : h.fuera_alerta ? '<br>⚠️ Fuera de alerta' : ''}`,
+        }));
         const sinEdad = (historial || []).length - puntos.length;
-        const actual = vivo && vivo.valor !== null && Number.isFinite(vivo.valor) && vivo.edad !== null ? { x: vivo.edad, y: vivo.valor } : null;
-        const curva = (ref.curva || []).map(([x, y]) => ({ x: Number(x), y: Number(y) }));
-        const objetivo = num(ref.objetivo);
-        const lineas = [
-            ['especificacion_max', 'Esp. máx', 'fuera'], ['especificacion_min', 'Esp. mín', 'fuera'],
-            ['alerta_max', 'Alerta máx', 'alerta'], ['alerta_min', 'Alerta mín', 'alerta'],
-        ].filter(([c]) => num(lim[c]) !== null).map(([c, etiqueta, tipo]) => ({ y: num(lim[c]), etiqueta, tipo }));
+        const actual = vivo && vivo.valor !== null && Number.isFinite(vivo.valor) && vivo.edad !== null
+            ? { x: vivo.edad, y: vivo.valor, texto: `<strong>${esc(corto(vivo.valor))}${unidad}</strong> a ${esc(corto(vivo.edad))} h<br>Valor que estás capturando` } : null;
+        const color = window.COLORES_SERIES[0];
 
         panel.querySelector('.captura-tendencia__titulo').innerHTML = `📈 ${esc(p.nombre)}${p.unidad ? ` <small>${esc(p.unidad)}</small>` : ''}`;
         const lienzo = panel.querySelector('.captura-tendencia__lienzo');
-        const nota = panel.querySelector('.captura-tendencia__nota');
-        const leyenda = panel.querySelector('.captura-tendencia__leyenda');
-
-        // Dominio: los datos mandan; la curva se recorta a ese rango de edades
-        const xsDatos = [...puntos.map(q => q.x), ...(actual ? [actual.x] : [])];
-        let xMin = Math.min(0, ...xsDatos);
-        let xMax = xsDatos.length ? Math.max(...xsDatos) : 0;
-        xMax = Math.max(xMax + Math.max(6, (xMax - xMin) * 0.15), 24);
-        const curvaVisible = curva.filter((q, i) => (q.x >= xMin && q.x <= xMax)
-            || (curva[i + 1] && curva[i + 1].x >= xMin && q.x < xMin) || (curva[i - 1] && curva[i - 1].x <= xMax && q.x > xMax));
-        const ys = [...puntos.map(q => q.y), ...(actual ? [actual.y] : []), ...lineas.map(l => l.y),
-                    ...(objetivo !== null ? [objetivo] : []), ...curvaVisible.map(q => q.y)];
-        if (!ys.length) {
-            lienzo.innerHTML = '<div class="captura-tendencia__vacio">Sin datos anteriores en esta etapa ni valor esperado configurado. Escribe un valor para verlo aquí.</div>';
-            leyenda.innerHTML = '';
-            nota.textContent = '';
-            return;
-        }
-        let yMin = Math.min(...ys), yMax = Math.max(...ys);
-        const holgura = (yMax - yMin) * 0.12 || Math.abs(yMax) * 0.1 || 1;
-        yMin -= holgura; yMax += holgura;
-
-        const ancho = Math.max(lienzo.clientWidth || 0, 280), alto = 240;
-        const m = { izq: 46, der: 14, arr: 10, aba: 34 };
-        const X = (v) => m.izq + (v - xMin) / (xMax - xMin) * (ancho - m.izq - m.der);
-        const Y = (v) => alto - m.aba - (v - yMin) / (yMax - yMin) * (alto - m.arr - m.aba);
-        const el = (tag, attrs, padre) => {
-            const nodo = document.createElementNS(SVG, tag);
-            Object.entries(attrs).forEach(([k, v]) => nodo.setAttribute(k, v));
-            if (padre) padre.appendChild(nodo);
-            return nodo;
-        };
-        const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, width: ancho, height: alto, class: 'captura-tendencia__svg', role: 'img',
-            'aria-label': `Tendencia de ${p.nombre}` });
-        const clipId = `clip-${Math.random().toString(36).slice(2)}`;
-        el('rect', { x: m.izq, y: m.arr, width: ancho - m.izq - m.der, height: alto - m.arr - m.aba }, el('clipPath', { id: clipId }, el('defs', {}, svg)));
-
-        // Rejilla y ejes (recesivos)
-        marcas(yMin, yMax, 4).forEach(v => {
-            el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(v), y2: Y(v), class: 'tg-rejilla' }, svg);
-            el('text', { x: m.izq - 6, y: Y(v) + 3, class: 'tg-eje', 'text-anchor': 'end' }, svg).textContent = corto(v);
+        const r = graficaLineas(lienzo, {
+            series: puntos.length ? [{ nombre: 'Registros anteriores', color, puntos }] : [],
+            vivo: actual, curva: ref.curva || [], objetivo: ref.objetivo, limites: p.limites,
+            textoX: ref.eje_edad === 'ETAPA' ? 'Edad de la etapa (h)' : 'Edad del lote (h)',
         });
-        marcas(xMin, xMax, 6).forEach(v => {
-            el('line', { x1: X(v), x2: X(v), y1: alto - m.aba, y2: alto - m.aba + 4, class: 'tg-tick' }, svg);
-            el('text', { x: X(v), y: alto - m.aba + 15, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = corto(v);
+        panel.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
+            series: puntos.length ? [{ color, etiqueta: `Registros anteriores (${puntos.length})` }] : [],
+            vivo: !!actual, curva: r.curvaVisible, objetivo: num(ref.objetivo) !== null, limites: p.limites,
         });
-        el('line', { x1: m.izq, x2: ancho - m.der, y1: alto - m.aba, y2: alto - m.aba, class: 'tg-base' }, svg);
-        el('text', { x: (m.izq + ancho - m.der) / 2, y: alto - 4, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = textoEje;
-
-        const zona = el('g', { 'clip-path': `url(#${clipId})` }, svg);
-        lineas.forEach(l => {
-            el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(l.y), y2: Y(l.y), class: `tg-limite tg-limite--${l.tipo}` }, zona);
-            el('text', { x: ancho - m.der - 3, y: Y(l.y) - 3, class: 'tg-etiqueta', 'text-anchor': 'end' }, zona).textContent = `${l.etiqueta} ${corto(l.y)}`;
-        });
-        if (objetivo !== null) {
-            el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(objetivo), y2: Y(objetivo), class: 'tg-esperado' }, zona);
-            el('text', { x: m.izq + 4, y: Y(objetivo) - 3, class: 'tg-etiqueta' }, zona).textContent = `Esperado ${corto(objetivo)}`;
-        }
-        if (curvaVisible.length > 1) {
-            el('polyline', { points: curvaVisible.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'tg-curva' }, zona);
-        }
-        if (puntos.length > 1) {
-            el('polyline', { points: puntos.map(q => `${X(q.x)},${Y(q.y)}`).join(' '), class: 'tg-historial' }, zona);
-        }
-        if (actual && puntos.length) {
-            const ultimo = puntos[puntos.length - 1];
-            el('line', { x1: X(ultimo.x), y1: Y(ultimo.y), x2: X(actual.x), y2: Y(actual.y), class: 'tg-enlace' }, zona);
-        }
-
-        // Puntos con su ayuda al pasar el cursor o tocar
-        const ayuda = document.createElement('div');
-        ayuda.className = 'captura-tendencia__ayuda';
-        ayuda.hidden = true;
-        const mostrar = (q, texto) => {
-            ayuda.innerHTML = texto;
-            ayuda.hidden = false;
-            const izquierda = Math.min(X(q.x) + 10, ancho - 190);
-            ayuda.style.left = `${Math.max(izquierda, 0)}px`;
-            ayuda.style.top = `${Math.max(Y(q.y) - 52, 0)}px`;
-        };
-        const punto = (q, clase, texto) => {
-            el('circle', { cx: X(q.x), cy: Y(q.y), r: clase.includes('vivo') ? 6 : 4.5, class: clase }, svg);
-            const zonaToque = el('circle', { cx: X(q.x), cy: Y(q.y), r: 12, class: 'tg-toque' }, svg);
-            zonaToque.addEventListener('mouseenter', () => mostrar(q, texto));
-            zonaToque.addEventListener('click', () => mostrar(q, texto));
-            zonaToque.addEventListener('mouseleave', () => { ayuda.hidden = true; });
-        };
-        const unidad = p.unidad ? ` ${esc(p.unidad)}` : '';
-        puntos.forEach(q => {
-            const estado = q.fuera_especificacion ? ' tg-punto--fuera' : q.fuera_alerta ? ' tg-punto--alerta' : '';
-            const resaltado = tomaActual && q.toma === tomaActual ? ' tg-punto--actual' : '';
-            punto(q, `tg-punto${estado}${resaltado}`, `<strong>${esc(corto(q.y))}${unidad}</strong> a ${esc(corto(q.x))} h<br>${esc(q.tarea)}${q.adicional ? ' · adicional' : ''}<br>${fechaHora(q.momento)}${q.fuera_especificacion ? '<br>🚨 Fuera de especificación' : q.fuera_alerta ? '<br>⚠️ Fuera de alerta' : ''}`);
-        });
-        if (actual) punto(actual, 'tg-punto tg-punto--vivo', `<strong>${esc(corto(actual.y))}${unidad}</strong> a ${esc(corto(actual.x))} h<br>Valor que estás capturando`);
-
-        lienzo.innerHTML = '';
-        lienzo.appendChild(svg);
-        lienzo.appendChild(ayuda);
-
-        const items = [];
-        if (puntos.length) items.push(`<span><i class="tg-l tg-l--historial"></i>Registros anteriores (${puntos.length})</span>`);
-        if (actual) items.push('<span><i class="tg-l tg-l--vivo"></i>Valor actual</span>');
-        if (curvaVisible.length > 1) items.push('<span><i class="tg-l tg-l--curva"></i>Curva esperada</span>');
-        if (objetivo !== null) items.push('<span><i class="tg-l tg-l--esperado"></i>Esperado fijo</span>');
-        if (lineas.some(l => l.tipo === 'fuera')) items.push('<span><i class="tg-l tg-l--fuera"></i>Especificación</span>');
-        if (lineas.some(l => l.tipo === 'alerta')) items.push('<span><i class="tg-l tg-l--alerta"></i>Alerta</span>');
-        leyenda.innerHTML = items.join('');
         const notas = [];
         if (!puntos.length) notas.push('Aún no hay datos anteriores de este parámetro en la etapa.');
         if (sinEdad) notas.push(`${sinEdad} registro(s) sin edad (falta la edad 0) no se grafican.`);
-        if (curva.length && curvaVisible.length < 2) notas.push('La curva esperada queda fuera de este rango de edades.');
-        nota.textContent = notas.join(' ');
+        if ((ref.curva || []).length && !r.curvaVisible) notas.push('La curva esperada queda fuera de este rango de edades.');
+        panel.querySelector('.captura-tendencia__nota').textContent = notas.join(' ');
     }
 
     // Firma con PIN para la terminal (en web se usa ejecutarConFirma de firma.js)

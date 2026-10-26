@@ -12,7 +12,7 @@ from auditoria.models import FirmaElectronica, RegistroAuditoria
 from procesos.models import AsignacionFaseOperador, EtapaProceso, FaseLote, LoteProduccion, OperacionProceso, ProcesoMaestro
 from roster.models import Cuadrilla, Operador, RolOperador
 from .formulas import ErrorFormula, evaluar, variables
-from .models import ParametroProceso, SeccionCaptura, TomaDatos, ValorParametro
+from .models import IndicadorProceso, ParametroProceso, SeccionCaptura, TomaDatos, ValorParametro
 from .services import edades_cero
 
 
@@ -429,3 +429,118 @@ class EdadCeroTests(CapturaBase):
         ceros = edades_cero(self.lote)
         self.assertIn('no hay actividad de edad 0', ceros[self.etapa.id]['origen'])
         self.assertEqual(ceros[self.etapa.id]['momento'], self.actividad(self.t1).inicio_programado)
+
+
+class CalculosAnalisisTests(TestCase):
+
+    def test_area_por_trapecios_e_interpolacion(self):
+        from .services import area_curva_entre, area_trapecios, interpolar
+        self.assertEqual(area_trapecios([(0, 1), (10, 3), (10, 9), (20, 3)]), 80.0)  # 20 + 60: el tramo sin avance de edad no suma
+        curva = [[0, 0], [10, 10], [20, 10]]
+        self.assertEqual(interpolar(curva, 5), 5)
+        self.assertEqual(interpolar(curva, -3), 0)
+        self.assertEqual(interpolar(curva, 99), 10)
+        self.assertEqual(area_curva_entre(curva, 5, 15), 37.5 + 50)  # 5→10 h sube de 5 a 10; 10→15 h se queda en 10
+
+
+class AnalisisTests(CapturaBase):
+    """Células a las 0 h (0.3) y a las 24 h (0.5) → ABC = 9.6; curva esperada 0.3 → 0.7 → área 12 → apego 80 %."""
+
+    def setUp(self):
+        super().setUp()
+        from .services import generar_plan_captura
+        self.web = APIClient()
+        self.web.force_authenticate(usuario_con_rol('ingeniera', 'Ingeniería de procesos'))
+        ps = SeccionCaptura.objects.get(operacion=self.t2, nombre='Cuenta').parametros.get(parametro=self.celulas)
+        ps.curva_referencia = [[0, 0.3], [24, 0.7]]
+        ps.save()
+        generar_plan_captura(self.lote)
+        hito = timezone.now() - timedelta(hours=30)
+        self.forzar(self.actividad(self.t1), 'COMPLETADA', hito)
+        self.forzar(self.actividad(self.t2), 'EN_PROGRESO', hito)
+        for indice, horas, celulas in ((0, 0, '0.3'), (4, 24, '0.5')):
+            fase = self.forzar(self.muestreo(indice), 'EN_PROGRESO', hito)
+            r = self.registrar(self.admin, fase, {**self.valores_reactor(), self.glucosa.id: '4', self.celulas.id: celulas,
+                                                  self.viabilidad.id: '97'}, momento=(hito + timedelta(hours=horas)).isoformat())
+            self.assertEqual(r.status_code, 201, r.data)
+
+    def indicador(self, esperado=201, **datos):
+        r = self.web.post('/api/indicadores-proceso/', {'proceso': self.proceso.id, 'decimales': 2, **datos}, format='json')
+        self.assertEqual(r.status_code, esperado, r.data)
+        return r
+
+    def crear_indicadores(self):
+        self.indicador(codigo='abc_cel', nombre='ABC células', tipo='AREA', parametro=self.celulas.id)
+        self.indicador(codigo='apego', nombre='Apego', tipo='APEGO', parametro=self.celulas.id, etapa=self.etapa.id, meta_min='90')
+        self.indicador(codigo='gramos', nombre='Gramos estimados', tipo='FORMULA', formula='abc_cel * 10 - 5')
+        self.indicador(codigo='glu_final', nombre='Glucosa final', tipo='ULTIMO', parametro=self.glucosa.id)
+
+    def test_indicadores_del_lote(self):
+        self.crear_indicadores()
+        r = self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={self.lote.id}')
+        self.assertEqual(r.status_code, 200, r.data)
+        valores = r.data['valores_indicadores'][str(self.lote.id)]
+        self.assertEqual(valores['abc_cel']['valor'], 9.6)
+        self.assertEqual(valores['apego']['valor'], 80.0)
+        self.assertEqual(valores['gramos']['valor'], 91.0)
+        self.assertEqual(valores['glu_final']['valor'], 4.0)
+        celulas = next(p for p in r.data['parametros'] if p['codigo'] == 'celulas')
+        puntos = celulas['series'][str(self.lote.id)]   # [edad_lote, edad_etapa, valor, estado, adicional, momento, tarea]
+        self.assertEqual([q[2] for q in puntos], [0.3, 0.5])
+        self.assertAlmostEqual(puntos[1][0], 24, delta=0.05)
+        self.assertIn('M-24h', r.data['tareas'][puntos[1][6]])
+        self.assertEqual(celulas['referencia']['curva'], [[0.0, 0.3], [24.0, 0.7]])
+        temp = next(p for p in r.data['parametros'] if p['codigo'] == 'temp')
+        self.assertEqual(temp['limites']['especificacion_max'], '38')
+        self.assertTrue(RegistroAuditoria.objects.filter(categoria='RECETA', accion='CREAR', descripcion__icontains='indicador').exists())
+
+    def test_sin_curva_o_sin_datos_explica_por_que(self):
+        self.indicador(codigo='apego_glu', nombre='Apego glucosa', tipo='APEGO', parametro=self.glucosa.id)
+        self.indicador(codigo='abc_temp', nombre='ABC T3', tipo='AREA', parametro=self.temp.id, etapa=EtapaProceso.objects.create(
+            proceso=self.proceso, nombre='Producción', orden=2).id)
+        valores = self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={self.lote.id}').data['valores_indicadores'][str(self.lote.id)]
+        self.assertIsNone(valores['apego_glu']['valor'])
+        self.assertIn('curva esperada', valores['apego_glu']['nota'])
+        self.assertEqual(valores['abc_temp']['nota'], 'Sin datos')
+
+    def test_reglas_de_los_indicadores(self):
+        self.crear_indicadores()
+        otra = ProcesoMaestro.objects.create(nombre='Otra receta')
+        casos = [
+            ({'codigo': 'abc_cel', 'nombre': 'Repetido', 'tipo': 'AREA', 'parametro': self.celulas.id}, 'Ya hay'),
+            ({'codigo': 'g2', 'nombre': 'G2', 'tipo': 'FORMULA', 'formula': 'zz * 2'}, 'No existen'),
+            ({'codigo': 'g3', 'nombre': 'G3', 'tipo': 'FORMULA', 'formula': 'g3 + 1'}, 'propio'),
+            ({'codigo': 'asp', 'nombre': 'Asp', 'tipo': 'ULTIMO', 'parametro': self.aspecto.id}, 'numérico'),
+            ({'codigo': 'sin', 'nombre': 'Sin', 'tipo': 'AREA'}, 'Elige el parámetro'),
+            ({'codigo': 'e', 'nombre': 'E', 'tipo': 'AREA', 'parametro': self.celulas.id,
+              'etapa': EtapaProceso.objects.create(proceso=otra, nombre='X', orden=1).id}, 'no es de esta receta'),
+        ]
+        for datos, mensaje in casos:
+            with self.subTest(mensaje=mensaje):
+                self.assertIn(mensaje, str(self.indicador(esperado=400, **datos).data))
+        # circular: abc_cel no puede pasar a calcularse con gramos (gramos → abc_cel)
+        abc = IndicadorProceso.objects.get(proceso=self.proceso, codigo='abc_cel')
+        r = self.web.patch(f'/api/indicadores-proceso/{abc.id}/', {'tipo': 'FORMULA', 'formula': 'gramos / 2'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('circular', str(r.data))
+
+    def test_operador_no_configura_y_clonar_copia_indicadores(self):
+        operador = APIClient()
+        operador.force_authenticate(usuario_con_rol('op', 'Operador'))
+        r = operador.post('/api/indicadores-proceso/', {'proceso': self.proceso.id, 'codigo': 'x', 'nombre': 'X', 'tipo': 'AREA',
+                                                        'parametro': self.celulas.id}, format='json')
+        self.assertEqual(r.status_code, 403)
+        self.crear_indicadores()
+        r = self.admin.post(f'/api/procesos-maestros/{self.proceso.id}/clonar/', {'nuevo_nombre': 'EPO copia'}, format='json')
+        copia = IndicadorProceso.objects.get(proceso_id=r.data['nuevo_id'], codigo='apego')
+        self.assertNotEqual(copia.etapa_id, self.etapa.id)
+        self.assertEqual(copia.etapa.nombre, 'PO4')
+
+    def test_lotes_de_la_receta_y_limite_de_lotes(self):
+        r = self.web.get(f'/api/analisis-proceso/lotes/?proceso={self.proceso.id}')
+        self.assertEqual(r.data['lotes'][0]['tomas'], 2)
+        self.assertEqual(r.data['etapas'][0]['nombre'], 'PO4')
+        muchos = ','.join(str(i) for i in range(1, 202))
+        self.assertEqual(self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={muchos}').status_code, 400)
+        repetidos = ','.join(str(self.lote.id) for _ in range(300))   # los repetidos cuentan una vez
+        self.assertEqual(len(self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={repetidos}').data['lotes']), 1)

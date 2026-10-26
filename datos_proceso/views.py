@@ -12,14 +12,14 @@ from rest_framework.response import Response
 
 from auditoria.mixins import AuditoriaMixin
 from auditoria.services import firmar, quien, registrar
-from procesos.models import AsignacionFaseOperador, FaseLote, LoteProduccion
+from procesos.models import AsignacionFaseOperador, FaseLote, LoteProduccion, ProcesoMaestro
 from usuarios.firmas import FirmaRechazada, verificar_firma
 from usuarios.permisos import PermisoCaptura, SOLO_SESION, operador_de_sesion, tiene_permiso
 from .formulas import ErrorFormula, evaluar
-from .models import ParametroProceso, TomaDatos
-from .serializers import ParametroProcesoSerializer
+from .models import IndicadorProceso, ParametroProceso, TomaDatos
+from .serializers import IndicadorProcesoSerializer, ParametroProcesoSerializer
 from .services import (
-    MOTIVO_MINIMO, ErrorCaptura, avisos_limites, corregir_valor, detalle_captura, nombre_fase, operacion_admite_adicional,
+    MAX_LOTES_ANALISIS, MOTIVO_MINIMO, ErrorCaptura, analisis_lotes, avisos_limites, corregir_valor, detalle_captura, nombre_fase, operacion_admite_adicional,
     plan_de_operacion, preparar_valores, registrar_toma, registrar_toma_adicional, tabla_lote, texto_decimal,
     validar_formula_parametro,
 )
@@ -226,3 +226,65 @@ class CapturaViewSet(viewsets.ViewSet):
         except (LoteProduccion.DoesNotExist, ValueError, TypeError):
             raise NotFound("El lote no existe.")
         return Response(tabla_lote(lote))
+
+
+class IndicadorProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
+    """
+    Indicadores de una receta (?proceso=<id>). Sin DELETE: se desactivan (`activo=false`).
+    Se calculan por lote en /api/analisis-proceso/.
+    """
+    auditoria_categoria, auditoria_nombre = 'RECETA', 'indicador de proceso'
+    auditoria_excluir = ('tipo_display', 'parametro_nombre', 'parametro_unidad', 'etapa_nombre')
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
+    serializer_class = IndicadorProcesoSerializer
+    permiso_escritura = 'editar_receta'
+
+    def get_queryset(self):
+        qs = IndicadorProceso.objects.select_related('parametro', 'etapa', 'proceso')
+        proceso = self.request.query_params.get('proceso')
+        if proceso:
+            qs = qs.filter(proceso_id=proceso)
+        return qs
+
+
+class AnalisisProcesoViewSet(viewsets.ViewSet):
+    """
+    Gráficas de proceso (solo lectura):
+      GET /api/analisis-proceso/?proceso=<id>&lotes=1,2,3[&etapa=<id>]   series por parámetro, curvas e indicadores
+      GET /api/analisis-proceso/lotes/?proceso=<id>                       lotes de la receta con cuántas tomas tienen
+    """
+
+    def _proceso(self, request):
+        try:
+            return ProcesoMaestro.objects.get(pk=int(request.query_params.get('proceso', '')))
+        except (ValueError, ProcesoMaestro.DoesNotExist):
+            raise NotFound("Elige una receta.")
+
+    def list(self, request):
+        proceso = self._proceso(request)
+        try:
+            ids = [int(x) for x in request.query_params.get('lotes', '').split(',') if x.strip()]
+            etapa = int(request.query_params['etapa']) if request.query_params.get('etapa') else None
+        except ValueError:
+            return Response({'error': "Lotes o etapa no válidos."}, status=status.HTTP_400_BAD_REQUEST)
+        ids = list(dict.fromkeys(ids))
+        if len(ids) > MAX_LOTES_ANALISIS:
+            return Response({'error': f"Elige hasta {MAX_LOTES_ANALISIS} lotes a la vez."}, status=status.HTTP_400_BAD_REQUEST)
+        if etapa and not proceso.etapas.filter(pk=etapa).exists():
+            return Response({'error': "La etapa no es de esta receta."}, status=status.HTTP_400_BAD_REQUEST)
+        lotes = {l.id: l for l in LoteProduccion.objects.filter(proceso_maestro=proceso, pk__in=ids)}
+        return Response(analisis_lotes(proceso, [lotes[i] for i in ids if i in lotes], etapa))
+
+    @action(detail=False, methods=['get'])
+    def lotes(self, request):
+        proceso = self._proceso(request)
+        qs = (LoteProduccion.objects.filter(proceso_maestro=proceso)
+              .annotate(tomas=Count('fases__tomas_datos', distinct=True)).order_by('-id'))
+        return Response({
+            'proceso': {'id': proceso.id, 'nombre': proceso.nombre},
+            'etapas': [{'id': e.id, 'nombre': e.nombre} for e in proceso.etapas.order_by('orden', 'id')],
+            'max_lotes': MAX_LOTES_ANALISIS,
+            'lotes': [{'id': l.id, 'identificador': l.identificador_lote, 'estado': l.estado,
+                       'estado_display': l.get_estado_display(), 'archivado': l.archivado, 'tomas': l.tomas,
+                       'inicio': l.fecha_inicio_planeada} for l in qs],
+        })

@@ -145,7 +145,7 @@ tbody tr:hover { background-color: rgba(255,255,255,0.02); }
 
 /* Historial del lote (bitácora de auditoría) */
 .encabezado-lote-acciones { display: inline-flex; align-items: center; gap: 0.5rem; }
-.btn-historial { padding: 0.25rem 0.6rem; font-size: 0.7rem; }
+.btn-historial { padding: 0.25rem 0.6rem; font-size: 0.7rem; text-decoration: none; }
 .modal-historial { width: 640px; max-width: calc(100vw - 2rem); max-height: 85vh; display: flex; flex-direction: column; gap: 0.6rem; }
 .historial-ayuda { margin: 0; font-size: 0.72rem; color: var(--text-muted); }
 .historial-contenido { overflow-y: auto; padding-right: 0.25rem; }

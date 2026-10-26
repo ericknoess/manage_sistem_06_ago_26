@@ -12,6 +12,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from procesos.models import FaseLote, OperacionProceso
@@ -163,6 +164,18 @@ def clonar_secciones(operacion_origen, operacion_nueva):
                              **{campo: getattr(ps, campo) for campo in LIMITES})
             for ps in parametros
         ])
+
+
+def clonar_indicadores(proceso_origen, proceso_nuevo, mapa_etapas):
+    """Copia los indicadores de una receta a su clon (`mapa_etapas` = {etapa_id original: etapa nueva})."""
+    from .models import IndicadorProceso
+    copias = []
+    for ind in IndicadorProceso.objects.filter(proceso=proceso_origen):
+        ind.pk = None
+        ind.proceso = proceso_nuevo
+        ind.etapa = mapa_etapas.get(ind.etapa_id) if ind.etapa_id else None
+        copias.append(ind)
+    IndicadorProceso.objects.bulk_create(copias)
 
 
 # ==============================================================================
@@ -641,14 +654,7 @@ def tendencias(fase, planes, ceros):
                        parametro_id__in=ids, vigente=True, valor_numero__isnull=False)
                .select_related('toma__fase__operacion_maestra').order_by('toma__momento', 'id'))
     for v in valores:
-        toma = v.toma
-        resultado[str(v.parametro_id)].append({
-            'edad_etapa_h': edad_horas(toma.momento, ceros.get(etapa_id)),
-            'edad_lote_h': edad_horas(toma.momento, ceros.get('lote')),
-            'valor': float(v.valor_numero), 'tarea': nombre_fase(toma.fase), 'momento': toma.momento,
-            'adicional': toma.adicional, 'toma': toma.id,
-            'fuera_especificacion': v.fuera_especificacion, 'fuera_alerta': v.fuera_alerta,
-        })
+        resultado[str(v.parametro_id)].append(_punto(v, ceros))
     return resultado
 
 
@@ -717,4 +723,292 @@ def tabla_lote(lote):
         'lote': lote.identificador_lote, 'lote_id': lote.id,
         'edades_cero': {('lote' if k == 'lote' else str(k)): _cero_json(v) for k, v in ceros.items()},
         'parametros': list(columnas.values()), 'filas': filas,
+    }
+
+
+# ==============================================================================
+# ANÁLISIS: SERIES POR LOTE, CURVA ESPERADA E INDICADORES
+# ==============================================================================
+# Lo que hacía el "carnet" de Cultivo, configurable por receta: cada parámetro contra la edad y los indicadores
+# (área bajo la curva por trapecios, apego a la curva esperada, gramos estimados con una fórmula, etc.).
+# Los indicadores no se guardan: se calculan al consultar con los datos vigentes.
+
+MAX_LOTES_ANALISIS = 200   # en la gráfica, hasta 8 lotes destacados llevan color; el resto va en gris
+
+
+def _punto(v, ceros):
+    toma = v.toma
+    etapa_id = toma.fase.operacion_maestra.etapa_id
+    return {
+        'edad_etapa_h': edad_horas(toma.momento, ceros.get(etapa_id)),
+        'edad_lote_h': edad_horas(toma.momento, ceros.get('lote')),
+        'valor': float(v.valor_numero), 'tarea': nombre_fase(toma.fase), 'momento': toma.momento,
+        'adicional': toma.adicional, 'toma': toma.id, 'etapa_id': etapa_id,
+        'fuera_especificacion': v.fuera_especificacion, 'fuera_alerta': v.fuera_alerta,
+    }
+
+
+def fases_por_lote(lotes):
+    """{lote_id: [fases]} de varios lotes en una sola consulta."""
+    resultado = {lote.id: [] for lote in lotes}
+    for fase in FaseLote.objects.filter(lote__in=lotes).select_related('operacion_maestra'):
+        resultado[fase.lote_id].append(fase)
+    return resultado
+
+
+def series_lotes(lotes, parametro_ids=None, etapa_id=None, fases=None):
+    """
+    Valores numéricos vigentes de varios lotes: {lote_id: {parametro_id: [punto…]}} en orden de toma, y las edades 0
+    de cada lote {lote_id: ceros}. `etapa_id` limita a los datos de esa etapa. `fases` = fases_por_lote(lotes) (opcional).
+    Usa .values() para que alcance con cientos de lotes.
+    """
+    lotes = list(lotes)
+    fases = fases if fases is not None else fases_por_lote(lotes)
+    ceros = {lote.id: edades_cero(lote, fases[lote.id]) for lote in lotes}
+    filtro = Q(toma__fase__lote__in=lotes, vigente=True, valor_numero__isnull=False)
+    if parametro_ids is not None:
+        filtro &= Q(parametro_id__in=parametro_ids)
+    if etapa_id:
+        filtro &= Q(toma__fase__operacion_maestra__etapa_id=etapa_id)
+    filas = (ValorParametro.objects.filter(filtro).order_by('toma__momento', 'id').values_list(
+        'parametro_id', 'valor_numero', 'fuera_especificacion', 'fuera_alerta', 'toma_id', 'toma__momento', 'toma__adicional',
+        'toma__fase__lote_id', 'toma__fase__operacion_maestra__etapa_id', 'toma__fase__es_subtarea_muestreo',
+        'toma__fase__nombre_tarea_dinamica', 'toma__fase__operacion_maestra__nombre', 'toma__fase__operacion_maestra__identificador_paso'))
+    series = {lote.id: {} for lote in lotes}
+    for (pid, valor, fuera_esp, fuera_ale, toma_id, momento, adicional, lote_id, etapa, es_muestreo,
+         nombre_dinamico, nombre_op, paso) in filas:
+        cero = ceros[lote_id]
+        series[lote_id].setdefault(pid, []).append({
+            'edad_etapa_h': edad_horas(momento, cero.get(etapa)), 'edad_lote_h': edad_horas(momento, cero.get('lote')),
+            'valor': float(valor), 'tarea': f"[{paso}] {nombre_dinamico if es_muestreo and nombre_dinamico else nombre_op}",
+            'momento': momento, 'adicional': adicional, 'toma': toma_id, 'etapa_id': etapa,
+            'fuera_especificacion': fuera_esp, 'fuera_alerta': fuera_ale,
+        })
+    return series, ceros
+
+
+def _xy(puntos, eje):
+    """[(edad, valor)] ordenado por edad, sin puntos sin edad (falta la edad 0)."""
+    clave = 'edad_etapa_h' if eje == 'ETAPA' else 'edad_lote_h'
+    return sorted((p[clave], p['valor']) for p in puntos if p[clave] is not None)
+
+
+def area_trapecios(xy):
+    """Área bajo la curva por trapecios (como Cultivo: solo tramos con edad creciente)."""
+    total = 0.0
+    for (x0, y0), (x1, y1) in zip(xy, xy[1:]):
+        if x1 > x0:
+            total += (x1 - x0) * (y0 + y1) / 2
+    return total
+
+
+def interpolar(curva, x):
+    """Valor de la curva esperada en la edad x (lineal entre puntos; fuera del rango, el extremo más cercano)."""
+    if x <= curva[0][0]:
+        return curva[0][1]
+    for (x0, y0), (x1, y1) in zip(curva, curva[1:]):
+        if x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0) if x1 > x0 else y1
+    return curva[-1][1]
+
+
+def area_curva_entre(curva, desde, hasta):
+    """Área bajo la curva esperada entre dos edades."""
+    if hasta <= desde:
+        return 0.0
+    cortes = [desde] + [x for x, _ in curva if desde < x < hasta] + [hasta]
+    return area_trapecios([(x, interpolar(curva, x)) for x in cortes])
+
+
+def referencias_receta(proceso, etapa_id=None):
+    """
+    Configuración de cada parámetro numérico de la receta (la primera actividad que lo captura; en la etapa si se indica):
+    {parametro_id: {parametro, limites, referencia, etapa_id, orden}}.
+    """
+    usos = (ParametroSeccion.objects
+            .filter(seccion__operacion__proceso=proceso, parametro__tipo_dato='NUMERO')
+            .select_related('parametro', 'seccion__operacion')
+            .order_by('seccion__operacion__etapa__orden', 'seccion__operacion__orden', 'seccion__operacion_id',
+                      'seccion__orden', 'orden'))
+    if etapa_id:
+        usos = usos.filter(seccion__operacion__etapa_id=etapa_id)
+    resultado = {}
+    for ps in usos:
+        actual = resultado.get(ps.parametro_id)
+        if actual is None:
+            snapshot = _snapshot_parametro(ps)
+            snapshot['orden'] = len(resultado)
+            snapshot['etapa_id'] = ps.seccion.operacion.etapa_id
+            resultado[ps.parametro_id] = snapshot
+        elif not actual['referencia']['curva'] and ps.curva_referencia:
+            actual['referencia'] = _snapshot_parametro(ps)['referencia']  # la curva de otra actividad que sí la tiene
+    return resultado
+
+
+def curva_del_lote(lote, parametro_id, etapa_id=None, fases=None):
+    """Curva esperada y eje de un parámetro tal como se copiaron al lote; ([], 'LOTE') si no tiene."""
+    for fase in fases if fases is not None else lote.fases.select_related('operacion_maestra'):
+        if etapa_id and fase.operacion_maestra.etapa_id != etapa_id:
+            continue
+        for _, p in _parametros_de_plan(fase.plan_captura):
+            ref = p.get('referencia') or {}
+            if p['parametro'] == parametro_id and ref.get('curva'):
+                return ref['curva'], ref.get('eje_edad', 'LOTE')
+    return [], 'LOTE'
+
+
+def _redondear_float(valor, decimales):
+    return None if valor is None else round(valor, int(decimales or 0))
+
+
+def calcular_indicadores(lote, indicadores, series=None, fases=None):
+    """
+    Valor de cada indicador para un lote: {codigo: {'valor': float|None, 'nota': texto}}.
+    `series` = {parametro_id: [punto…]} del lote (todas las etapas); si no se pasa, se consulta.
+    """
+    indicadores = list(indicadores)
+    if series is None:
+        series = series_lotes([lote])[0][lote.id]
+    if fases is None:
+        fases = list(lote.fases.select_related('operacion_maestra'))
+    resultados = {}
+    for ind in indicadores:
+        if ind.tipo == 'FORMULA':
+            continue
+        puntos = [p for p in series.get(ind.parametro_id, []) if not ind.etapa_id or p['etapa_id'] == ind.etapa_id]
+        curva, eje = ([], ind.eje_edad)
+        if ind.tipo == 'APEGO':
+            curva, eje = curva_del_lote(lote, ind.parametro_id, ind.etapa_id, fases)  # se integra contra la edad de la curva
+        xy = _xy(puntos, eje)
+        valor, nota = None, ''
+        if not puntos:
+            nota = 'Sin datos'
+        elif ind.tipo == 'ULTIMO':
+            valor = puntos[-1]['valor']
+        elif ind.tipo == 'MAXIMO':
+            valor = max(p['valor'] for p in puntos)
+        elif len(xy) < 2:
+            nota = 'Se necesitan al menos dos datos con edad'
+        elif ind.tipo == 'AREA':
+            valor = area_trapecios(xy)
+        elif ind.tipo == 'APEGO':
+            if not curva:
+                nota = 'El parámetro no tiene curva esperada en la receta'
+            else:
+                esperada = area_curva_entre(curva, xy[0][0], xy[-1][0])
+                if esperada:
+                    valor = area_trapecios(xy) / esperada * 100
+                    nota = f"Hasta {xy[-1][0]:.0f} h"
+                else:
+                    nota = 'La curva esperada da área cero en ese rango'
+        resultados[ind.codigo] = {'valor': _redondear_float(valor, ind.decimales), 'nota': nota}
+
+    # Fórmulas: pueden usar a otras fórmulas (se resuelven en orden de dependencia)
+    conocidos = {c: r['valor'] for c, r in resultados.items() if r['valor'] is not None}
+    pendientes = [ind for ind in indicadores if ind.tipo == 'FORMULA']
+    for _ in range(len(pendientes)):
+        avance = False
+        for ind in pendientes:
+            if ind.codigo in resultados:
+                continue
+            try:
+                valor = evaluar(ind.formula, conocidos)
+            except ErrorFormula:
+                valor = None
+            if valor is None:
+                continue
+            resultados[ind.codigo] = {'valor': _redondear_float(valor, ind.decimales), 'nota': ''}
+            conocidos[ind.codigo] = resultados[ind.codigo]['valor']
+            avance = True
+        if not avance:
+            break
+    for ind in pendientes:
+        resultados.setdefault(ind.codigo, {'valor': None, 'nota': 'Faltan los indicadores que usa'})
+    return resultados
+
+
+def validar_formula_indicador(formula, codigo_propio, otros):
+    """
+    Revisa la fórmula de un indicador: que use códigos de otros indicadores de la receta y sin referencias circulares.
+    `otros` = {codigo: formula ('' si no es fórmula)}. Lanza ErrorFormula.
+    """
+    usadas = variables(formula)
+    faltan = [c for c in usadas if c not in otros or c == codigo_propio]
+    if codigo_propio in usadas:
+        raise ErrorFormula("La fórmula no puede usar su propio indicador.")
+    if faltan:
+        raise ErrorFormula(f"No existen en esta receta los indicadores: {', '.join(faltan)}.")
+    pendientes, vistos = list(usadas), set()
+    while pendientes:
+        codigo = pendientes.pop()
+        if codigo in vistos:
+            continue
+        vistos.add(codigo)
+        if otros.get(codigo):
+            try:
+                internas = variables(otros[codigo])
+            except ErrorFormula:
+                continue
+            if codigo_propio in internas:
+                raise ErrorFormula(f"Referencia circular: «{codigo}» ya se calcula a partir de este indicador.")
+            pendientes.extend(internas)
+    return usadas
+
+
+def _compactar(puntos, tareas):
+    """Puntos para el navegador en forma corta: [edad_lote, edad_etapa, valor, estado (0 ok, 1 alerta, 2 fuera),
+    adicional (0/1), momento (segundos epoch), índice de la tarea en `tareas`]."""
+    salida = []
+    for p in puntos:
+        tarea = tareas.setdefault(p['tarea'], len(tareas))
+        estado = 2 if p['fuera_especificacion'] else 1 if p['fuera_alerta'] else 0
+        salida.append([p['edad_lote_h'], p['edad_etapa_h'], p['valor'], estado, int(p['adicional']),
+                       int(p['momento'].timestamp()), tarea])
+    return salida
+
+
+def analisis_lotes(proceso, lotes, etapa_id=None):
+    """
+    Datos de la pantalla de gráficas: por cada parámetro numérico de la receta (en la etapa), una serie por lote
+    (puntos compactos, ver `_compactar`), con sus límites y curva esperada, y los indicadores de cada lote.
+    """
+    from .models import IndicadorProceso
+    lotes = list(lotes)[:MAX_LOTES_ANALISIS]
+    referencias = referencias_receta(proceso, etapa_id)
+    fases = fases_por_lote(lotes)
+    series, ceros = series_lotes(lotes, fases=fases)   # todas las etapas: los indicadores pueden ser de otra etapa
+    indicadores = list(IndicadorProceso.objects.filter(proceso=proceso, activo=True).select_related('parametro', 'etapa'))
+
+    tareas = {}
+    parametros = []
+    for pid, ref in sorted(referencias.items(), key=lambda par: par[1]['orden']):
+        por_lote = {}
+        for lote in lotes:
+            puntos = [p for p in series[lote.id].get(pid, []) if not etapa_id or p['etapa_id'] == etapa_id]
+            if puntos:
+                por_lote[str(lote.id)] = _compactar(puntos, tareas)
+        parametros.append({
+            'parametro': pid, 'codigo': ref['codigo'], 'nombre': ref['nombre'], 'unidad': ref['unidad'],
+            'decimales': ref['decimales'], 'calculado': bool(ref['formula']), 'limites': ref['limites'],
+            'referencia': ref['referencia'], 'series': por_lote,
+        })
+
+    lotes_json, valores = [], {}
+    ahora = timezone.now()
+    for lote in lotes:
+        valores[str(lote.id)] = calcular_indicadores(lote, indicadores, series[lote.id], fases[lote.id])
+        abierto = lote.estado not in ('COMPLETADO', 'ABORTADO')
+        lotes_json.append({
+            'id': lote.id, 'identificador': lote.identificador_lote, 'estado': lote.estado,
+            'estado_display': lote.get_estado_display(),
+            'edad_actual_h': edad_horas(ahora, ceros[lote.id].get('lote')) if abierto else None,
+        })
+    return {
+        'proceso': proceso.id, 'etapa': etapa_id, 'lotes': lotes_json, 'parametros': parametros,
+        'tareas': list(tareas),   # en orden de índice
+        'indicadores': [{
+            'codigo': i.codigo, 'nombre': i.nombre, 'unidad': i.unidad, 'tipo': i.tipo, 'tipo_display': i.get_tipo_display(),
+            'decimales': i.decimales, 'meta_min': texto_decimal(i.meta_min), 'meta_max': texto_decimal(i.meta_max),
+        } for i in indicadores],
+        'valores_indicadores': valores,
     }

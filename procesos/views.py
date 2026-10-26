@@ -53,7 +53,7 @@ from .services import (
     advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
     ErrorSurtido, operadores_disponibles,
 )
-from datos_proceso.services import clonar_secciones, datos_pendientes, generar_plan_captura, resumen_captura
+from datos_proceso.services import clonar_indicadores, clonar_secciones, datos_pendientes, generar_plan_captura, resumen_captura
 
 
 # ==============================================================================
@@ -162,6 +162,8 @@ class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
                 if nueva_op_predecesora:
                     nueva_op_actual.predecesora = nueva_op_predecesora
                     nueva_op_actual.save()
+
+        clonar_indicadores(original, nuevo_proceso, mapa_etapas)
 
         registrar(request, 'RECETA', 'CLONAR', f"Receta '{original.nombre}' clonada como '{nuevo_nombre}'", objeto=nuevo_proceso,
                   cambios={'origen': [None, original.nombre], 'actividades': [None, len(mapa_ops)]})

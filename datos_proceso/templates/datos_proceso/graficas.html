@@ -1,0 +1,192 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gráficas de Proceso - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/graficas.css' %}">
+    <link rel="stylesheet" href="{% static 'datos_proceso/css/graficas_proceso.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📉 Gráficas de Proceso</h2>
+            <p>Elige los lotes en la pestaña <strong>Lotes</strong> (hasta 200) y compáralos en <strong>Gráficas</strong>: cada parámetro contra la edad, con la curva esperada, los límites y la banda de los lotes. Hasta 8 lotes destacados llevan color.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'catalogo-parametros' %}" class="btn-secundario">📈 Catálogo de parámetros</a>
+            <a href="{% url 'procesos-index' %}" class="btn-secundario">🧫 Diseñador de procesos</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Receta y etapa">
+        <div class="grupo-filtros">
+            <label class="filtro-etiquetado">Receta
+                <select id="filtroProceso" onchange="cambiarProceso()"><option value="">Cargando…</option></select>
+            </label>
+            <label class="filtro-etiquetado">Etapa
+                <select id="filtroEtapa" onchange="cambiarEtapa()"><option value="">Todo el lote</option></select>
+            </label>
+        </div>
+        <button class="btn-secundario" id="btnIndicadores" onclick="abrirIndicadores()" disabled>⚙️ Indicadores de la receta</button>
+    </section>
+
+    <nav class="pestanas" role="tablist" aria-label="Secciones">
+        <button type="button" role="tab" class="pestana" data-pestana="lotes" onclick="mostrarPestana('lotes')">🧪 Lotes <span class="pestana__conteo" id="conteoPestanaLotes">0</span></button>
+        <button type="button" role="tab" class="pestana" data-pestana="graficas" onclick="mostrarPestana('graficas')">📈 Gráficas</button>
+        <button type="button" role="tab" class="pestana" data-pestana="indicadores" onclick="mostrarPestana('indicadores')">📐 Indicadores</button>
+    </nav>
+
+    <!-- PESTAÑA: LOTES -->
+    <section class="panel-pestana" data-panel="lotes" hidden>
+        <div class="barra-herramientas barra-lotes">
+            <div class="grupo-filtros">
+                <input type="search" id="buscarLote" placeholder="🔎 Lote…" oninput="pintarTablaLotes()">
+                <select id="filtroEstadoLote" onchange="pintarTablaLotes()">
+                    <option value="">Todos los estados</option>
+                    <option value="EN_CURSO">En curso (o con desviación)</option>
+                    <option value="COMPLETADO">Completados</option>
+                    <option value="ABORTADO">Abortados</option>
+                    <option value="PLANEADO">Planeados</option>
+                </select>
+                <label class="filtro-etiquetado">Inicio desde <input type="date" id="filtroDesde" onchange="pintarTablaLotes()"></label>
+                <label class="filtro-etiquetado">hasta <input type="date" id="filtroHasta" onchange="pintarTablaLotes()"></label>
+                <label class="filtro-check"><input type="checkbox" id="filtroConDatos" checked onchange="pintarTablaLotes()"> Solo con datos</label>
+                <label class="filtro-check"><input type="checkbox" id="filtroArchivados" onchange="pintarTablaLotes()"> Incluir archivados</label>
+            </div>
+            <div class="grupo-filtros">
+                <button type="button" class="btn-secundario" onclick="elegirFiltrados(true)">✔ Elegir los filtrados</button>
+                <button type="button" class="btn-secundario" onclick="elegirFiltrados(false)">✖ Quitar los filtrados</button>
+                <button type="button" class="btn-primario" onclick="mostrarPestana('graficas')">Ver gráficas →</button>
+            </div>
+        </div>
+        <div class="resumen-lotes" id="resumenLotes"></div>
+        <div class="panel">
+            <div class="tabla-contenedor tabla-lotes">
+                <table class="tabla-catalogo">
+                    <thead><tr>
+                        <th class="col-check"><input type="checkbox" id="checkTodos" title="Elegir o quitar los lotes filtrados" onchange="elegirFiltrados(this.checked)"></th>
+                        <th>Lote</th><th>Estado</th><th>Inicio planeado</th><th title="Tomas de datos registradas">Tomas</th>
+                        <th title="Los lotes destacados llevan color en las gráficas (máx. 8)">Destacar</th>
+                    </tr></thead>
+                    <tbody id="cuerpoLotes"><tr><td colspan="6" class="estado-vacio">Elige una receta.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- PESTAÑA: GRÁFICAS -->
+    <section class="panel-pestana" data-panel="graficas" hidden>
+        <div class="barra-graficas">
+            <div class="destacados">
+                <span class="destacados__titulo">Destacados</span>
+                <span id="chipsDestacados" class="destacados__chips"></span>
+                <input type="search" id="buscarDestacar" list="listaDestacar" placeholder="➕ Destacar lote…" onchange="destacarPorNombre(this)">
+                <datalist id="listaDestacar"></datalist>
+            </div>
+            <div class="grupo-filtros">
+                <label class="interruptor"><input type="checkbox" id="opcionBanda" onchange="cambiarOpcion()"> Banda P10–P90 y mediana</label>
+                <label class="interruptor"><input type="checkbox" id="opcionPuntos" onchange="cambiarOpcion()"> Puntos de todos los lotes</label>
+                <button type="button" class="btn-secundario" id="btnRestablecerZoom" onclick="restablecerZoom()" hidden>↺ Restablecer zoom</button>
+            </div>
+        </div>
+        <div class="filtro-parametros" id="filtroParametros"></div>
+        <p class="pista-graficas">🖱️ Arrastra sobre una gráfica para acercar (las de la misma edad se acercan juntas) · doble clic para volver · clic en una línea para destacarla.</p>
+        <div id="rejillaGraficas" class="rejilla-graficas"></div>
+    </section>
+
+    <!-- PESTAÑA: INDICADORES -->
+    <section class="panel-pestana" data-panel="indicadores" hidden>
+        <div class="panel">
+            <div class="tabla-contenedor tabla-contenedor--auto">
+                <table class="tabla-catalogo tabla-indicadores" id="tablaIndicadores">
+                    <tbody><tr><td class="estado-vacio">Elige una receta y sus lotes.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+        <p class="pista-graficas">Clic en un encabezado para ordenar · clic en un lote para destacarlo en las gráficas.</p>
+    </section>
+
+    <!-- MODAL: GRÁFICA AMPLIADA -->
+    <div class="modal-overlay modal-grafica" id="modalGrafica" style="display: none;" onclick="if (event.target === this) cerrarGraficaGrande()">
+        <div class="modal-grafica__caja" role="dialog" aria-modal="true" aria-label="Gráfica ampliada">
+            <div class="modal-grafica__barra">
+                <button type="button" class="btn-navegar" onclick="moverGraficaGrande(-1)" title="Parámetro anterior (←)">◀</button>
+                <span id="posicionGrafica" class="modal-grafica__posicion"></span>
+                <button type="button" class="btn-navegar" onclick="moverGraficaGrande(1)" title="Parámetro siguiente (→)">▶</button>
+                <span class="modal-grafica__pista">Arrastra para acercar · doble clic para volver · clic en una línea para destacarla</span>
+                <button type="button" class="btn-cerrar-grafica" onclick="cerrarGraficaGrande()" title="Cerrar (Esc)">✕</button>
+            </div>
+            <article class="tarjeta-grafica tarjeta-grafica--grande" id="tarjetaGrande"></article>
+        </div>
+    </div>
+
+    <!-- MODAL: INDICADORES DE LA RECETA -->
+    <div class="modal-overlay" id="modalIndicadores" style="display: none;">
+        <div class="modal-content modal-indicadores">
+            <div class="modal-header">
+                <h3>⚙️ Indicadores de <span id="indicadoresReceta"></span></h3>
+                <button type="button" class="btn-icono" onclick="cerrarIndicadores()" title="Cerrar">✕</button>
+            </div>
+            <p class="ayuda-indicadores">Se calculan para cada lote con sus datos vigentes. <strong>Área</strong>: área bajo la curva por trapecios contra la edad
+                (ej. ABC de células, MCel·h/mL). <strong>Apego</strong>: área del lote entre el área de la curva esperada del parámetro (la que se pone
+                en el diseñador) en las mismas edades, en %. <strong>Fórmula</strong>: con los códigos de otros indicadores, ej. <code>abc_cel / 1000 - 5.5</code>.</p>
+            <div class="tabla-contenedor tabla-contenedor--auto">
+                <table class="tabla-catalogo">
+                    <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Cálculo</th><th>Meta</th><th>Estado</th><th class="col-acciones"></th></tr></thead>
+                    <tbody id="cuerpoIndicadores"></tbody>
+                </table>
+            </div>
+
+            <form id="formIndicador" class="formulario formulario--indicador" onsubmit="guardarIndicador(event)" data-permiso="editar_receta">
+                <div class="campo campo--ancho subtitulo-form" id="tituloFormIndicador">➕ Nuevo indicador</div>
+                <label class="campo"><span>Código *</span>
+                    <input type="text" id="indCodigo" maxlength="40" required placeholder="abc_cel" autocomplete="off"></label>
+                <label class="campo"><span>Nombre *</span>
+                    <input type="text" id="indNombre" maxlength="120" required placeholder="ABC de células"></label>
+                <label class="campo"><span>Tipo</span>
+                    <select id="indTipo" onchange="actualizarFormIndicador()">
+                        <option value="AREA">Área bajo la curva</option>
+                        <option value="APEGO">Apego a la curva esperada (%)</option>
+                        <option value="ULTIMO">Último valor</option>
+                        <option value="MAXIMO">Valor máximo</option>
+                        <option value="FORMULA">Fórmula con otros indicadores</option>
+                    </select></label>
+                <label class="campo"><span>Unidad</span>
+                    <input type="text" id="indUnidad" maxlength="30" placeholder="MCel·h/mL"></label>
+                <label class="campo" data-segun="parametro"><span>Parámetro *</span>
+                    <select id="indParametro"></select></label>
+                <label class="campo" data-segun="parametro"><span>Etapa</span>
+                    <select id="indEtapa"></select></label>
+                <label class="campo" data-segun="area"><span>Integrar contra</span>
+                    <select id="indEje"><option value="LOTE">Edad del lote</option><option value="ETAPA">Edad de la etapa</option></select></label>
+                <label class="campo campo--ancho" data-segun="formula"><span>Fórmula *</span>
+                    <input type="text" id="indFormula" maxlength="500" placeholder="abc_cel / 1000 - 5.5" autocomplete="off">
+                    <small id="ayudaCodigosIndicador"></small></label>
+                <label class="campo"><span>Decimales</span>
+                    <input type="number" id="indDecimales" min="0" max="6" value="1"></label>
+                <div class="campo campo--metas"><span>Meta (opcional)</span>
+                    <div class="metas"><input type="number" step="any" id="indMetaMin" placeholder="mín"> – <input type="number" step="any" id="indMetaMax" placeholder="máx"></div></div>
+                <label class="campo--check"><input type="checkbox" id="indActivo" checked> Activo (se calcula y se muestra)</label>
+                <div id="errorIndicador" class="error-formulario campo--ancho" hidden></div>
+                <div class="modal-actions campo--ancho">
+                    <button type="button" class="btn-secundario" onclick="nuevoIndicador()">Limpiar</button>
+                    <button type="submit" class="btn-primario">Guardar indicador</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'core/js/graficas.js' %}"></script>
+    <script src="{% static 'datos_proceso/js/graficas_proceso.js' %}"></script>
+</body>
+</html>
