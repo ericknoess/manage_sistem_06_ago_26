@@ -7,77 +7,40 @@ let globalMinDate = null;
 let globalMaxDate = null;
 
 async function initGantt() {
+    const todos = document.getElementById('chkGanttTodos')?.checked;
     try {
-        const response = await fetch('/api/lotes/');
+        // Barras ya agregadas por etapa en el servidor: no se traen las tareas (un lote puede tener miles)
+        const response = await fetch(`/api/lotes/gantt/${todos ? '?todos=1' : ''}`);
         if (!response.ok) throw new Error("Error fetching data");
-        const lotes = await response.json();
+        const datos = await response.json();
+        const aviso = document.getElementById('ganttOcultos');
+        if (aviso) aviso.textContent = datos.ocultos ? `${datos.ocultos} lotes terminados hace más de 30 días no se muestran.` : '';
 
-        procesarYRenderizar(lotes);
+        procesarYRenderizar(datos.lotes);
     } catch (error) {
         document.getElementById('loadingState').innerHTML = `<span style="color:var(--danger)">Error al cargar datos: ${error.message}</span>`;
     }
 }
 
 function procesarYRenderizar(lotes) {
+    globalMinDate = null;
+    globalMaxDate = null;
+    const fecha = v => (v ? new Date(v) : null);
     const lotesProcesados = lotes.map(lote => {
-        const etapasDict = {};
-        // Si la receta no tiene ninguna etapa, cada actividad es una fila; si solo faltan algunas, van juntas al final.
-        const sinEtapas = lote.fases.length > 0 && !lote.fases.some(f => f.etapa_id);
-
-        lote.fases.forEach(f => {
-            let clave, nombre, orden, tipo;
-            if (f.etapa_id) {
-                clave = `e${f.etapa_id}`; nombre = f.etapa_nombre; orden = f.etapa_orden; tipo = 'etapa';
-            } else if (sinEtapas) {
-                // Los muestreos se suman a la barra de su actividad
-                clave = `o${f.operacion_maestra}`; nombre = f.operacion_nombre; orden = 0; tipo = 'actividad';
-            } else {
-                clave = 'sin-etapa'; nombre = 'Sin etapa asignada'; orden = Number.MAX_SAFE_INTEGER; tipo = 'sin-etapa';
-            }
-            if (!etapasDict[clave]) {
-                etapasDict[clave] = { nombre, orden, tipo, fases: [] };
-            }
-            if (tipo === 'actividad' && !f.es_subtarea_muestreo) etapasDict[clave].nombre = f.operacion_nombre;
-            etapasDict[clave].fases.push(f);
-        });
-
-        const etapasArray = Object.values(etapasDict).map(etapa => {
-            let baseStart = null, baseEnd = null;
-            let progStart = null, progEnd = null;
-
-            etapa.fases.forEach(f => {
-                if (f.inicio_programado && f.fin_programado) {
-                    let start = new Date(f.inicio_programado);
-                    let end = new Date(f.fin_programado);
-
-                    if (!progStart || start < progStart) progStart = start;
-                    if (!progEnd || end > progEnd) progEnd = end;
-                }
-
-                if (f.inicio_base_cpm && f.fin_base_cpm) {
-                    let start = new Date(f.inicio_base_cpm);
-                    let end = new Date(f.fin_base_cpm);
-
-                    if (!baseStart || start < baseStart) baseStart = start;
-                    if (!baseEnd || end > baseEnd) baseEnd = end;
-                }
-            });
+        const etapasArray = lote.filas.map(fila => {
+            const baseStart = fecha(fila.base_inicio), baseEnd = fecha(fila.base_fin);
+            const progStart = fecha(fila.prog_inicio), progEnd = fecha(fila.prog_fin);
 
             if (baseStart && (!globalMinDate || baseStart < globalMinDate)) globalMinDate = new Date(baseStart);
             if (progStart && (!globalMinDate || progStart < globalMinDate)) globalMinDate = new Date(progStart);
             if (baseEnd && (!globalMaxDate || baseEnd > globalMaxDate)) globalMaxDate = new Date(baseEnd);
             if (progEnd && (!globalMaxDate || progEnd > globalMaxDate)) globalMaxDate = new Date(progEnd);
 
-            let delayHours = 0;
-            if (baseEnd && progEnd) delayHours = (progEnd - baseEnd) / MS_PER_HOUR;
-
-            return { ...etapa, baseStart, baseEnd, progStart, progEnd, delayHours };
+            const delayHours = (baseEnd && progEnd) ? (progEnd - baseEnd) / MS_PER_HOUR : 0;
+            return { nombre: fila.nombre, orden: fila.orden, tipo: fila.tipo, baseStart, baseEnd, progStart, progEnd, delayHours };
         });
-
-        // Mismo orden de etapa (o filas por actividad): primero lo que empieza antes
-        const inicio = e => (e.baseStart || e.progStart || new Date(8.64e15)).getTime();
-        etapasArray.sort((a, b) => (a.orden - b.orden) || (inicio(a) - inicio(b)));
-        return { ...lote, sinEtapas, etapasSummary: etapasArray };
+        // El servidor ya las manda en orden de etapa (o de actividad) y luego por inicio
+        return { ...lote, sinEtapas: lote.sin_etapas, etapasSummary: etapasArray };
     });
 
     if (!globalMinDate) globalMinDate = new Date();
@@ -263,4 +226,7 @@ function activarTooltipsInteractivos() {
     });
 }
 
-window.onload = initGantt;
+window.onload = () => {
+    document.getElementById('chkGanttTodos')?.addEventListener('change', initGantt);
+    initGantt();
+};

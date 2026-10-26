@@ -3,6 +3,7 @@
 let lotesGlobales = [];
 let procesosMaestrosGlobales = [];
 let loteSeleccionado = null;
+let fasesLoteActual = [];  // tareas del lote abierto (se piden con ?lote=)
 
 
 // Minutos de desviación en texto corto: 45m, 3h 20m, 14d 17h
@@ -158,9 +159,11 @@ async function renderizarDetalleLote() {
     `;
 
     try {
-        const resFases = await fetch('/api/fases-lote/');
-        const todasFases = await resFases.json();
-        const fasesLote = todasFases.filter(f => f.lote === loteSeleccionado.id);
+        // Solo las tareas de este lote (con cientos de lotes, pedir todas sería lentísimo)
+        const resFases = await fetch(`/api/fases-lote/?lote=${loteSeleccionado.id}`);
+        if (!resFases.ok) throw new Error('No se pudieron cargar las tareas del lote');
+        const fasesLote = await resFases.json();
+        fasesLoteActual = fasesLote;
 
         let fasesPorEtapa = {};
         fasesLote.forEach(fase => {
@@ -383,7 +386,7 @@ function abrirDatosFase(faseId) {
 async function cambiarEstadoFase(faseId, estadoActual) {
     let siguienteEstado = estadoActual === 'PENDIENTE' ? 'EN_PROGRESO' : (estadoActual === 'EN_PROGRESO' ? 'COMPLETADA' : null);
     if (!siguienteEstado) return;
-    const fase = loteSeleccionado ? loteSeleccionado.fases.find(f => f.id === faseId) : null;
+    const fase = fasesLoteActual.find(f => f.id === faseId) || null;
     const avisoDesviacion = estadoActual === 'PENDIENTE' && fase ? avisoVentanaInicio(fase) : '';
     const r = await ejecutarConFirma({
         avisoDesviacion,
@@ -511,7 +514,7 @@ function avisoVentanaInicio(fase) {
 
 // Usado por core/js/equipos.js para encontrar la fase de los modales
 function buscarFaseParaEquipos(faseId) {
-    return loteSeleccionado ? loteSeleccionado.fases.find(f => f.id === faseId) : null;
+    return fasesLoteActual.find(f => f.id === faseId) || null;
 }
 
 configurarEquipos({ alActualizar: () => cargarCatalogos() });

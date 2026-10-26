@@ -64,13 +64,13 @@ function navegarTiempo(direccion) {
         currentDateBase.setDate(currentDateBase.getDate() + direccion);
     }
     actualizarMecanismoTiempo();
-    renderGrillaActiva();
+    cargarDatosPlanificacion();
 }
 
 function irHoy() {
     currentDateBase = new Date();
     actualizarMecanismoTiempo();
-    renderGrillaActiva();
+    cargarDatosPlanificacion();
 }
 
 function cambiarModoVista(modo) {
@@ -82,19 +82,37 @@ function cambiarModoVista(modo) {
     document.getElementById('gridDiaria').style.display = modo === 'diaria' ? 'flex' : 'none';
 
     actualizarMecanismoTiempo();
-    renderGrillaActiva();
+    cargarDatosPlanificacion();
 }
 
+// Ventana visible (semana de lunes a domingo, o el día) en hora local, para pedir solo sus tareas
+function ventanaVisible() {
+    const desde = modoVista === 'semanal' ? obtenerLunes(currentDateBase) : new Date(currentDateBase);
+    desde.setHours(0, 0, 0, 0);
+    const hasta = new Date(desde);
+    hasta.setDate(hasta.getDate() + (modoVista === 'semanal' ? 7 : 1));
+    return { desde, hasta };
+}
+
+let consultaPlanificacion = 0;  // descarta respuestas viejas si se navega rápido
+
 async function cargarDatosPlanificacion() {
+    const consulta = ++consultaPlanificacion;
+    const { desde, hasta } = ventanaVisible();
+    // Solo las tareas que se cruzan con lo que se ve: con cientos de lotes, pedirlas todas sería lentísimo.
+    // Los cruces de operador se revisan con estas mismas tareas (una tarea visible solo choca con otras que también se ven).
+    const urlFases = `/api/fases-lote/?desde=${encodeURIComponent(desde.toISOString())}&hasta=${encodeURIComponent(hasta.toISOString())}`;
     try {
         const [resFases, resOp, resMat, resAlertas] = await Promise.all([
-            fetch('/api/fases-lote/'), fetch('/api/operadores/?activo=true'),
+            fetch(urlFases), fetch('/api/operadores/?activo=true'),
             fetch('/api/materiales/'), fetch('/api/fases-lote/alertas/')
         ]);
 
         if (!resFases.ok) throw new Error('Error de red');
+        const fases = await resFases.json();
+        if (consulta !== consultaPlanificacion) return;
 
-        fasesGlobales = await resFases.json();
+        fasesGlobales = fases;
         operadoresGlobales = await resOp.json();
         materialesGlobales = await resMat.json();
         alertasGlobales = resAlertas.ok ? await resAlertas.json() : {};

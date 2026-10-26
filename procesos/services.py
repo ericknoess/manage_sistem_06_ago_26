@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Min, Q
 from roster.models import TurnoDia, Operador
 from .models import (
     OperacionProceso, RequerimientoPersonalFase, FaseLote, AsignacionFaseOperador,
@@ -1247,3 +1247,61 @@ def materiales_por_surtir(ahora=None, horas=48):
     filas = requerimientos_materiales(ahora - timedelta(days=3), ahora + timedelta(hours=horas))
     filas = [mf for mf in filas if mf.fase.estado in ('PENDIENTE', 'EN_PROGRESO') and mf.fase.lote.estado in ('PLANEADO', 'EN_PROGRESO')]
     return [mf for mf in filas if resumen_surtido(mf)['estado'] != 'COMPLETO']
+
+
+# ==============================================================================
+# GANTT: BARRAS POR ETAPA (AGREGADAS EN LA BASE, SIN TRAER CADA TAREA)
+# ==============================================================================
+
+ESTADOS_LOTE_ABIERTO = ('PLANEADO', 'EN_PROGRESO', 'DESVIACION')
+
+
+def lotes_para_gantt(lotes, todos=False, dias_terminados=30, ahora=None):
+    """Lotes abiertos y los terminados en los últimos `dias_terminados` días (o todos). Devuelve (lotes, ocultos)."""
+    if todos:
+        return lotes, 0
+    limite = (ahora or timezone.now()) - timedelta(days=dias_terminados)
+    con_fin = lotes.annotate(fin_gantt=Max('fases__fin_programado'))
+    visibles = con_fin.filter(Q(estado__in=ESTADOS_LOTE_ABIERTO) | Q(fin_gantt__gte=limite) | Q(fin_gantt__isnull=True))
+    return visibles, con_fin.count() - visibles.count()
+
+
+def resumen_gantt(lotes):
+    """
+    Una fila por etapa de cada lote con su barra de línea base (CPM) y la programada (forecast), calculadas con
+    Min/Max en la base. Sin etapas en la receta, una fila por actividad; las actividades sueltas van en «Sin etapa».
+    [{id, identificador_lote, estado, sin_etapas, filas: [{tipo, nombre, orden, base_inicio, base_fin, prog_inicio, prog_fin}]}]
+    """
+    lotes = list(lotes)
+    extremos = dict(base_inicio=Min('inicio_base_cpm'), base_fin=Max('fin_base_cpm'),
+                    prog_inicio=Min('inicio_programado'), prog_fin=Max('fin_programado'))
+    fases = FaseLote.objects.filter(lote__in=lotes)
+    por_etapa = (fases.filter(operacion_maestra__etapa__isnull=False)
+                 .values('lote_id', 'operacion_maestra__etapa_id', 'operacion_maestra__etapa__nombre',
+                         'operacion_maestra__etapa__orden').annotate(**extremos))
+    sueltas = (fases.filter(operacion_maestra__etapa__isnull=True)
+               .values('lote_id', 'operacion_maestra_id', 'operacion_maestra__nombre').annotate(**extremos))
+    filas = {lote.id: {'etapas': [], 'sueltas': []} for lote in lotes}
+    for f in por_etapa:
+        filas[f['lote_id']]['etapas'].append({'tipo': 'etapa', 'nombre': f['operacion_maestra__etapa__nombre'],
+                                              'orden': f['operacion_maestra__etapa__orden'], **{k: f[k] for k in extremos}})
+    for f in sueltas:
+        filas[f['lote_id']]['sueltas'].append({'tipo': 'actividad', 'nombre': f['operacion_maestra__nombre'], 'orden': 0,
+                                               **{k: f[k] for k in extremos}})
+    resultado = []
+    for lote in lotes:
+        etapas, sueltas = filas[lote.id]['etapas'], filas[lote.id]['sueltas']
+        sin_etapas = bool(sueltas) and not etapas
+        if not sin_etapas and sueltas:
+            # Actividades sin etapa en una receta con etapas: una sola fila al final
+            etapas.append({'tipo': 'sin-etapa', 'nombre': 'Sin etapa asignada', 'orden': 10 ** 9,
+                           'base_inicio': min((s['base_inicio'] for s in sueltas if s['base_inicio']), default=None),
+                           'base_fin': max((s['base_fin'] for s in sueltas if s['base_fin']), default=None),
+                           'prog_inicio': min((s['prog_inicio'] for s in sueltas if s['prog_inicio']), default=None),
+                           'prog_fin': max((s['prog_fin'] for s in sueltas if s['prog_fin']), default=None)})
+        lista = sueltas if sin_etapas else etapas
+        lejano = timezone.now().replace(year=9999)
+        lista.sort(key=lambda e: (e['orden'], e['base_inicio'] or e['prog_inicio'] or lejano))
+        resultado.append({'id': lote.id, 'identificador_lote': lote.identificador_lote, 'estado': lote.estado,
+                          'sin_etapas': sin_etapas, 'filas': lista})
+    return resultado

@@ -751,7 +751,7 @@ def _punto(v, ceros):
 def fases_por_lote(lotes):
     """{lote_id: [fases]} de varios lotes en una sola consulta."""
     resultado = {lote.id: [] for lote in lotes}
-    for fase in FaseLote.objects.filter(lote__in=lotes).select_related('operacion_maestra'):
+    for fase in FaseLote.objects.filter(lote__in=lotes).select_related('operacion_maestra').defer('plan_captura'):
         resultado[fase.lote_id].append(fase)
     return resultado
 
@@ -876,11 +876,16 @@ def estructura_receta(proceso, etapa_id=None):
 
 
 def curva_del_lote(lote, parametro_id, etapa_id=None, fases=None):
-    """Curva esperada y eje de un parámetro tal como se copiaron al lote; ([], 'LOTE') si no tiene."""
-    for fase in fases if fases is not None else lote.fases.select_related('operacion_maestra'):
-        if etapa_id and fase.operacion_maestra.etapa_id != etapa_id:
-            continue
-        for _, p in _parametros_de_plan(fase.plan_captura):
+    """
+    Curva esperada y eje de un parámetro tal como se copiaron al lote; ([], 'LOTE') si no tiene.
+    Lee los planes de las fases de a poco y se detiene en el primero que la trae (un lote largo tiene cientos).
+    `fases` se acepta por compatibilidad; los planes siempre se leen de la base.
+    """
+    planes = lote.fases.order_by('inicio_programado', 'id')
+    if etapa_id:
+        planes = planes.filter(operacion_maestra__etapa_id=etapa_id)
+    for plan in planes.values_list('plan_captura', flat=True).iterator(chunk_size=20):
+        for _, p in _parametros_de_plan(plan):
             ref = p.get('referencia') or {}
             if p['parametro'] == parametro_id and ref.get('curva'):
                 return ref['curva'], ref.get('eje_edad', 'LOTE')

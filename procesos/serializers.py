@@ -543,3 +543,20 @@ class LoteProduccionSerializer(serializers.ModelSerializer):
             return 0.0
         completadas = sum(1 for f in fases_totales if f.estado in ['COMPLETADA', 'OMITIDA'])
         return round((completadas / total) * 100, 1)
+
+
+class LoteResumenSerializer(serializers.ModelSerializer):
+    """Lote para listas (sin sus tareas): con cientos de lotes de miles de tareas, las tareas se piden aparte."""
+    proceso_nombre = serializers.CharField(source='proceso_maestro.nombre', read_only=True)
+    progreso_porcentual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LoteProduccion
+        fields = ['id', 'identificador_lote', 'proceso_maestro', 'proceso_nombre', 'estado', 'fecha_inicio_planeada',
+                  'progreso_porcentual', 'created_at', 'updated_at']
+
+    def get_progreso_porcentual(self, obj):
+        total = getattr(obj, 'n_fases', None)
+        if total is None:
+            return LoteProduccionSerializer().get_progreso_porcentual(obj)
+        return round(obj.n_fases_cerradas / total * 100, 1) if total else 0.0

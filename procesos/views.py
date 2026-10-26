@@ -6,11 +6,12 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
-from django.db.models import RestrictedError
+from django.db.models import Count, Q, RestrictedError
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import mixins, permissions, viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from auditoria.mixins import AuditoriaMixin
@@ -37,7 +38,7 @@ from actividades.models import Equipo, MaterialInsumo, TipoEquipo
 from roster.models import Operador
 from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
-    LoteProduccionSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer,
+    LoteProduccionSerializer, LoteResumenSerializer, FaseLoteSerializer, AsignacionFaseOperadorSerializer,
     MaterialFaseSerializer, RequerimientoMaterialSerializer, EquipoFaseSerializer, ReservaEquipoSerializer,
     EntregaMaterialSerializer,
 )
@@ -51,7 +52,7 @@ from .services import (
     liberar_reserva, cambiar_equipo, validar_cambio_equipo, equipos_candidatos, ocupacion_equipos, ErrorEquipoFase,
     registrar_entrega, recibir_entrega, rechazar_entrega, registrar_devolucion, materiales_por_surtir,
     advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
-    ErrorSurtido, operadores_disponibles,
+    ErrorSurtido, operadores_disponibles, lotes_para_gantt, resumen_gantt,
 )
 from datos_proceso.services import clonar_indicadores, clonar_secciones, datos_pendientes, generar_plan_captura, resumen_captura
 
@@ -235,9 +236,22 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo', 'fases__tomas_datos').order_by('-created_at')
+        base = LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').select_related('proceso_maestro').order_by('-created_at')
+        if self.action in ('list', 'gantt'):
+            # Listas sin tareas: el avance se cuenta en la base (un lote puede tener miles de tareas)
+            return base.annotate(n_fases=Count('fases', distinct=True),
+                                 n_fases_cerradas=Count('fases', filter=Q(fases__estado__in=['COMPLETADA', 'OMITIDA']), distinct=True))
+        return base.prefetch_related('fases__operacion_maestra__etapa', 'fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo', 'fases__tomas_datos')
 
-    serializer_class = LoteProduccionSerializer
+    def get_serializer_class(self):
+        return LoteResumenSerializer if self.action == 'list' else LoteProduccionSerializer
+
+    @action(detail=False, methods=['get'], url_path='gantt')
+    def gantt(self, request):
+        """Barras por etapa de los lotes abiertos y de los terminados en los últimos 30 días (`?todos=1`: todos)."""
+        lotes, ocultos = lotes_para_gantt(LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO')
+                                          .order_by('-created_at'), todos=request.query_params.get('todos') == '1')
+        return Response({'lotes': resumen_gantt(lotes), 'ocultos': ocultos})
     permisos_por_accion = {
         'create': 'instanciar_lote',
         'destroy': 'abortar_lote', 'archivar': 'abortar_lote', 'abortar': 'abortar_lote',
@@ -318,6 +332,8 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     """
     Las fases se crean al instanciar el lote y no se borran. Estado y horarios cambian únicamente vía
     `cambiar-estado` y `reprogramar`, que aplican las reglas GxP; los equipos, vía `/api/equipos-fase/`.
+    El listado se filtra con `?lote=<id>` y/o `?desde=&hasta=` (fecha-hora ISO; fases cuyo horario programado
+    se cruza con esa ventana). Con cientos de lotes de miles de tareas, las pantallas deben pedir siempre un filtro.
     """
     serializer_class = FaseLoteSerializer
     permission_classes = [PermisoFaseLote]
@@ -327,11 +343,41 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     }
 
     def get_queryset(self):
-        return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related(
+        return FaseLote.objects.select_related('operacion_maestra__etapa', 'lote').prefetch_related(
             'materiales__material', 'materiales__entregas__devoluciones', 'materiales__entregas__material_fase__material', 'materiales__entregas__material_fase__fase__lote',
             'operadores_asignados__operador', 'operadores_asignados__rol_ejercido',
             'equipos__tipo', 'equipos__reservas__equipo', 'tomas_datos',
         ).filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        if self.action != 'list':
+            return queryset
+        params = self.request.query_params
+        if params.get('lote'):
+            try:
+                queryset = queryset.filter(lote_id=int(params['lote']))
+            except ValueError:
+                raise ValidationError({'lote': 'Debe ser un número.'})
+        desde, hasta = self._fecha_param('desde'), self._fecha_param('hasta')
+        if hasta:
+            queryset = queryset.filter(inicio_programado__lt=hasta)
+        if desde:
+            queryset = queryset.filter(Q(fin_programado__gte=desde) | Q(fin_programado__isnull=True, inicio_programado__gte=desde))
+        return queryset
+
+    def _fecha_param(self, nombre):
+        """Fecha-hora ISO (o solo fecha, a medianoche local) de un parámetro; None si no viene."""
+        texto = (self.request.query_params.get(nombre) or '').strip().replace(' ', '+')
+        if not texto:
+            return None
+        valor = parse_datetime(texto)
+        if valor is None:
+            fecha = parse_date(texto)
+            valor = datetime.combine(fecha, time.min) if fecha else None
+        if valor is None:
+            raise ValidationError({nombre: 'Fecha u hora inválida (formato ISO).'})
+        return timezone.make_aware(valor) if timezone.is_naive(valor) else valor
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
     @transaction.atomic

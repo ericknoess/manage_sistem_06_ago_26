@@ -289,3 +289,8 @@ body {
 .custom-tooltip .delay-val { color: #fca5a5; font-weight: bold; background: rgba(239, 68, 68, 0.2); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--danger); }
 
 #loadingState { padding: 2rem; text-align: center; color: var(--accent); font-weight: bold; }
+
+/* Filtro de lotes terminados (por defecto: abiertos y terminados en los últimos 30 días) */
+.gantt-filtro { display: flex; flex-direction: column; justify-content: center; gap: 2px; font-size: 0.75rem; color: var(--text-muted); }
+.gantt-filtro label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+.gantt-filtro__aviso { font-size: 0.68rem; }

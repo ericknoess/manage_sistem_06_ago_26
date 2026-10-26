@@ -647,3 +647,96 @@ class InformesTests(AnalisisBase):
         self.assertTrue(any(f[9] == 'celulas' and f[12] == 0.5 for f in filas))
         self.assertEqual(self.web.get(f'/api/informes-proceso/{self.lote.id}/pdf/?etapa=99999').status_code, 404)
         self.assertEqual(self.web.get(f'/api/informes-proceso/lotes/?proceso={self.proceso.id}&lotes=').status_code, 400)
+
+
+class ImportacionCultivoTests(TestCase):
+    """Importación del histórico de Cultivo con datos en memoria (sin PostgreSQL)."""
+
+    def setUp(self):
+        from . import importacion_cultivo as imp
+        self.imp = imp
+        self.t0 = timezone.make_aware(timezone.datetime(2026, 5, 1, 8, 0))
+        self.pr1 = self.t0 + timedelta(hours=24)
+
+    def registro(self, id_, etapa, edad, P=True, GyL=False, C=False, **valores):
+        inicio = self.t0 if etapa == 'PO4' else self.pr1
+        base = {'id': id_, 'lote_id': 'EMAS99001', 'etapa': etapa, 'edad': edad, 'muestra': f'Edad: {edad}',
+                'fecha_obj': inicio + timedelta(hours=edad), 'registro': 'E.Prueba',
+                'estatus_P': 'registrado' if P else 'Por_registar', 'estatus_GyL': 'registrado' if GyL else 'Por_registar',
+                'estatus_C': 'registrado' if C else 'Por_registar'}
+        base.update({col: None for col in self.imp.PARAMETROS})
+        base.update({k: Decimal(str(v)) if isinstance(v, (int, float)) else v for k, v in valores.items()})
+        return base
+
+    def datos(self, status='Finalizado', termino_h=96, extra=()):
+        registros = [
+            self.registro(1, 'PO4', 0, GyL=True, C=True, temperatura=36.5, glucosa=4.0, celulas=0.5, viabilidad=98,
+                          muestra='PO41-M01', lote_medio_de_cultivo='MC-1'),
+            self.registro(2, 'PO4', 6, temperatura=36.6, state3='Se ajusta el pH'),
+            self.registro(3, 'PO4', 12, P=False, GyL=True, glucosa=3.5),
+            self.registro(4, 'PO4', 18, P=False),                                   # sin capturar: no se importa
+            self.registro(5, 'PR1', 0, C=True, temperatura=36.8, celulas=1.5),
+            self.registro(6, 'PR1', 0, C=True, temperatura=36.8, celulas=1.6),      # duplicado de Cultivo
+            self.registro(7, 'PR1', 24, C=True, temperatura=36.9, celulas=3.5),
+            *extra,
+        ]
+        lote = {'lote': 'EMAS99001', 'status': status, 'fecha_inicio': self.t0, 'fecha_inicio_PR1': self.pr1,
+                'fecha_termino': self.t0 + timedelta(hours=termino_h), 'tipoReactor': 'Applikon'}
+        return {'lotes': [lote], 'registros': {'EMAS99001': registros}}
+
+    def test_crea_receta_lote_y_tomas_con_las_edades_de_cultivo(self):
+        resumen = self.imp.importar(self.datos(), curva=[[0, 0.3], [48, 2.0]])
+        self.assertTrue(resumen['receta_creada'])
+        r = resumen['lotes'][0]
+        self.assertEqual((r['estado'], r['tomas']), ('COMPLETADO', 5))
+        self.assertEqual(len(r['diferencias']), 1)   # el duplicado con otra cuenta celular se reporta
+        lote = LoteProduccion.objects.get(identificador_lote='EMAS99001')
+        self.assertEqual(lote.proceso_maestro.nombre, self.imp.NOMBRE_RECETA)
+        from .services import tabla_lote
+        tabla = tabla_lote(lote)
+        edades = [(f['etapa'], f['edad_etapa_h'], f['edad_lote_h']) for f in tabla['filas']]
+        self.assertEqual(edades, [('PO4', 0, 0), ('PO4', 6, 6), ('PO4', 12, 12), ('PR1', 0, 24), ('PR1', 24, 48)])
+        primera = tabla['filas'][0]
+        self.assertEqual(primera['valores']['celulas']['valor'], '0.5')
+        self.assertEqual(primera['valores']['lote_medio']['valor'], 'MC-1')
+        self.assertEqual(primera['codigos_muestra'], {'Glucosa y lactato': 'PO41-M01'})
+        self.assertEqual(tabla['filas'][1]['valores']['observaciones']['valor'], 'Se ajusta el pH')
+        self.assertEqual(tabla['filas'][3]['valores']['celulas']['valor'], '1.6')   # gana el registro más reciente
+        toma = TomaDatos.objects.filter(fase__lote=lote).first()
+        self.assertEqual(toma.registrado_por_nombre, 'E.Prueba (Cultivo)')
+        self.assertTrue(RegistroAuditoria.objects.filter(accion='IMPORTAR_HISTORICO', lote=lote).exists())
+
+    def test_indicadores_del_carnet(self):
+        from .services import calcular_indicadores
+        resumen = self.imp.importar(self.datos(), curva=[[0, 0.3], [48, 2.0]])
+        lote = LoteProduccion.objects.get(identificador_lote='EMAS99001')
+        ind = calcular_indicadores(lote, resumen['receta'].indicadores.all())
+        # ABC por trapecios contra la edad global: (0.5+1.6)/2·24 + (1.6+3.5)/2·24 = 25.2 + 61.2
+        self.assertEqual(ind['abc_cel']['valor'], 86.4)
+        self.assertEqual(ind['gramos_obj']['valor'], round(86.4 / 1000 - 5.5, 1))
+        self.assertIsNotNone(ind['apego_cel']['valor'])
+
+    def test_reimportar_solo_agrega_lo_nuevo_y_actualiza_el_estado(self):
+        en_curso = self.datos(status='PR1', termino_h=2000)
+        self.imp.importar(en_curso)
+        lote = LoteProduccion.objects.get(identificador_lote='EMAS99001')
+        self.assertEqual(lote.estado, 'EN_PROGRESO')
+        pr1 = lote.fases.get(es_subtarea_muestreo=False, operacion_maestra__etapa__nombre='PR1')
+        self.assertEqual(pr1.estado, 'EN_PROGRESO')
+        finalizado = self.datos(extra=[self.registro(8, 'PR1', 48, C=True, temperatura=37.0, celulas=5.0)])
+        resumen = self.imp.importar(finalizado)
+        r = resumen['lotes'][0]
+        self.assertFalse(resumen['receta_creada'])
+        self.assertEqual((r['nuevo'], r['tomas']), (False, 1))
+        lote.refresh_from_db()
+        self.assertEqual(lote.estado, 'COMPLETADO')
+        self.assertEqual(TomaDatos.objects.filter(fase__lote=lote).count(), 6)
+        pr1.refresh_from_db()
+        self.assertEqual(pr1.estado, 'COMPLETADA')
+
+    def test_no_toca_un_lote_del_mes_con_el_mismo_codigo(self):
+        otra = ProcesoMaestro.objects.create(nombre='Otra receta')
+        LoteProduccion.objects.create(identificador_lote='EMAS99001', proceso_maestro=otra, fecha_inicio_planeada=self.t0)
+        r = self.imp.importar(self.datos())['lotes'][0]
+        self.assertIn('Ya existe', r['aviso'])
+        self.assertFalse(TomaDatos.objects.exists())

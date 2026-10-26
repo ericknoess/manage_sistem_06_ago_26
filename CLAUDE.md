@@ -30,6 +30,11 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Lógica CPM, generación de fases, reprogramación en cascada y cruces de operadores en `procesos/services.py`.
   Los horarios de `FaseLote` son fecha-hora completas (`inicio_programado`/`fin_programado`, `inicio_base_cpm`/`fin_base_cpm`);
   la API también expone `fecha_programada`/`hora_*` derivados en hora local, solo lectura.
+- Escala (cientos de lotes de ~1000 tareas): ninguna pantalla pide todas las tareas. `/api/fases-lote/` se filtra con `?lote=`
+  (Piso de planta) o `?desde=&hasta=` (Planificación: la semana o el día visibles; tareas que se cruzan con esa ventana).
+  `/api/lotes/` es una lista ligera sin tareas (avance contado en la base); el detalle `/api/lotes/<id>/` sí las trae.
+  El Gantt usa `/api/lotes/gantt/` (barras por etapa con Min/Max en la base; abiertos y terminados en los últimos 30 días,
+  `?todos=1` para todos). Una pantalla o endpoint nuevo que liste tareas debe filtrar igual.
 - Inicio en planta (`evaluar_inicio` en `procesos/services.py`): la dependencia con la predecesora debe cumplirse (FS completada,
   SS iniciada; el muestreo espera a su incubación) y la ventana `OperacionProceso.tolerancia_antes_horas`/`tolerancia_despues_horas`
   (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige
@@ -82,6 +87,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   (`&combinar=<etapa>-<parámetro>,…&vista=apiladas|superpuestas`; en Excel, gráficas nativas apiladas). Llevan indicadores, tomas,
   fuera de límites, adicionales, correcciones con su firma (de la bitácora) y huella SHA-256 de los datos; cada emisión se
   registra (`GENERAR_INFORME`). Front: `static/core/js/informes.js` (`abrirInformeLote`, `descargarArchivo`).
+  Histórico de Cultivo (fase 4): `python manage.py importar_cultivo --bd "<dsn libpq>" --curva ../cultivo_local/app/datos_modelo.csv
+  [--lote X] [--simular] [--detalle]` (lógica en `datos_proceso/importacion_cultivo.py`; contraseña en PGPASSWORD; Cultivo solo se lee).
+  Crea la receta «EPO – Cultivo (histórico)» (PO4 y PR1, muestreo cada 6 h, secciones P / GyL cada 12 h / C cada 24 h, curva
+  Modelo_2024 e indicadores del carnet) y un lote por lote de Cultivo con un muestreo completado y su toma por registro; la hora es
+  `fecha_obj` (Cultivo no guarda la real), así que las edades coinciden. Repetirlo solo agrega muestreos nuevos; los duplicados
+  de Cultivo (misma etapa y edad) se resuelven por el registro con más secciones y luego el más reciente. Bitácora `IMPORTAR_HISTORICO`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
   Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
@@ -113,7 +124,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   cuenta celular, carnet del lote contra la curva Modelo_2024, desviaciones, CAPAs, expedientes y tablero de tareas.
 - Objetivo (cambiado el 2026-10-23): llevar la lógica de Cultivo al MES, en su propia base y configurable desde pantallas
   (app `datos_proceso`). Fases: 1) catálogo, captura en tablet/web, edad 0 ✅; 2) gráficas por etapa, curvas de referencia
-  e indicadores (área bajo la curva, gramos estimados) ✅; 3) informes por etapa (PDF/Excel) ✅; 4) importar el histórico de Cultivo.
+  e indicadores (área bajo la curva, gramos estimados) ✅; 3) informes por etapa (PDF/Excel) ✅; 4) importar el histórico de Cultivo ✅ (comando listo; probado en una copia).
   Desviaciones, CAPAs y expedientes quedan para después.
 - Se trabaja primero en la copia local `../cultivo_local` (ver su CLAUDE.md); a producción solo se lleva lo
   probado y con autorización explícita del usuario. En el servidor, solo lectura salvo que el usuario lo pida.

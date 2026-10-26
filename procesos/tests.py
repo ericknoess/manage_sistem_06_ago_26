@@ -1017,3 +1017,60 @@ class OperadoresDisponiblesTests(TestCase):
                                        fecha_fin_real=self.fase.inicio_programado + timedelta(hours=1))
         AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.noche, rol_ejercido=self.rol)
         self.assertEqual(self.disponibles(), {})
+
+
+class ListadosEscalablesTests(TestCase):
+    """Con cientos de lotes de miles de tareas, las listas no traen todas las tareas."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(usuario_con_rol('consulta', 'Consulta'))
+        receta = ProcesoMaestro.objects.create(nombre='Receta listados')
+        etapa = EtapaProceso.objects.create(proceso=receta, nombre='Inóculo', orden=1)
+        self.op = OperacionProceso.objects.create(proceso=receta, etapa=etapa, identificador_paso='T1', nombre='Siembra',
+                                                  duracion_horas=2)
+        suelta = OperacionProceso.objects.create(proceso=receta, identificador_paso='T2', nombre='Limpieza', duracion_horas=1)
+        self.lote_a = LoteProduccion.objects.create(identificador_lote='A', proceso_maestro=receta, estado='EN_PROGRESO',
+                                                    fecha_inicio_planeada=local(2026, 3, 2, 8))
+        self.lote_b = LoteProduccion.objects.create(identificador_lote='B', proceso_maestro=receta, estado='COMPLETADO',
+                                                    fecha_inicio_planeada=local(2025, 1, 6, 8))
+        self.a1 = self.fase(self.lote_a, self.op, local(2026, 3, 2, 8), local(2026, 3, 2, 10), 'COMPLETADA')
+        self.a2 = self.fase(self.lote_a, suelta, local(2026, 3, 9, 23), local(2026, 3, 10, 1))   # cruza medianoche
+        self.b1 = self.fase(self.lote_b, self.op, local(2025, 1, 6, 8), local(2025, 1, 6, 10), 'COMPLETADA')
+
+    @staticmethod
+    def fase(lote, op, inicio, fin, estado='PENDIENTE'):
+        return FaseLote.objects.create(lote=lote, operacion_maestra=op, estado=estado, inicio_programado=inicio,
+                                       fin_programado=fin, inicio_base_cpm=inicio, fin_base_cpm=fin)
+
+    def ids(self, url):
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 200, r.content)
+        return sorted(f['id'] for f in r.json())
+
+    def test_tareas_por_lote_y_por_ventana(self):
+        self.assertEqual(self.ids(f'/api/fases-lote/?lote={self.lote_a.id}'), sorted([self.a1.id, self.a2.id]))
+        # Semana del 2 al 9 de marzo: la siembra; la tarea que empieza el 9 a las 23 h cae en la siguiente
+        self.assertEqual(self.ids('/api/fases-lote/?desde=2026-03-02&hasta=2026-03-09'), [self.a1.id])
+        # El día 10 ve la tarea que viene cruzando la medianoche
+        desde = local(2026, 3, 10, 0).isoformat()
+        hasta = local(2026, 3, 11, 0).isoformat()
+        self.assertEqual(self.ids(f'/api/fases-lote/?desde={desde}&hasta={hasta}'), [self.a2.id])
+        self.assertEqual(self.client.get('/api/fases-lote/?desde=ayer').status_code, 400)
+
+    def test_lista_de_lotes_sin_tareas_y_con_avance(self):
+        r = self.client.get('/api/lotes/')
+        self.assertEqual(r.status_code, 200)
+        a = next(l for l in r.json() if l['id'] == self.lote_a.id)
+        self.assertNotIn('fases', a)
+        self.assertEqual(a['progreso_porcentual'], 50.0)
+        self.assertIn('fases', self.client.get(f'/api/lotes/{self.lote_a.id}/').json())   # el detalle sí las trae
+
+    def test_gantt_agregado_y_terminados_viejos_ocultos(self):
+        r = self.client.get('/api/lotes/gantt/').json()
+        self.assertEqual(r['ocultos'], 1)  # el lote B terminó hace más de 30 días
+        (lote,) = r['lotes']
+        self.assertEqual([f['nombre'] for f in lote['filas']], ['Inóculo', 'Sin etapa asignada'])
+        self.assertTrue(lote['filas'][0]['prog_inicio'] and lote['filas'][1]['prog_fin'])
+        todos = self.client.get('/api/lotes/gantt/?todos=1').json()
+        self.assertEqual((len(todos['lotes']), todos['ocultos']), (2, 0))
