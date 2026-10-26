@@ -23,6 +23,7 @@ from auditoria.services import registrar
 from procesos.models import EtapaProceso, FaseLote, LoteProduccion, OperacionProceso, ProcesoMaestro
 from .models import IndicadorProceso, ParametroProceso, ParametroSeccion, SeccionCaptura, TomaDatos, ValorParametro
 from .planes import compactar_planes
+from .signals import invalidar_series
 from .services import _snapshot_parametro
 
 NOMBRE_RECETA = 'EPO – Cultivo (histórico)'
@@ -402,6 +403,7 @@ def importar_lote(datos_lote, registros, receta, estructura, corte):
                     valor_texto='' if es_numero else str(crudo).strip()[:500],
                     limites=p['limites'], registrado_por_nombre=toma.registrado_por_nombre))
     ValorParametro.objects.bulk_create(valores, batch_size=2000)
+    invalidar_series(lote.id)   # la carga en bloque no dispara las señales
     resultado['tomas'], resultado['valores'] = len(tomas), len(valores)
 
     estado_anterior = None if resultado['nuevo'] else lote.estado

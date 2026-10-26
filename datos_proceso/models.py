@@ -256,3 +256,20 @@ class IndicadorProceso(models.Model):
 
     def __str__(self):
         return f"{self.nombre} ({self.proceso})"
+
+
+class SeriesLote(models.Model):
+    """
+    Gráficas ya preparadas de un lote TERMINADO (sus series reducidas y sus indicadores), para no releer cientos de miles
+    de valores cada vez que se grafican muchos lotes. Es una copia derivada: no es registro GxP, se borra sola cuando
+    cambia algo del lote (señales en signals.py) y se vuelve a generar al graficar.
+    """
+    lote = models.OneToOneField('procesos.LoteProduccion', on_delete=models.CASCADE, primary_key=True, related_name='series_preparadas')
+    puntos = models.JSONField(default=dict, help_text='{"<parámetro>|<etapa>": [[edad lote, edad etapa, valor, estado, adicional, momento, tarea]]}')
+    indicadores = models.JSONField(default=dict)
+    huella_indicadores = models.CharField(max_length=64, help_text="Definición de los indicadores con que se calcularon")
+    generado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Series preparadas de un lote"
+        verbose_name_plural = "Series preparadas de lotes"

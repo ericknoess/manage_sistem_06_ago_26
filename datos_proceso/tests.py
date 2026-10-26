@@ -785,3 +785,44 @@ class ReduccionPuntosTests(TestCase):
         self.assertEqual(max(p['valor'] for p in reducidos), 49.0)
         self.assertEqual(min(p['valor'] for p in reducidos), 0.0)
         self.assertEqual(reducir_puntos(puntos[:50], 120), puntos[:50])
+
+
+class SeriesPreparadasTests(AnalisisBase):
+    """Las gráficas de lotes terminados se guardan ya preparadas y se borran al cambiar algo del lote."""
+
+    def analizar(self):
+        from unittest import mock
+        with mock.patch('datos_proceso.services.UMBRAL_REDUCIR', 0):
+            return self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={self.lote.id}').data
+
+    def test_se_preparan_al_graficar_y_se_reusan(self):
+        from .models import SeriesLote
+        self.crear_indicadores()
+        en_curso = self.analizar()
+        self.assertFalse(SeriesLote.objects.exists())             # un lote en curso no se prepara
+        LoteProduccion.objects.filter(pk=self.lote.pk).update(estado='COMPLETADO')
+        primera = self.analizar()
+        self.assertTrue(SeriesLote.objects.filter(lote=self.lote).exists())
+        segunda = self.analizar()
+        celulas = lambda d: next(p for p in d['parametros'] if p['codigo'] == 'celulas')['series'][str(self.lote.id)]
+        self.assertEqual([q[2] for q in celulas(segunda)], [0.3, 0.5])
+        self.assertIn('M-24h', segunda['tareas'][celulas(segunda)[1][6]])
+        self.assertEqual(segunda['valores_indicadores'], en_curso['valores_indicadores'])
+        self.assertEqual(celulas(primera), celulas(segunda))
+
+    def test_se_borran_al_cambiar_el_lote_o_los_indicadores(self):
+        from .models import SeriesLote
+        self.crear_indicadores()
+        LoteProduccion.objects.filter(pk=self.lote.pk).update(estado='COMPLETADO')
+        self.analizar()
+        toma = TomaDatos.objects.filter(fase__lote=self.lote).first()
+        valor = toma.valores.first()
+        valor.save()                                                # una corrección guarda valores
+        self.assertFalse(SeriesLote.objects.exists())
+        self.analizar()
+        self.indicador(codigo='glu_max', nombre='Glucosa máxima', tipo='MAXIMO', parametro=self.glucosa.id)
+        datos = self.analizar()                                     # otra definición de indicadores: se recalcula
+        self.assertEqual(datos['valores_indicadores'][str(self.lote.id)]['glu_max']['valor'], 4.0)
+        self.lote.refresh_from_db()
+        self.lote.save()
+        self.assertFalse(SeriesLote.objects.exists())

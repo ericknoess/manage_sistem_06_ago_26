@@ -45,6 +45,11 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Gráficas con más de 20 lotes (`UMBRAL_REDUCIR`): los no destacados llegan reducidos (`reducir_puntos`: hasta 120 puntos por
   serie, con mínimos, máximos y valores fuera de límites); `&completos=` = destacados; al destacar uno reducido, el front pide
   solo ese lote (`completarLote`). Los indicadores siempre usan todos los datos.
+  Series preparadas (`SeriesLote`, `series_preparadas`): de cada lote TERMINADO se guardan sus series reducidas y sus
+  indicadores (con la huella de la definición de los indicadores) y se usan al graficar muchos lotes, sin releer sus valores.
+  Es una copia derivada (no GxP): las señales de `datos_proceso/signals.py` la borran al guardar el lote, una fase, una toma o
+  un valor, y se regenera al graficar; tras escrituras en bloque (bulk_create) llamar `invalidar_series(lote_ids)`.
+  `python manage.py preparar_series [--receta id]` las deja listas de antemano. 200 lotes simulados: 2 s (antes 6.9 s).
 - Inicio en planta (`evaluar_inicio` en `procesos/services.py`): la dependencia con la predecesora debe cumplirse (FS completada,
   SS iniciada; el muestreo espera a su incubación) y la ventana `OperacionProceso.tolerancia_antes_horas`/`tolerancia_despues_horas`
   (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige

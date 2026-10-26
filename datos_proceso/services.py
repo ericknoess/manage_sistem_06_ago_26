@@ -1041,25 +1041,71 @@ def reducir_puntos(puntos, maximo=MAX_PUNTOS_REDUCIDOS):
     return [puntos[i] for i in sorted(elegidos)]
 
 
+def huella_indicadores(indicadores):
+    """Huella de la definición de los indicadores: si cambia, las series preparadas se recalculan."""
+    import hashlib, json
+    datos = [(i.codigo, i.tipo, i.parametro_id, i.etapa_id, i.eje_edad, i.formula, i.decimales) for i in indicadores]
+    return hashlib.sha256(json.dumps(datos, default=str).encode()).hexdigest()
+
+
+def _clave_serie(parametro_id, etapa_id):
+    return f"{parametro_id}|{etapa_id or 0}"
+
+
+def series_preparadas(lotes, indicadores):
+    """
+    {lote_id: SeriesLote} de lotes TERMINADOS: sus series reducidas y sus indicadores, ya calculados. Las que faltan
+    (o se calcularon con otra definición de indicadores) se generan ahora con todos los datos y se guardan.
+    """
+    from .models import SeriesLote
+    huella = huella_indicadores(indicadores)
+    guardadas = {s.lote_id: s for s in SeriesLote.objects.filter(lote__in=lotes, huella_indicadores=huella)}
+    faltan = [l for l in lotes if l.id not in guardadas]
+    if faltan:
+        fases = fases_por_lote(faltan)
+        series, _ = series_lotes(faltan, fases=fases)
+        nuevas = []
+        for lote in faltan:
+            grupos = {}
+            for pid, puntos in series[lote.id].items():
+                for p in puntos:
+                    grupos.setdefault(_clave_serie(pid, p['etapa_id']), []).append(p)
+            puntos = {clave: [[p['edad_lote_h'], p['edad_etapa_h'], p['valor'],
+                               2 if p['fuera_especificacion'] else 1 if p['fuera_alerta'] else 0,
+                               int(p['adicional']), int(p['momento'].timestamp()), p['tarea']] for p in reducir_puntos(lista)]
+                      for clave, lista in grupos.items()}
+            nuevas.append(SeriesLote(lote=lote, puntos=puntos, huella_indicadores=huella,
+                                     indicadores=calcular_indicadores(lote, indicadores, series[lote.id], fases[lote.id])))
+        with transaction.atomic():
+            SeriesLote.objects.filter(lote__in=faltan).delete()
+            SeriesLote.objects.bulk_create(nuevas)
+        guardadas.update({s.lote_id: s for s in nuevas})
+    return guardadas
+
+
 def analisis_lotes(proceso, lotes, etapa_id=None, completos=None):
     """
     Datos de la pantalla de gráficas: por cada parámetro numérico de la receta (en la etapa), una serie por lote
     (puntos compactos, ver `_compactar`), con sus límites y curva esperada, y los indicadores de cada lote.
     Con más de UMBRAL_REDUCIR lotes, los que no están en `completos` (los destacados) llevan sus series reducidas
-    (`reducir_puntos`); los indicadores siempre se calculan con todos los datos.
+    (`reducir_puntos`); los indicadores siempre se calculan con todos los datos. Las series reducidas de los lotes
+    terminados salen de `series_preparadas` (no se releen sus valores).
     """
     from .models import IndicadorProceso
     lotes = list(lotes)[:MAX_LOTES_ANALISIS]
     completos = set(completos or [])
     reducidos = {l.id for l in lotes if l.id not in completos} if len(lotes) > UMBRAL_REDUCIR else set()
     estructura = estructura_receta(proceso, etapa_id)
-    fases = fases_por_lote(lotes)
-    series, ceros = series_lotes(lotes, fases=fases)   # todas las etapas: los indicadores pueden ser de otra etapa
     indicadores = list(IndicadorProceso.objects.filter(proceso=proceso, activo=True).select_related('parametro', 'etapa'))
+    preparables = [l for l in lotes if l.id in reducidos and l.estado == 'COMPLETADO']
+    guardadas = series_preparadas(preparables, indicadores) if preparables else {}
+    vivos = [l for l in lotes if l.id not in guardadas]
+    fases = fases_por_lote(vivos)
+    series, ceros = series_lotes(vivos, fases=fases)   # todas las etapas: los indicadores pueden ser de otra etapa
 
     # Puntos de cada lote por (parámetro, etapa), agrupados una sola vez
     por_etapa = {}
-    for lote in lotes:
+    for lote in vivos:
         grupos = por_etapa[lote.id] = {}
         for pid, puntos in series[lote.id].items():
             for p in puntos:
@@ -1073,6 +1119,11 @@ def analisis_lotes(proceso, lotes, etapa_id=None, completos=None):
                 pid = ref['parametro']
                 por_lote = {}
                 for lote in lotes:
+                    if lote.id in guardadas:
+                        filas = guardadas[lote.id].puntos.get(_clave_serie(pid, grupo['etapa_id']))
+                        if filas:
+                            por_lote[str(lote.id)] = [[*f[:6], tareas.setdefault(f[6], len(tareas))] for f in filas]
+                        continue
                     puntos = por_etapa[lote.id].get((pid, grupo['etapa_id']))
                     if puntos:
                         if lote.id in reducidos:
@@ -1089,8 +1140,11 @@ def analisis_lotes(proceso, lotes, etapa_id=None, completos=None):
     lotes_json, valores = [], {}
     ahora = timezone.now()
     for lote in lotes:
-        valores[str(lote.id)] = calcular_indicadores(lote, indicadores, series[lote.id], fases[lote.id])
-        abierto = lote.estado not in ('COMPLETADO', 'ABORTADO')
+        if lote.id in guardadas:
+            valores[str(lote.id)] = guardadas[lote.id].indicadores
+        else:
+            valores[str(lote.id)] = calcular_indicadores(lote, indicadores, series[lote.id], fases[lote.id])
+        abierto = lote.estado not in ('COMPLETADO', 'ABORTADO') and lote.id in ceros
         lotes_json.append({
             'id': lote.id, 'identificador': lote.identificador_lote, 'estado': lote.estado,
             'estado_display': lote.get_estado_display(),
