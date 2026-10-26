@@ -140,6 +140,10 @@ body {
 .btn-success { background-color: var(--success); color: white; }
 .btn-success:active { background-color: var(--success-hover); transform: scale(0.97); }
 
+/* Datos de proceso: va antes de "Completar" en la tarjeta */
+.btn-datos { background-color: rgba(168, 85, 247, 0.18); color: #e9d5ff; border: 2px solid rgba(168, 85, 247, 0.6); margin-bottom: 0.6rem; }
+.btn-datos:active { transform: scale(0.97); }
+
 /* --- VISTA DASHBOARD (WORKLIST) --- */
 .dashboard-view {
     flex: 1;

@@ -108,10 +108,10 @@ class PermisoFaseLote(PermisoPorAccion):
         return True
 
 
-class PermisoSurtido(permissions.BasePermission):
+class PermisoUsuarioOTerminal(permissions.BasePermission):
     """
-    Surtido de materiales: entra el usuario web o la persona que ingresó con su PIN en /mobile/.
-    Quién puede cada paso (almacén o personal de la fase) lo decide la vista con la regla de cuatro ojos.
+    Entra el usuario web o la persona que ingresó con su PIN en /mobile/. Qué puede hacer cada quien
+    (según su rol o las tareas que tiene asignadas) lo decide la vista.
     """
 
     def has_permission(self, request, view):
@@ -123,3 +123,11 @@ class PermisoSurtido(permissions.BasePermission):
                 SesionAutenticacion().enforce_csrf(request)
             return True
         return False
+
+
+class PermisoSurtido(PermisoUsuarioOTerminal):
+    """Surtido de materiales: quién puede cada paso (almacén o personal de la fase) lo decide la vista con la regla de cuatro ojos."""
+
+
+class PermisoCaptura(PermisoUsuarioOTerminal):
+    """Datos de proceso: captura un rol con `ejecutar_fase` o el operador asignado a la tarea (lo revisa la vista)."""

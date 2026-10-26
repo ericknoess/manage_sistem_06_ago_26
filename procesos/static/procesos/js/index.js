@@ -25,16 +25,18 @@ const ZOOM_CONFIG = {
 
 async function cargarCatalogosGlobales() {
     try {
-        const [resProc, resMat, resRoles, resTipos] = await Promise.all([
+        const [resProc, resMat, resRoles, resTipos, resParam] = await Promise.all([
             fetch('/api/procesos-maestros/'),
             fetch('/api/materiales/'),
             fetch('/api/roles-operador/'),
-            fetch('/api/tipos-equipo/')
+            fetch('/api/tipos-equipo/'),
+            fetch('/api/parametros-proceso/')
         ]);
         procesosGlobales = await resProc.json();
         materialesGlobales = await resMat.json();
         rolesGlobales = await resRoles.json();
         tiposEquipoGlobales = await resTipos.json();
+        establecerParametrosCatalogo(await resParam.json());
         llenarSelectsTipoEquipo();
 
         inicializarBuscadoresMateriales();
@@ -81,6 +83,15 @@ function inicializarBuscadoresMateriales() {
             },
         });
     });
+}
+
+async function recargarCatalogoParametros() {
+    try {
+        const res = await fetch('/api/parametros-proceso/');
+        establecerParametrosCatalogo(await res.json());
+    } catch (err) {
+        alert("No se pudo recargar el catálogo de parámetros.");
+    }
 }
 
 async function recargarCatalogoMateriales() {
@@ -280,6 +291,7 @@ function abrirModalNuevaOperacion() {
     materialesBuilder.crear = [];
     equiposBuilder.crear = [];
     renderizarEquiposBuilder('crear');
+    inicializarCaptura('crear');
 
     toggleIncubacionFields(false);
     document.getElementById('modalNuevaOperacion').style.display = 'flex';
@@ -404,6 +416,7 @@ function toggleIncubacionFields(isEdit = false) {
     }
     renderizarMaterialesBuilder(isEdit ? 'editar' : 'crear');
     renderizarEquiposBuilder(isEdit ? 'editar' : 'crear');
+    renderizarCaptura(isEdit ? 'editar' : 'crear');
 }
 
 function toggleVistaArchivados() {
@@ -616,7 +629,7 @@ function renderizarCPMConHolguras(cpmData) {
         if (t.tipo_operacion === 'INCUBACION') {
             totalInc += t.duracion_horas;
             if (opOrig.frecuencia_muestreo_horas > 0) {
-                let cantidadMuestreos = Math.floor(t.duracion_horas / opOrig.frecuencia_muestreo_horas);
+                let cantidadMuestreos = Math.floor(t.duracion_horas / opOrig.frecuencia_muestreo_horas) + (opOrig.muestreo_inicial ? 1 : 0);
                 totalHorasHombre += (cantidadMuestreos * (opOrig.duracion_muestreo_horas || 0) * (opOrig.ops_muestreo || 0));
             }
         } else {
@@ -723,6 +736,7 @@ function renderizarCPMConHolguras(cpmData) {
                     ${badgesRolesHtml}
                     ${chipsEquipos}
                     ${chipsMateriales ? `<div>${chipsMateriales}</div>` : ''}
+                    ${(opOriginal.captura_datos && opOriginal.captura_datos !== 'NINGUNA') || opOriginal.edad_cero ? `<div>${chipsCapturaActividad(opOriginal)}</div>` : ''}
                 </td>
                 <td>${t.es}h ➔ ${t.ef}h</td>
                 <td>
@@ -1110,6 +1124,8 @@ async function crearOperacionAPI() {
     if (!materiales) return;
     const equipos = obtenerEquiposDesdeBuilder('crear');
     if (!equipos) return;
+    const captura = obtenerCaptura('crear');
+    if (!captura) return;
 
     const res = await fetch('/api/operaciones-proceso/', {
         method: 'POST',
@@ -1132,7 +1148,8 @@ async function crearOperacionAPI() {
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             equipos,
             materiales,
-            requerimientos_rol
+            requerimientos_rol,
+            ...captura
         })
     });
 
@@ -1144,7 +1161,7 @@ async function crearOperacionAPI() {
         let msg = "Error al registrar la operación.";
         if (data.non_field_errors) msg = data.non_field_errors.join("\n");
         else if (data.identificador_paso) msg = "ID de Paso: " + data.identificador_paso.join("\n");
-        else msg = JSON.stringify(data);
+        else msg = mensajeErrorCaptura(data) || JSON.stringify(data);
 
         alert(`⚠️ Solicitud rechazada por el servidor:\n${msg}`);
     }
@@ -1196,6 +1213,7 @@ function abrirModalEditarOperacion(id) {
     equiposBuilder.editar = (op.equipos || []).map(e => ({
         tipo: e.tipo, cantidad: e.cantidad, horas_preparacion: e.horas_preparacion, horas_limpieza: e.horas_limpieza, aplica_a: e.aplica_a,
     }));
+    inicializarCaptura('editar', op);
 
     toggleIncubacionFields(true);
     document.getElementById('modalEditarOperacion').style.display = 'flex';
@@ -1239,6 +1257,8 @@ async function guardarEdicionOperacionAPI() {
     if (!materiales) return;
     const equipos = obtenerEquiposDesdeBuilder('editar');
     if (!equipos) return;
+    const captura = obtenerCaptura('editar');
+    if (!captura) return;
 
     const res = await fetch(`/api/operaciones-proceso/${id}/`, {
         method: 'PATCH',
@@ -1260,7 +1280,8 @@ async function guardarEdicionOperacionAPI() {
             equipos,
             personal_requerido: requerimientos_rol.reduce((acc, r) => acc + r.cantidad, 0) || 1,
             requerimientos_rol,
-            materiales
+            materiales,
+            ...captura
         })
     });
 
@@ -1272,7 +1293,7 @@ async function guardarEdicionOperacionAPI() {
         let msg = "Error al actualizar la operación.";
         if (data.non_field_errors) msg = data.non_field_errors.join("\n");
         else if (data.identificador_paso) msg = "ID de Paso: " + data.identificador_paso.join("\n");
-        else msg = JSON.stringify(data);
+        else msg = mensajeErrorCaptura(data) || JSON.stringify(data);
 
         alert(`⚠️ Solicitud rechazada por el servidor:\n${msg}`);
     }

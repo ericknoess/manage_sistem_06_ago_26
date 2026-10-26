@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/materiales.css' %}">
     <link rel="stylesheet" href="{% static 'procesos/css/index.css' %}">
+    <link rel="stylesheet" href="{% static 'datos_proceso/css/disenador_captura.css' %}">
     <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
     <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
     <script src="{% static 'core/js/sesion.js' %}"></script>
@@ -257,13 +258,13 @@
                 </div>
                 <div class="form-group">
                     <label>Duración (h)</label>
-                    <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5">
+                    <input type="number" id="inputTareaDuracion" placeholder="8" min="0.5" step="0.5" oninput="renderizarCaptura('crear')">
                 </div>
                 <div class="form-group" aria-hidden="true"><!-- los equipos se definen por tipo en su sección --></div>
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly oninput="renderizarMaterialesBuilder('crear'); renderizarEquiposBuilder('crear')">
+                    <input type="number" id="inputFrecMuestreo" value="0" min="0" step="1" readonly oninput="renderizarMaterialesBuilder('crear'); renderizarEquiposBuilder('crear'); renderizarCaptura('crear')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -331,6 +332,17 @@
                     <div id="equiposBuilderCrear"></div>
                 </div>
 
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>📊 Datos de proceso y edad 0</span>
+                        <span class="seccion-materiales__acciones">
+                            <button type="button" onclick="recargarCatalogoParametros()" title="Volver a leer el catálogo (tras crear parámetros nuevos)">↻ Recargar</button>
+                            <a href="{% url 'catalogo-parametros' %}" target="_blank" title="Abrir el catálogo de parámetros en otra pestaña">📈 Parámetros ↗</a>
+                        </span>
+                    </label>
+                    <div id="capturaBuilderCrear"></div>
+                </div>
+
                 <div class="form-group" style="grid-column: span 3;">
                     <label class="flex justify-between items-center border-b border-slate-700 pb-1 mb-1">
                         <span>Requerimientos de Roles / Competencias</span>
@@ -381,13 +393,13 @@
                 </div>
                 <div class="form-group">
                     <label>Duración (h)</label>
-                    <input type="number" id="editOpDuracion" step="0.5" min="0.5">
+                    <input type="number" id="editOpDuracion" step="0.5" min="0.5" oninput="renderizarCaptura('editar')">
                 </div>
                 <div class="form-group" aria-hidden="true"><!-- los equipos se definen por tipo en su sección --></div>
 
                 <div class="form-group" style="border-left: 2px solid var(--incubation); padding-left: 5px;">
                     <label>Frec. Muestreo (h)</label>
-                    <input type="number" id="editOpFrecMuestreo" min="0" step="1" oninput="renderizarMaterialesBuilder('editar'); renderizarEquiposBuilder('editar')">
+                    <input type="number" id="editOpFrecMuestreo" min="0" step="1" oninput="renderizarMaterialesBuilder('editar'); renderizarEquiposBuilder('editar'); renderizarCaptura('editar')">
                 </div>
                 <div class="form-group">
                     <label>Dur. Muestreo (h)</label>
@@ -462,6 +474,17 @@
                     </div>
                     <div id="equiposBuilderEditar"></div>
                 </div>
+
+                <div class="form-group seccion-materiales" style="grid-column: span 3;">
+                    <label class="seccion-materiales__titulo">
+                        <span>📊 Datos de proceso y edad 0</span>
+                        <span class="seccion-materiales__acciones">
+                            <button type="button" onclick="recargarCatalogoParametros()" title="Volver a leer el catálogo (tras crear parámetros nuevos)">↻ Recargar</button>
+                            <a href="{% url 'catalogo-parametros' %}" target="_blank" title="Abrir el catálogo de parámetros en otra pestaña">📈 Parámetros ↗</a>
+                        </span>
+                    </label>
+                    <div id="capturaBuilderEditar"></div>
+                </div>
             </div>
             <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
                 <button class="btn-secondary" onclick="cerrarModalEditarOperacion()">Cancelar</button>
@@ -500,6 +523,7 @@
 
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'core/js/materiales.js' %}"></script>
+    <script src="{% static 'datos_proceso/js/disenador_captura.js' %}"></script>
     <script src="{% static 'procesos/js/index.js' %}"></script>
 </body>
 </html>

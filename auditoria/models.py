@@ -18,6 +18,7 @@ class RegistroAuditoria(models.Model):
         ('ASIGNACION', 'Asignación de personal'),
         ('MATERIAL_LOTE', 'Material de lote'),
         ('EQUIPO_LOTE', 'Equipo de lote'),
+        ('DATOS_PROCESO', 'Datos de proceso'),
         ('RECETA', 'Receta maestra'),
         ('CATALOGO', 'Catálogo'),
         ('ROSTER', 'Roster'),

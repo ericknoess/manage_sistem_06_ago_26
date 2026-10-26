@@ -2,7 +2,7 @@
 // Lo usan la Bitácora (/auditoria/), Piso de planta (historial del lote) y Planificación (historial de la fase).
 
 const ICONOS_AUDITORIA = {
-    LOTE: '📦', FASE: '⚙️', ASIGNACION: '👤', MATERIAL_LOTE: '🧪', EQUIPO_LOTE: '🏗️',
+    LOTE: '📦', FASE: '⚙️', ASIGNACION: '👤', MATERIAL_LOTE: '🧪', EQUIPO_LOTE: '🏗️', DATOS_PROCESO: '📊',
     RECETA: '🧫', CATALOGO: '📚', ROSTER: '👥', SESION: '🔑',
 };
 

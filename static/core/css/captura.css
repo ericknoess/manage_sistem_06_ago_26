@@ -1,0 +1,239 @@
+/* static/core/css/captura.css — Formulario de captura de datos de proceso (static/core/js/captura.js).
+   Define sus propios colores para verse igual en Piso de planta y en la tablet. */
+
+.captura-fondo {
+    --c-fondo: #0f172a;
+    --c-panel: #1e293b;
+    --c-borde: #334155;
+    --c-texto: #f8fafc;
+    --c-tenue: #94a3b8;
+    --c-acento: #38bdf8;
+    --c-alerta: #f59e0b;
+    --c-fuera: #ef4444;
+    --c-ok: #22c55e;
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(4px);
+    font-family: system-ui, -apple-system, sans-serif;
+    color: var(--c-texto);
+}
+.captura-fondo--firma { z-index: 1600; }
+.captura-fondo [hidden] { display: none !important; }
+
+.captura-modal {
+    width: 720px;
+    max-width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 1.1rem 1.2rem;
+    background: var(--c-panel);
+    border: 1px solid var(--c-borde);
+    border-radius: 10px;
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+    font-size: 0.82rem;
+}
+.captura-modal--firma { width: 380px; }
+.captura-modal--con-tendencia { width: 1120px; }
+.captura-modal h3 { margin: 0; font-size: 1rem; color: var(--c-acento); }
+.captura-cargando, .captura-vacio-grande { padding: 1.5rem; text-align: center; color: var(--c-tenue); font-style: italic; }
+
+.captura-encabezado { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-borde); padding-bottom: 0.45rem; }
+.captura-cerrar { background: none; border: none; color: var(--c-tenue); font-size: 1rem; cursor: pointer; }
+.captura-cerrar:hover { color: var(--c-texto); }
+.captura-contexto { color: var(--c-tenue); }
+.captura-contexto strong { color: var(--c-texto); }
+
+.captura-edades {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.2rem;
+    padding: 0.45rem 0.65rem;
+    border-radius: 6px;
+    background: rgba(250, 204, 21, 0.07);
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    color: #fde68a;
+    font-size: 0.76rem;
+}
+.captura-edades span[title] { cursor: help; }
+
+.captura-generales { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; }
+.captura-generales label, .captura-motivo, .captura-correccion label { display: flex; flex-direction: column; gap: 0.25rem; color: var(--c-tenue); font-size: 0.72rem; font-weight: 600; }
+.captura-modal input, .captura-modal select, .captura-modal textarea {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--c-borde);
+    border-radius: 5px;
+    background: var(--c-fondo);
+    color: var(--c-texto);
+    font: inherit;
+    font-size: 0.82rem;
+}
+.captura-modal input:focus, .captura-modal select:focus, .captura-modal textarea:focus { outline: none; border-color: var(--c-acento); }
+
+.captura-seccion { margin: 0; padding: 0.45rem 0.65rem 0.6rem; border: 1px solid var(--c-borde); border-radius: 7px; }
+.captura-seccion legend { padding: 0 0.35rem; font-weight: 700; color: var(--c-acento); }
+.captura-codigo { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(56, 189, 248, 0.12); color: #bae6fd; font-family: ui-monospace, monospace; font-size: 0.72rem; }
+
+.captura-fila {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.3fr) minmax(110px, 1fr) minmax(120px, 1.2fr) minmax(90px, auto);
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px dashed rgba(51, 65, 85, 0.6);
+}
+.captura-fila:last-child { border-bottom: none; }
+.captura-nombre { font-weight: 600; }
+.captura-nombre small { color: var(--c-tenue); font-weight: 400; margin-left: 0.2rem; }
+.captura-obligatorio { color: var(--c-fuera); }
+.captura-f { color: #d8b4fe !important; font-weight: 700 !important; }
+.captura-ayuda { color: var(--c-tenue); font-size: 0.7rem; }
+.captura-estado { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: flex-end; }
+.captura-calculado { padding: 0.35rem 0.5rem; border: 1px dashed rgba(168, 85, 247, 0.5); border-radius: 5px; color: #e9d5ff; font-family: ui-monospace, monospace; }
+
+.captura-fila--alerta .captura-entrada, .captura-fila--alerta .captura-calculado { border-color: var(--c-alerta); }
+.captura-fila--fuera .captura-entrada, .captura-fila--fuera .captura-calculado { border-color: var(--c-fuera); background: rgba(239, 68, 68, 0.08); }
+.captura-marca { font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+.captura-marca--alerta { color: #fcd34d; }
+.captura-marca--fuera { color: #fca5a5; }
+
+.captura-valor { font-family: ui-monospace, monospace; font-size: 0.9rem; font-weight: 700; }
+.captura-valor--alerta { color: #fcd34d; }
+.captura-valor--fuera { color: #fca5a5; }
+.captura-vacio { color: var(--c-tenue); font-weight: 400; font-style: italic; font-family: inherit; font-size: 0.75rem; }
+.captura-toma-info { padding: 0.45rem 0.65rem; border-radius: 6px; background: rgba(56, 189, 248, 0.06); color: var(--c-tenue); line-height: 1.5; }
+.captura-toma-info strong { color: var(--c-texto); }
+.captura-subtitulo { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--c-acento); }
+
+.captura-corregir, .captura-historial {
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--c-borde);
+    border-radius: 999px;
+    background: none;
+    color: var(--c-tenue);
+    font-size: 0.68rem;
+    cursor: pointer;
+}
+.captura-corregir:hover, .captura-historial:hover { color: var(--c-acento); border-color: var(--c-acento); }
+.captura-historial-lista { margin: 0.2rem 0 0.4rem 1rem; padding: 0.35rem 0.6rem; border-left: 2px solid var(--c-borde); font-size: 0.72rem; color: var(--c-tenue); line-height: 1.6; }
+.captura-historial-lista .vigente { color: #86efac; }
+
+.captura-correccion { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.3rem 0 0.5rem; padding: 0.6rem; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 7px; background: rgba(56, 189, 248, 0.05); }
+
+.captura-avisos { padding: 0.5rem 0.7rem; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.08); color: #fde68a; line-height: 1.5; }
+.captura-error { padding: 0.5rem 0.7rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.1); color: #fca5a5; }
+.captura-significado { color: #bae6fd; font-style: italic; }
+
+.captura-botones { display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+.captura-btn { padding: 0.45rem 0.95rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
+.captura-btn--primario { border: none; background: var(--c-acento); color: #0f172a; }
+.captura-btn--secundario { border: 1px solid var(--c-borde); background: none; color: var(--c-texto); }
+.captura-btn:disabled { opacity: 0.6; cursor: wait; }
+
+/* Tablet: controles grandes para el dedo */
+.captura--terminal .captura-modal { width: 100%; max-width: 900px; font-size: 1rem; }
+.captura--terminal input, .captura--terminal select, .captura--terminal textarea { min-height: 48px; font-size: 1.1rem !important; }
+.captura--terminal .captura-btn { min-height: 52px; padding: 0.7rem 1.4rem; font-size: 1rem; }
+.captura--terminal .captura-fila { grid-template-columns: 1fr 1fr; }
+.captura--terminal .captura-ayuda, .captura--terminal .captura-estado { grid-column: span 1; }
+
+@media (max-width: 640px) {
+    .captura-fila { grid-template-columns: 1fr 1fr; }
+}
+
+/* Chip de estado de la captura en tablas y tarjetas de tareas */
+.chip-captura {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(168, 85, 247, 0.55);
+    color: #d8b4fe;
+    font-size: 0.65rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.chip-captura--pendiente { border-color: rgba(245, 158, 11, 0.6); color: #fcd34d; }
+.chip-captura--ok { border-color: rgba(34, 197, 94, 0.55); color: #86efac; }
+
+/* Gráfica de tendencia junto al formulario */
+.captura-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; align-items: start; }
+.captura-modal--con-tendencia .captura-cuerpo { grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr); }
+.captura-form, .captura-registrados { display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; }
+.captura-tendencia {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--c-borde);
+    border-radius: 8px;
+    background: var(--c-fondo);
+}
+.captura-tendencia__titulo { font-weight: 700; color: var(--c-texto); }
+.captura-tendencia__titulo small { color: var(--c-tenue); font-weight: 400; }
+.captura-tendencia__leyenda { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; color: var(--c-tenue); font-size: 0.68rem; }
+.captura-tendencia__leyenda span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.captura-tendencia__lienzo { position: relative; min-height: 240px; }
+.captura-tendencia__vacio { padding: 3rem 1rem; text-align: center; color: var(--c-tenue); font-style: italic; }
+.captura-tendencia__nota { color: var(--c-tenue); font-size: 0.68rem; min-height: 0.8rem; }
+.captura-tendencia__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.captura-tendencia__ayuda {
+    position: absolute;
+    z-index: 2;
+    max-width: 190px;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--c-borde);
+    border-radius: 6px;
+    background: var(--c-panel);
+    color: var(--c-texto);
+    font-size: 0.7rem;
+    line-height: 1.4;
+    pointer-events: none;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.tg-rejilla { stroke: rgba(148, 163, 184, 0.12); stroke-width: 1; }
+.tg-base, .tg-tick { stroke: rgba(148, 163, 184, 0.45); stroke-width: 1; }
+.tg-eje { fill: var(--c-tenue); font-size: 10px; }
+.tg-etiqueta { fill: var(--c-tenue); font-size: 9.5px; }
+.tg-limite { stroke-width: 1.5; stroke-dasharray: 6 4; }
+.tg-limite--fuera { stroke: var(--c-fuera); }
+.tg-limite--alerta { stroke: var(--c-alerta); }
+.tg-esperado { stroke: #a78bfa; stroke-width: 1.5; stroke-dasharray: 2 3; }
+.tg-curva { fill: none; stroke: #a78bfa; stroke-width: 2; stroke-linejoin: round; }
+.tg-historial { fill: none; stroke: var(--c-acento); stroke-width: 2; stroke-linejoin: round; }
+.tg-enlace { stroke: var(--c-texto); stroke-width: 1.5; stroke-dasharray: 3 3; opacity: 0.7; }
+.tg-punto { fill: var(--c-acento); stroke: var(--c-fondo); stroke-width: 2; }
+.tg-punto--alerta { fill: var(--c-alerta); }
+.tg-punto--fuera { fill: var(--c-fuera); }
+.tg-punto--actual { stroke: var(--c-texto); stroke-width: 2.5; }
+.tg-punto--vivo { fill: var(--c-texto); stroke: var(--c-acento); stroke-width: 3; }
+.tg-toque { fill: transparent; cursor: pointer; }
+
+.tg-l { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.tg-l--historial { border-color: var(--c-acento); }
+.tg-l--vivo { width: 9px; height: 9px; border: 2px solid var(--c-acento); border-radius: 50%; background: var(--c-texto); }
+.tg-l--curva { border-color: #a78bfa; }
+.tg-l--esperado { border-top-style: dotted; border-color: #a78bfa; }
+.tg-l--fuera { border-top-style: dashed; border-color: var(--c-fuera); }
+.tg-l--alerta { border-top-style: dashed; border-color: var(--c-alerta); }
+
+.captura-fila--graficada { background: rgba(56, 189, 248, 0.07); box-shadow: inset 3px 0 0 var(--c-acento); }
+.captura-fila[data-grafica] { cursor: pointer; }
+
+/* Pantallas angostas y tablet: la gráfica arriba y fija mientras se captura */
+@media (max-width: 980px) {
+    .captura-modal--con-tendencia .captura-cuerpo { grid-template-columns: minmax(0, 1fr); }
+    .captura-modal--con-tendencia .captura-tendencia { order: -1; z-index: 3; }
+}
+.captura--terminal .captura-modal--con-tendencia { max-width: 1200px; }

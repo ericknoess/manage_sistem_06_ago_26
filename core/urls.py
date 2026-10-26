@@ -20,6 +20,8 @@ urlpatterns = [
     # Integración de los endpoints REST del módulo de Actividades y Recursos Semanales
     path('', include('actividades.urls')),
     path('', include('procesos.urls')),
+    # Datos de proceso: catálogo de parámetros y captura en planta
+    path('', include('datos_proceso.urls')),
 ]
 
 # Configuración para servir archivos multimedia en entorno de desarrollo (DEBUG = True)

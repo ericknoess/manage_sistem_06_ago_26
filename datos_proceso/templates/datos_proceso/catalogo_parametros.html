@@ -1,0 +1,134 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Parámetros - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'datos_proceso/css/catalogo_parametros.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>📈 Catálogo de Parámetros de Proceso</h2>
+            <p>Qué se puede medir en planta: nombre, unidad, tipo de dato y, para los calculados, su fórmula. Dónde y cuándo se mide se define en el diseñador de procesos. Los parámetros no se borran: se desactivan.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'procesos-index' %}" class="btn-secundario">🧫 Diseñador de procesos</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Búsqueda y filtros">
+        <div class="grupo-filtros">
+            <input type="search" id="filtroTexto" placeholder="🔎 Código, nombre o unidad…" oninput="renderizarTabla()" autofocus>
+            <select id="filtroTipo" onchange="renderizarTabla()"><option value="">Todos los tipos</option></select>
+            <select id="filtroCalculo" onchange="renderizarTabla()">
+                <option value="">Capturados y calculados</option>
+                <option value="capturado">Solo capturados</option>
+                <option value="calculado">Solo calculados</option>
+            </select>
+            <select id="filtroEstado" onchange="renderizarTabla()">
+                <option value="activos">Solo activos</option>
+                <option value="inactivos">Solo inactivos</option>
+                <option value="todos">Todos</option>
+            </select>
+            <span id="conteo" class="conteo"></span>
+        </div>
+        <button class="btn-primario" data-permiso="gestionar_catalogos" onclick="abrirModalParametro()">➕ Nuevo parámetro</button>
+    </section>
+
+    <main class="panel">
+        <div class="tabla-contenedor">
+            <table class="tabla-catalogo">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Unidad</th>
+                        <th>Tipo</th>
+                        <th>Decimales</th>
+                        <th>Fórmula / opciones</th>
+                        <th title="Actividades de recetas que lo capturan">Recetas</th>
+                        <th>Estado</th>
+                        <th class="col-acciones">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoTabla">
+                    <tr><td colspan="9" class="estado-vacio">Cargando catálogo…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- MODAL ALTA / EDICIÓN DE PARÁMETRO -->
+    <div class="modal-overlay" id="modalParametro" style="display: none;">
+        <form class="modal-content modal-parametro" id="formParametro" onsubmit="guardarParametro(event)">
+            <div class="modal-header">
+                <h3 id="modalParametroTitulo">➕ Nuevo parámetro</h3>
+            </div>
+            <div class="formulario">
+                <label class="campo">
+                    <span>Código *</span>
+                    <input type="text" id="campoCodigo" maxlength="40" required placeholder="glucosa" autocomplete="off">
+                    <small id="ayudaCodigo">Minúsculas, números y _; lo usan las fórmulas. No cambia después.</small>
+                </label>
+                <label class="campo">
+                    <span>Nombre *</span>
+                    <input type="text" id="campoNombre" maxlength="120" required placeholder="Glucosa">
+                </label>
+                <label class="campo">
+                    <span>Unidad</span>
+                    <input type="text" id="campoUnidad" maxlength="30" placeholder="g/L">
+                </label>
+                <label class="campo">
+                    <span>Tipo de dato</span>
+                    <select id="campoTipo" onchange="actualizarCamposPorTipo()"></select>
+                </label>
+                <label class="campo" id="grupoDecimales">
+                    <span>Decimales</span>
+                    <input type="number" id="campoDecimales" min="0" max="6" step="1" value="2">
+                </label>
+                <div class="campo" aria-hidden="true"></div>
+
+                <label class="campo campo--ancho" id="grupoOpciones" hidden>
+                    <span>Opciones (una por renglón) *</span>
+                    <textarea id="campoOpciones" rows="3" placeholder="Normal&#10;Espuma&#10;Turbio"></textarea>
+                </label>
+
+                <div class="campo campo--ancho" id="grupoFormula">
+                    <label class="campo--check">
+                        <input type="checkbox" id="campoEsCalculado" onchange="actualizarCamposPorTipo()">
+                        <span>Es calculado: su valor sale de una fórmula con otros parámetros (no se captura)</span>
+                    </label>
+                    <div id="bloqueFormula" hidden>
+                        <textarea id="campoFormula" rows="2" maxlength="500" placeholder="flujo_total * mezcla_o2 / 100" oninput="programarPruebaFormula()"></textarea>
+                        <small class="ayuda-formula">Usa códigos de parámetros numéricos, números, + − * / % ** y paréntesis.
+                            Funciones: <span id="listaFunciones"></span>. Ej.: <code>0.0139 * rot_l + 0.059</code></small>
+                        <div class="probador" id="probadorFormula"></div>
+                    </div>
+                </div>
+
+                <label class="campo campo--ancho">
+                    <span>Descripción</span>
+                    <textarea id="campoDescripcion" rows="2" maxlength="500" placeholder="Cómo se mide, equipo o método de referencia…"></textarea>
+                </label>
+            </div>
+            <div id="errorParametro" class="error-formulario" hidden></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secundario" onclick="cerrarModalParametro()">Cancelar</button>
+                <button type="submit" class="btn-primario">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'datos_proceso/js/catalogo_parametros.js' %}"></script>
+</body>
+</html>

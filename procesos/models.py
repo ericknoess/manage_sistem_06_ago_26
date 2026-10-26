@@ -110,6 +110,23 @@ class OperacionProceso(models.Model):
 
     personal_requerido = models.PositiveIntegerField(default=1, help_text="Número total de operadores requeridos")
 
+    # Incubación: muestreo también al arrancar (M-0h), además de los de cada frecuencia
+    muestreo_inicial = models.BooleanField(default=False, help_text="Genera un muestreo a las 0 h del inicio de la incubación")
+
+    # Captura de datos de proceso (parámetros del catálogo, configurados en `datos_proceso.SeccionCaptura`)
+    CAPTURA_CHOICES = [
+        ('NINGUNA', 'No captura datos'),
+        ('COMPLETAR', 'Al completar la actividad'),
+        ('MUESTREOS', 'En cada muestreo'),
+    ]
+    captura_datos = models.CharField(max_length=10, choices=CAPTURA_CHOICES, default='NINGUNA')
+
+    # Edad 0: la hora real en que esta actividad inicia o termina es la edad 0 de su etapa
+    # (y, si se marca, también la del lote); las edades de los datos capturados se cuentan desde ahí.
+    EDAD_CERO_CHOICES = [('', 'No define la edad 0'), ('INICIO', 'Al iniciar la actividad'), ('FIN', 'Al completar la actividad')]
+    edad_cero = models.CharField(max_length=6, choices=EDAD_CERO_CHOICES, blank=True, default='')
+    edad_cero_lote = models.BooleanField(default=False, help_text="Su edad 0 es también la edad 0 del lote (edad global)")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -273,6 +290,10 @@ class FaseLote(models.Model):
 
     fecha_inicio_real = models.DateTimeField(null=True, blank=True)
     fecha_fin_real = models.DateTimeField(null=True, blank=True)
+
+    # Qué datos de proceso se capturan en esta fase, copiado de la receta al instanciar el lote
+    # (editar la receta después no cambia lo que pide un lote en curso). Vacío = no captura.
+    plan_captura = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = "Fase de Lote"

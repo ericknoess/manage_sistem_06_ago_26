@@ -217,13 +217,24 @@ async function renderizarDetalleLote() {
                     asignacionesHtml = `<span class="tag-machine" title="Tiempo de Máquina continuo. No requiere firma de asignación humana.">🧫 Automatizado</span>`;
                 }
 
+                // Datos de proceso: estado de la captura y acceso al formulario
+                let capturaHtml = '';
+                if (fase.captura) {
+                    const c = fase.captura;
+                    capturaHtml = c.capturada
+                        ? `<span class="chip-captura chip-captura--ok" title="${escaparHtml(c.secciones.join(', '))}">📊 Datos capturados</span>`
+                        : `<span class="chip-captura ${c.requerida ? 'chip-captura--pendiente' : ''}" title="${escaparHtml(c.secciones.join(', '))}">📊 ${c.requerida ? 'Datos por capturar' : 'Datos opcionales'}</span>`;
+                }
+                let btnDatos = fase.captura || fase.admite_muestra_adicional
+                    ? `<button class="btn-icon" title="Datos de proceso${fase.admite_muestra_adicional ? ' y muestras adicionales' : ''}" onclick="abrirDatosFase(${fase.id})">📊</button>` : '';
+
                 let idMostrar = fase.operacion_id_paso || fase.operacion_maestra?.identificador_paso || '-';
                 let nombreMostrar = fase.operacion_nombre || fase.nombre_tarea_dinamica || fase.operacion_maestra?.nombre || 'Operación';
 
                 // ACCIONES CON BLOQUEOS
                 let accionesHtml = '';
                 if (isLocked) {
-                    accionesHtml = `<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
+                    accionesHtml = `${btnDatos}<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
                 } else {
                     let btnReprogramar = estaIniciada
                         ? `<button class="btn-icon" title="Bloqueo GxP: Tarea iniciada en planta. No se puede reprogramar." disabled>🔒</button>`
@@ -235,6 +246,7 @@ async function renderizarDetalleLote() {
                         : `<button class="btn-icon" data-permiso="asignar_personal" title="Asignar Operador GxP" onclick="abrirModalAsignacion(${fase.id})">👤</button>`;
 
                     accionesHtml = `
+                        ${btnDatos}
                         ${btnReprogramar}
                         ${btnAsignar}
                         <button class="btn-icon" data-permiso="ejecutar_fase" title="Forzar Estado (Supervisor)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
@@ -244,7 +256,7 @@ async function renderizarDetalleLote() {
                 html += `
                     <tr ${rowClass}>
                         <td style="color: var(--info); font-weight: bold;">${idMostrar}</td>
-                        <td style="font-weight: bold;">${lockIconUI}${nombreMostrar}</td>
+                        <td style="font-weight: bold;">${lockIconUI}${nombreMostrar}${capturaHtml ? `<div>${capturaHtml}</div>` : ''}</td>
                         <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
                         <td style="font-size: 0.75rem;">
                             <div style="color: var(--text-muted); font-size: 0.65rem;">FCST: ${fcstInicio} a ${fcstFin}</div>
@@ -360,6 +372,10 @@ function limpiarSeleccionSiCorresponde(loteId) {
     }
 }
 
+function abrirDatosFase(faseId) {
+    abrirCapturaDatos({ faseId, alCambiar: () => cargarCatalogos() });
+}
+
 async function cambiarEstadoFase(faseId, estadoActual) {
     let siguienteEstado = estadoActual === 'PENDIENTE' ? 'EN_PROGRESO' : (estadoActual === 'EN_PROGRESO' ? 'COMPLETADA' : null);
     if (!siguienteEstado) return;
@@ -379,6 +395,10 @@ async function cambiarEstadoFase(faseId, estadoActual) {
         if (r.data.mensaje_cascada) avisos.push(r.data.mensaje_cascada);
         if (avisos.length) alert(avisos.join('\n\n'));
         await cargarCatalogos();
+    } else if (r.data.codigo === 'DATOS_PENDIENTES') {
+        // Falta capturar los datos de proceso: se abre el formulario directamente
+        alert(r.data.error);
+        abrirDatosFase(faseId);
     } else alert(r.data.error || r.data.detail || 'No se pudo cambiar el estado.');
 }
 

@@ -15,7 +15,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Servidor: `python manage.py runserver`
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
 - Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow); el `venv/` del proyecto no tiene Pillow
-- Pruebas: `python manage.py test auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
+- Pruebas: `python manage.py test datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
@@ -52,6 +52,18 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   ocupado, de otro tipo, no disponible o con calificación vencida, y una fase no inicia sin su equipo. Con la fase en ejecución el equipo
   se cambia con motivo y firma (`CAMBIAR_EQUIPO`): la reserva anterior se cierra en `hasta` y la nueva abre en `desde`.
   Lógica en `procesos/services.py`; API `/api/equipos-fase/`; front compartido en `static/core/js/equipos.js`.
+- `datos_proceso/`: datos de proceso (lo que hacía la app Cultivo, configurable sin código). Catálogo `ParametroProceso`
+  (/parametros/; número, texto, opción o sí/no; los calculados llevan fórmula, evaluada sin `eval` en `formulas.py`).
+  En el diseñador cada actividad dice si captura datos (`OperacionProceso.captura_datos`: al completar o en cada muestreo),
+  si su incubación muestrea a las 0 h (`muestreo_inicial`) y si define la edad 0 de su etapa/lote (`edad_cero`, `edad_cero_lote`);
+  sus `SeccionCaptura` (todos los muestreos, cada N h o horas específicas; muestra física con código `{n}`) llevan `ParametroSeccion`
+  con límites de especificación y alerta y un valor esperado opcional (`objetivo` fijo y/o `curva_referencia` [[edad, valor]],
+  graficada contra la edad del lote o de la etapa, `eje_edad`). Al instanciar, `generar_plan_captura` copia a `FaseLote.plan_captura` lo que pide cada fase.
+  En planta (`/api/captura/<fase>/`): una `TomaDatos` por fase en curso, `ValorParametro` por parámetro; no se completa la fase sin
+  sus obligatorios (`DATOS_PENDIENTES`); corregir crea un valor nuevo (motivo + firma `CORREGIR_DATO`); muestras adicionales en la
+  incubación con motivo. Edad = hora real de la toma − edad 0 (`edades_cero`). Al capturar, cada parámetro numérico muestra su
+  gráfica de tendencia (SVG propio, sin librerías): datos anteriores de la etapa (`tendencias`), valor que se escribe, límites y esperado. Front: `static/core/js/captura.js` (web y tablet),
+  `datos_proceso/static/datos_proceso/js/disenador_captura.js` (diseñador). Pruebas: `python manage.py test datos_proceso.tests`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
   Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
@@ -73,7 +85,21 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   se desbloquean con la acción del admin o `python manage.py desbloquear_usuario <usuario>`.
 - Pantallas: /login/, /auditoria/ (bitácora), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales),
-  /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos)
+  /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos), /parametros/ (catálogo de parámetros de proceso)
+
+## Integración con Cultivo (objetivo en curso, desde 2026-10-23)
+- Cultivo es la app en producción de control en proceso del cultivo celular (`controlcultivo.probiomed.com.mx`,
+  servidor Ubuntu 172.20.6.99; Django 5.2 + PostgreSQL `base_proceso`, Gunicorn + Nginx). Maneja lotes de EPO y
+  Rituximab con muestreos programados cada 6/12/24 h (±2 h), captura de parámetros del reactor, glucosa/lactato y
+  cuenta celular, carnet del lote contra la curva Modelo_2024, desviaciones, CAPAs, expedientes y tablero de tareas.
+- Objetivo (cambiado el 2026-10-23): llevar la lógica de Cultivo al MES, en su propia base y configurable desde pantallas
+  (app `datos_proceso`). Fases: 1) catálogo, captura en tablet/web, edad 0 ✅; 2) gráficas por etapa, curvas de referencia
+  e indicadores (área bajo la curva, gramos estimados); 3) informes por etapa (PDF/Excel); 4) importar el histórico de Cultivo.
+  Desviaciones, CAPAs y expedientes quedan para después.
+- Se trabaja primero en la copia local `../cultivo_local` (ver su CLAUDE.md); a producción solo se lleva lo
+  probado y con autorización explícita del usuario. En el servidor, solo lectura salvo que el usuario lo pida.
+- Problemas conocidos en producción: `DEBUG = True`, API `/api/EPO/` sin permisos (responde sin sesión),
+  sin bitácora de auditoría ni firma, algunas vistas sin `login_required`, `/desempeño/` falla.
 
 ## Convenciones
 - Código, modelos, comentarios y UI en español.

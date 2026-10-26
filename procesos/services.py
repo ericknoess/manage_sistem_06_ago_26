@@ -244,7 +244,8 @@ def construir_fases_lote(lote):
 
         if op.tipo_operacion == 'INCUBACION' and op.frecuencia_muestreo_horas > 0:
             cantidad_muestreos = int(op.duracion_horas // op.frecuencia_muestreo_horas)
-            for i in range(1, cantidad_muestreos + 1):
+            # Con muestreo inicial, el primero (M-0h) es al arrancar la incubación
+            for i in range(0 if op.muestreo_inicial else 1, cantidad_muestreos + 1):
                 horas_transcurridas = i * op.frecuencia_muestreo_horas
                 inicio_muestreo = inicio + timedelta(hours=horas_transcurridas)
                 fin_muestreo = inicio_muestreo + timedelta(hours=op.duracion_muestreo_horas)

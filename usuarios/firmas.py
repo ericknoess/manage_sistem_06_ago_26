@@ -25,6 +25,7 @@ SIGNIFICADOS = {
     'RECIBIR_MATERIAL': 'Recibo el material conforme',
     'RECHAZAR_MATERIAL': 'Rechazo el material entregado',
     'DEVOLVER_MATERIAL': 'Devuelvo el material sobrante',
+    'CORREGIR_DATO': 'Corrijo el dato de proceso registrado',
 }
 
 

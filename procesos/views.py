@@ -53,6 +53,7 @@ from .services import (
     advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
     ErrorSurtido, operadores_disponibles,
 )
+from datos_proceso.services import clonar_secciones, datos_pendientes, generar_plan_captura, resumen_captura
 
 
 # ==============================================================================
@@ -62,7 +63,7 @@ from .services import (
 class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     auditoria_categoria, auditoria_nombre = 'RECETA', 'receta'
     auditoria_excluir = ('etapas', 'operaciones')
-    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__equipos__tipo', 'operaciones__requerimientos_rol__rol', 'etapas').all().order_by('-created_at')
+    queryset = ProcesoMaestro.objects.prefetch_related('operaciones__materiales__material', 'operaciones__equipos__tipo', 'operaciones__requerimientos_rol__rol', 'operaciones__secciones_captura__parametros__parametro', 'etapas').all().order_by('-created_at')
     serializer_class = ProcesoMaestroSerializer
     permiso_escritura = 'editar_receta'
     permisos_por_accion = {'archivar': 'archivar_receta', 'desarchivar': 'archivar_receta'}
@@ -134,7 +135,12 @@ class ProcesoMaestroViewSet(AuditoriaMixin, viewsets.ModelViewSet):
                 tolerancia_antes_horas=op.tolerancia_antes_horas,
                 tolerancia_despues_horas=op.tolerancia_despues_horas,
                 personal_requerido=op.personal_requerido,
+                muestreo_inicial=op.muestreo_inicial,
+                captura_datos=op.captura_datos,
+                edad_cero=op.edad_cero,
+                edad_cero_lote=op.edad_cero_lote,
             )
+            clonar_secciones(op, nueva_op)
             EquipoOperacion.objects.bulk_create([
                 EquipoOperacion(operacion=nueva_op, tipo_id=e.tipo_id, cantidad=e.cantidad, aplica_a=e.aplica_a,
                                 horas_preparacion=e.horas_preparacion, horas_limpieza=e.horas_limpieza)
@@ -171,7 +177,7 @@ class EtapaProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
 
 class OperacionProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
     auditoria_categoria, auditoria_nombre = 'RECETA', 'actividad'
-    queryset = OperacionProceso.objects.prefetch_related('materiales__material', 'equipos__tipo').all().order_by('proceso', 'orden', 'id')
+    queryset = OperacionProceso.objects.prefetch_related('materiales__material', 'equipos__tipo', 'secciones_captura__parametros__parametro').all().order_by('proceso', 'orden', 'id')
     serializer_class = OperacionProcesoSerializer
     permiso_escritura = 'editar_receta'
     permisos_por_accion = {'validar_disponibilidad': SOLO_SESION}  # POST de solo consulta
@@ -227,7 +233,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
-        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo').order_by('-created_at')
+        return LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').prefetch_related('fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo', 'fases__tomas_datos').order_by('-created_at')
 
     serializer_class = LoteProduccionSerializer
     permisos_por_accion = {
@@ -243,6 +249,7 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         FaseLote.objects.bulk_create(construir_fases_lote(lote))
         generar_materiales_lote(lote)
         generar_equipos_lote(lote)
+        generar_plan_captura(lote)
         registrar(request, 'LOTE', 'CREAR', f"Lote {lote.identificador_lote} instanciado con la receta {lote.proceso_maestro.nombre}",
                   objeto=lote, lote=lote, cambios={
                       'receta': [None, lote.proceso_maestro.nombre],
@@ -321,7 +328,7 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         return FaseLote.objects.select_related('operacion_maestra', 'lote').prefetch_related(
             'materiales__material', 'materiales__entregas__devoluciones', 'materiales__entregas__material_fase__material', 'materiales__entregas__material_fase__fase__lote',
             'operadores_asignados__operador', 'operadores_asignados__rol_ejercido',
-            'equipos__tipo', 'equipos__reservas__equipo',
+            'equipos__tipo', 'equipos__reservas__equipo', 'tomas_datos',
         ).filter(lote__archivado=False).exclude(lote__estado='ABORTADO').order_by('operacion_maestra__identificador_paso', 'indice_muestreo')
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
@@ -338,6 +345,11 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
                 return Response({"error": "No se puede completar sin asignar al menos un operador."}, status=status.HTTP_400_BAD_REQUEST)
         if nuevo_estado == fase.estado:
             return Response({"error": f"La fase ya está en estado {nuevo_estado}."}, status=status.HTTP_400_BAD_REQUEST)
+        if nuevo_estado == 'COMPLETADA':
+            # Los datos de proceso obligatorios se capturan antes de cerrar la tarea
+            pendientes = datos_pendientes(fase)
+            if pendientes:
+                return Response({"error": pendientes, "codigo": "DATOS_PENDIENTES"}, status=status.HTTP_400_BAD_REQUEST)
 
         tiempo_actual = timezone.now()
 
@@ -958,6 +970,7 @@ class MobileeBRViewSet(viewsets.ViewSet):
             'fase_lote', 'fase_lote__lote', 'fase_lote__operacion_maestra', 'fase_lote__lote__proceso_maestro'
         ).prefetch_related(
             'fase_lote__equipos__reservas__equipo', 'fase_lote__materiales__material', 'fase_lote__materiales__entregas__devoluciones',
+            'fase_lote__tomas_datos',
         ).order_by('fase_lote__inicio_programado')
         
         tareas_data = []
@@ -979,6 +992,7 @@ class MobileeBRViewSet(viewsets.ViewSet):
                 "equipos": [f"[{r.equipo_id}] {r.equipo.nombre}" for ef in fase.equipos.all() if ef.activo
                             for r in ef.reservas.all() if r.vigente],
                 "materiales": [_material_terminal(mf) for mf in fase.materiales.all() if mf.activo],
+                "captura": resumen_captura(fase),
             })
 
         # Sobrantes por devolver de tareas que ya terminó (últimos 7 días); los de tareas abiertas van en cada tarjeta

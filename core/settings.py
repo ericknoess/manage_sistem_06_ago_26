@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'roster',
     'actividades',  # <-- NUEVA APLICACIÓN REGISTRADA
     'procesos',
+    'datos_proceso',
     'usuarios',
     'auditoria',
 ]

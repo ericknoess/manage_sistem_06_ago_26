@@ -9,6 +9,7 @@ from .models import (
     EquipoOperacion, EquipoFase, ReservaEquipo, EntregaMaterial,
 )
 from roster.models import RolOperador
+from datos_proceso.serializers import SeccionCapturaSerializer, guardar_secciones, validar_secciones_de_operacion
 
 
 # ==============================================================================
@@ -77,16 +78,18 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
     equipos = EquipoOperacionSerializer(many=True, required=False)
     requerimientos_rol = RequerimientoPersonalFaseSerializer(many=True, required=False)
     requerimientos_rol_detalles = RequerimientoPersonalFaseSerializer(source='requerimientos_rol', many=True, read_only=True)
+    secciones_captura = SeccionCapturaSerializer(many=True, required=False)
 
     class Meta:
         model = OperacionProceso
         fields = [
             'id', 'proceso', 'etapa', 'identificador_paso', 'nombre', 'tipo_operacion',
             'duracion_horas', 'frecuencia_muestreo_horas', 'duracion_muestreo_horas',
-            'ops_muestreo', 'predecesora', 'tipo_dependencia', 'desfase_horas',
+            'ops_muestreo', 'muestreo_inicial', 'predecesora', 'tipo_dependencia', 'desfase_horas',
             'tolerancia_antes_horas', 'tolerancia_despues_horas',
             'personal_requerido', 'materiales', 'equipos',
-            'requerimientos_rol', 'requerimientos_rol_detalles'
+            'requerimientos_rol', 'requerimientos_rol_detalles',
+            'captura_datos', 'edad_cero', 'edad_cero_lote', 'secciones_captura',
         ]
         extra_kwargs = {
             'etapa': {'required': False, 'allow_null': True},
@@ -148,7 +151,52 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             if not genera_muestreos and any(e.get('aplica_a') == 'MUESTREO' for e in equipos):
                 raise serializers.ValidationError({"equipos": "Solo una incubación con frecuencia de muestreo puede pedir equipo por muestreo."})
 
+        self._validar_datos_proceso(data)
         return data
+
+    def _validar_datos_proceso(self, data):
+        """Muestreo inicial, captura de datos y edad 0 (una actividad por etapa y una por lote)."""
+        valor = lambda campo, defecto=None: data.get(campo, getattr(self.instance, campo, defecto) if self.instance else defecto)
+        es_incubacion = valor('tipo_operacion', 'ACTIVA') == 'INCUBACION'
+        frecuencia = valor('frecuencia_muestreo_horas', 0) or 0
+        genera_muestreos = es_incubacion and frecuencia > 0
+        if valor('muestreo_inicial', False) and not genera_muestreos:
+            data['muestreo_inicial'] = False
+
+        captura = valor('captura_datos', 'NINGUNA')
+        if captura == 'NINGUNA':
+            if 'captura_datos' in data or 'secciones_captura' in data:
+                data['secciones_captura'] = []
+        elif 'secciones_captura' in data:
+            error = validar_secciones_de_operacion(
+                data['secciones_captura'], captura, es_incubacion, frecuencia,
+                valor('duracion_horas', 0) or 0, bool(valor('muestreo_inicial', False)))
+            if error:
+                raise serializers.ValidationError({"secciones_captura": error})
+        else:
+            # Sin secciones en la petición: la forma de captura debe seguir siendo posible con las que ya tiene
+            if captura == 'MUESTREOS' and not genera_muestreos:
+                raise serializers.ValidationError({"captura_datos": "Solo una incubación con frecuencia de muestreo captura datos en cada muestreo."})
+            if not (self.instance and self.instance.secciones_captura.exists()):
+                raise serializers.ValidationError({"secciones_captura": "Agrega al menos una sección con parámetros."})
+
+        edad_cero = valor('edad_cero', '') or ''
+        edad_cero_lote = bool(valor('edad_cero_lote', False))
+        if edad_cero_lote and not edad_cero:
+            raise serializers.ValidationError({"edad_cero_lote": "Para ser la edad 0 del lote, la actividad debe definir la edad 0 de su etapa (al iniciar o al completar)."})
+        if edad_cero:
+            etapa = valor('etapa')
+            if not etapa:
+                raise serializers.ValidationError({"edad_cero": "Solo una actividad dentro de una etapa puede definir su edad 0."})
+            otras = OperacionProceso.objects.filter(proceso=valor('proceso')).exclude(edad_cero='')
+            if self.instance:
+                otras = otras.exclude(pk=self.instance.pk)
+            repetida = otras.filter(etapa=etapa).first()
+            if repetida:
+                raise serializers.ValidationError({"edad_cero": f"La edad 0 de la etapa «{etapa.nombre}» ya la define [{repetida.identificador_paso}] {repetida.nombre}."})
+            repetida = otras.filter(edad_cero_lote=True).first() if edad_cero_lote else None
+            if repetida:
+                raise serializers.ValidationError({"edad_cero_lote": f"La edad 0 del lote ya la define [{repetida.identificador_paso}] {repetida.nombre}."})
 
     @staticmethod
     def _guardar_equipos(operacion, equipos_data):
@@ -165,10 +213,12 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
         requerimientos_data = validated_data.pop('requerimientos_rol', [])
         materiales_data = validated_data.pop('materiales', [])
         equipos_data = validated_data.pop('equipos', [])
+        secciones_data = validated_data.pop('secciones_captura', [])
 
         operacion = OperacionProceso.objects.create(**validated_data)
         self._guardar_materiales(operacion, materiales_data)
         self._guardar_equipos(operacion, equipos_data)
+        guardar_secciones(operacion, secciones_data)
             
         for req in requerimientos_data:
             RequerimientoPersonalFase.objects.create(operacion=operacion, **req)
@@ -180,6 +230,7 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
         requerimientos_data = validated_data.pop('requerimientos_rol', None)
         materiales_data = validated_data.pop('materiales', None)
         equipos_data = validated_data.pop('equipos', None)
+        secciones_data = validated_data.pop('secciones_captura', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -189,6 +240,8 @@ class OperacionProcesoSerializer(serializers.ModelSerializer):
             self._guardar_materiales(instance, materiales_data)
         if equipos_data is not None:
             self._guardar_equipos(instance, equipos_data)
+        if secciones_data is not None:
+            guardar_secciones(instance, secciones_data)
 
         if requerimientos_data is not None:
             instance.requerimientos_rol.all().delete()
@@ -386,6 +439,10 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     tolerancia_antes_horas = serializers.FloatField(source='operacion_maestra.tolerancia_antes_horas', read_only=True)
     tolerancia_despues_horas = serializers.FloatField(source='operacion_maestra.tolerancia_despues_horas', read_only=True)
 
+    # Datos de proceso: qué pide la fase y si ya se capturaron; si admite muestras adicionales (incubación)
+    captura = serializers.SerializerMethodField()
+    admite_muestra_adicional = serializers.SerializerMethodField()
+
     class Meta:
         model = FaseLote
         fields = [
@@ -401,7 +458,7 @@ class FaseLoteSerializer(serializers.ModelSerializer):
             'equipos', 'materiales',
             'fecha_inicio_real', 'fecha_fin_real', 'duracion_estimada', 'duracion_real_horas', 
             'desviacion_horas', 'personal_requerido', 'operadores_asignados',
-            'tolerancia_antes_horas', 'tolerancia_despues_horas',
+            'tolerancia_antes_horas', 'tolerancia_despues_horas', 'captura', 'admite_muestra_adicional',
         ]
         # Estado y horarios solo cambian vía las acciones `cambiar-estado` y `reprogramar`
         read_only_fields = [
@@ -414,6 +471,14 @@ class FaseLoteSerializer(serializers.ModelSerializer):
     @staticmethod
     def _local(valor):
         return timezone.localtime(valor) if valor else None
+
+    def get_captura(self, obj):
+        from datos_proceso.services import resumen_captura
+        return resumen_captura(obj)
+
+    def get_admite_muestra_adicional(self, obj):
+        from datos_proceso.services import operacion_admite_adicional
+        return operacion_admite_adicional(obj)
 
     def get_fecha_programada(self, obj):
         inicio = self._local(obj.inicio_programado)

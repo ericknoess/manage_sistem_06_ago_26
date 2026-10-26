@@ -238,7 +238,14 @@ function renderizarTareas(tareas, sobrantes = []) {
                 accionHtml = `${avisoRetraso}<button class="btn-massive btn-primary" onclick="cambiarEstadoFase(${t.fase_id}, 'EN_PROGRESO')">▶ INICIAR ACTIVIDAD</button>`;
             }
         } else if (t.estado === 'EN_PROGRESO') {
-            accionHtml = `<button class="btn-massive btn-success" onclick="cambiarEstadoFase(${t.fase_id}, 'COMPLETADA')">✔ MARCAR COMPLETADA</button>`;
+            // Si la tarea pide datos de proceso obligatorios, primero se capturan y después se completa
+            const faltanDatos = t.captura && t.captura.requerida && !t.captura.capturada;
+            const btnDatos = t.captura
+                ? `<button class="btn-massive btn-datos" onclick="abrirCapturaTarea(${t.fase_id})">📊 ${t.captura.capturada ? 'VER / CORREGIR DATOS' : 'CAPTURAR DATOS'}</button>` : '';
+            accionHtml = faltanDatos
+                ? `${btnDatos}<div class="task-aviso task-aviso--espera">📊 Captura los datos (${escaparTexto(t.captura.secciones.join(', '))}) para poder completarla.</div>
+                   <button class="btn-massive btn-success" disabled>✔ MARCAR COMPLETADA</button>`
+                : `${btnDatos}<button class="btn-massive btn-success" onclick="cambiarEstadoFase(${t.fase_id}, 'COMPLETADA')">✔ MARCAR COMPLETADA</button>`;
         }
 
         const tFecha = t.inicio_programado ? new Date(t.inicio_programado).toLocaleDateString('es-MX') : 'N/A';
@@ -259,6 +266,8 @@ function renderizarTareas(tareas, sobrantes = []) {
                 <div class="detail-item"><strong>👤 Rol Requerido</strong><span>${t.rol_asignado}</span></div>
                 <div class="detail-item"><strong>⚙️ Tipo</strong><span>${t.tipo_operacion}</span></div>
                 ${t.equipos && t.equipos.length ? `<div class="detail-item detail-item--ancho"><strong>🏗️ Equipo</strong><span>${t.equipos.map(escaparTexto).join(', ')}</span></div>` : ''}
+                ${t.captura ? `<div class="detail-item detail-item--ancho"><strong>📊 Datos de proceso</strong><span>${escaparTexto(t.captura.secciones.join(', '))}
+                    · <span class="chip-captura ${t.captura.capturada ? 'chip-captura--ok' : (t.captura.requerida ? 'chip-captura--pendiente' : '')}">${t.captura.capturada ? 'Capturados' : 'Por capturar'}</span></span></div>` : ''}
             </div>
 
             ${htmlMaterialesTarea(t)}
@@ -378,6 +387,10 @@ async function enviarFirmaPin(evento) {
         } else if (data.codigo === 'MOTIVO_REQUERIDO') {
             pedirMotivoPin(data.error);
             document.getElementById('firmaPinMotivo').focus();
+        } else if (data.codigo === 'DATOS_PENDIENTES') {
+            cerrarFirmaPin();
+            alert("📊 " + data.error);
+            abrirCapturaTarea(faseId);
         } else if (['FUERA_DE_VENTANA', 'DEPENDENCIA_PENDIENTE'].includes(data.codigo)) {
             cerrarFirmaPin();
             alert("⏳ " + data.error);
@@ -403,6 +416,11 @@ async function enviarFirmaPin(evento) {
     } finally {
         boton.disabled = false;
     }
+}
+
+// Datos de proceso de la tarea (formulario compartido static/core/js/captura.js, en modo terminal: firma con PIN)
+function abrirCapturaTarea(faseId) {
+    abrirCapturaDatos({ faseId, terminal: true, alCambiar: () => cargarTareasPendientes() });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
