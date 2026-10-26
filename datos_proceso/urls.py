@@ -4,13 +4,15 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
 
-from .views import AnalisisProcesoViewSet, CapturaViewSet, IndicadorProcesoViewSet, ParametroProcesoViewSet
+from .views import (AnalisisProcesoViewSet, CapturaViewSet, IndicadorProcesoViewSet, InformeProcesoViewSet,
+                    ParametroProcesoViewSet)
 
 router = DefaultRouter()
 router.register(r'parametros-proceso', ParametroProcesoViewSet, basename='parametro-proceso')
 router.register(r'captura', CapturaViewSet, basename='captura')
 router.register(r'indicadores-proceso', IndicadorProcesoViewSet, basename='indicador-proceso')
 router.register(r'analisis-proceso', AnalisisProcesoViewSet, basename='analisis-proceso')
+router.register(r'informes-proceso', InformeProcesoViewSet, basename='informe-proceso')
 
 urlpatterns = [
     path('api/', include(router.urls)),

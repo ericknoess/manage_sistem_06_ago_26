@@ -443,7 +443,7 @@ class CalculosAnalisisTests(TestCase):
         self.assertEqual(area_curva_entre(curva, 5, 15), 37.5 + 50)  # 5→10 h sube de 5 a 10; 10→15 h se queda en 10
 
 
-class AnalisisTests(CapturaBase):
+class AnalisisBase(CapturaBase):
     """Células a las 0 h (0.3) y a las 24 h (0.5) → ABC = 9.6; curva esperada 0.3 → 0.7 → área 12 → apego 80 %."""
 
     def setUp(self):
@@ -474,6 +474,10 @@ class AnalisisTests(CapturaBase):
         self.indicador(codigo='apego', nombre='Apego', tipo='APEGO', parametro=self.celulas.id, etapa=self.etapa.id, meta_min='90')
         self.indicador(codigo='gramos', nombre='Gramos estimados', tipo='FORMULA', formula='abc_cel * 10 - 5')
         self.indicador(codigo='glu_final', nombre='Glucosa final', tipo='ULTIMO', parametro=self.glucosa.id)
+
+
+
+class AnalisisTests(AnalisisBase):
 
     def test_indicadores_del_lote(self):
         self.crear_indicadores()
@@ -536,6 +540,23 @@ class AnalisisTests(CapturaBase):
         self.assertNotEqual(copia.etapa_id, self.etapa.id)
         self.assertEqual(copia.etapa.nombre, 'PO4')
 
+    def test_graficas_por_etapa_como_en_el_disenador(self):
+        produccion = EtapaProceso.objects.create(proceso=self.proceso, nombre='Producción', orden=2)
+        self.crear_operacion({'identificador_paso': 'T9', 'nombre': 'Perfusión', 'tipo_operacion': 'ACTIVA', 'duracion_horas': 1,
+                              'etapa': produccion.id, 'captura_datos': 'COMPLETAR',
+                              'secciones_captura': [{'nombre': 'Reactor', 'parametros': [self.p(self.celulas, especificacion_min='1')]}]})
+        r = self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={self.lote.id}')
+        self.assertEqual([e['nombre'] for e in r.data['etapas']], ['PO4', 'Producción'])
+        celulas = [p for p in r.data['parametros'] if p['codigo'] == 'celulas']
+        self.assertEqual([p['etapa'] for p in celulas], ['PO4', 'Producción'])       # una gráfica por etapa
+        self.assertEqual(celulas[0]['bloque'], '[T2] Incubación · Cuenta')
+        self.assertEqual(len(celulas[0]['series'][str(self.lote.id)]), 2)             # los datos de PO4
+        self.assertEqual(celulas[1]['series'], {})                                      # Producción aún sin datos
+        self.assertEqual(celulas[1]['limites']['especificacion_min'], '1')             # con los límites de esa etapa
+        recetas = self.web.get('/api/analisis-proceso/recetas/').data
+        receta = next(x for x in recetas if x['id'] == self.proceso.id)
+        self.assertEqual((receta['etapas'], receta['lotes'], receta['lotes_con_datos']), (2, 1, 1))
+
     def test_lotes_de_la_receta_y_limite_de_lotes(self):
         r = self.web.get(f'/api/analisis-proceso/lotes/?proceso={self.proceso.id}')
         self.assertEqual(r.data['lotes'][0]['tomas'], 2)
@@ -544,3 +565,85 @@ class AnalisisTests(CapturaBase):
         self.assertEqual(self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={muchos}').status_code, 400)
         repetidos = ','.join(str(self.lote.id) for _ in range(300))   # los repetidos cuentan una vez
         self.assertEqual(len(self.web.get(f'/api/analisis-proceso/?proceso={self.proceso.id}&lotes={repetidos}').data['lotes']), 1)
+
+
+class InformesTests(AnalisisBase):
+    """Informes PDF y Excel sobre los datos de AnalisisTests (células a las 0 y 24 h)."""
+
+    def test_pdf_y_excel_del_lote_quedan_en_la_bitacora(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        self.crear_indicadores()
+        r = self.web.get(f'/api/informes-proceso/{self.lote.id}/pdf/?etapa={self.etapa.id}')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
+        self.assertTrue(r.content.startswith(b'%PDF'))
+        self.assertIn('Informe_L-1_PO4_', r['Content-Disposition'])
+        r = self.web.get(f'/api/informes-proceso/{self.lote.id}/excel/')
+        self.assertEqual(r.status_code, 200)
+        libro = load_workbook(BytesIO(r.content))
+        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Fuera de límites', 'Muestras adicionales', 'Correcciones'])
+        datos = libro['Datos PO4']
+        encabezados = [c.value for c in datos[1]]
+        celulas = encabezados.index('Células (MCel/mL)') + 1
+        self.assertEqual([datos.cell(row=k, column=celulas).value for k in (2, 3)], [0.3, 0.5])
+        resumen = [fila for fila in libro['Resumen'].iter_rows(values_only=True)]
+        self.assertTrue(any(f[0] == 'ABC células' and f[3] == 9.6 for f in resumen))
+        self.assertEqual(RegistroAuditoria.objects.filter(categoria='DATOS_PROCESO', accion='GENERAR_INFORME', lote=self.lote).count(), 2)
+
+    def test_la_huella_cambia_con_una_correccion_y_esta_aparece_firmada(self):
+        from .services import datos_informe
+        antes = datos_informe(self.lote)
+        self.assertEqual(antes['huella'], datos_informe(self.lote)['huella'])  # mismos datos, misma huella
+        m24 = self.muestreo(4)
+        toma = TomaDatos.objects.get(fase=m24)
+        r = self.admin.post(f'/api/captura/{m24.id}/corregir/', {'toma': toma.id, 'parametro': self.celulas.id, 'valor': '0.55',
+                                                                 'motivo': 'Recuento repetido en cámara', 'firma_password': 'clave-de-prueba'},
+                            format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        despues = datos_informe(self.lote)
+        self.assertNotEqual(antes['huella'], despues['huella'])
+        correccion = despues['correcciones'][0]
+        self.assertEqual(correccion['cambios'], [{'codigo': 'celulas', 'antes': '0.5', 'despues': '0.55'}])
+        self.assertEqual(correccion['firma']['significado'], 'Corrijo el dato de proceso registrado')
+        fila = next(t for t in despues['etapas'][0]['tomas'] if t['toma'] == toma.id)
+        self.assertTrue(fila['valores'][self.celulas.id]['corregido'])
+
+    def test_informe_por_etapa_con_graficas_combinadas(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from .services import datos_informe
+        clave = lambda p: f"{self.etapa.id}-{p.id}"
+        datos = datos_informe(self.lote, combinar=[clave(self.celulas), clave(self.temp), clave(self.aspecto), 'basura'],
+                              vista='superpuestas')
+        self.assertEqual([e['etapa'] for e in datos['etapas']], ['PO4'])
+        po4 = datos['etapas'][0]
+        self.assertEqual(len(po4['tomas']), 2)
+        self.assertEqual([b['titulo'] for b in po4['bloques']], ['[T2] Incubación · Reactor', '[T2] Incubación · Metabolitos',
+                                                                 '[T2] Incubación · Cuenta'])
+        # Solo numéricos con datos; lo demás se ignora
+        self.assertEqual([c['columna']['codigo'] for c in datos['combinadas']], ['celulas', 'temp'])
+        self.assertEqual(datos['vista_combinadas'], 'superpuestas')
+        r = self.web.get(f'/api/informes-proceso/{self.lote.id}/pdf/?combinar={clave(self.celulas)},{clave(self.temp)}&vista=apiladas')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b'%PDF'))
+        r = self.web.get(f'/api/informes-proceso/{self.lote.id}/excel/?combinar={clave(self.celulas)},{clave(self.temp)}')
+        libro = load_workbook(BytesIO(r.content))
+        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Gráficas combinadas', 'Fuera de límites', 'Muestras adicionales',
+                                            'Correcciones'])
+        self.assertEqual(len(libro['Gráficas combinadas']._charts), 2)
+        registro = RegistroAuditoria.objects.filter(accion='GENERAR_INFORME').latest('id')
+        self.assertEqual(registro.cambios['combinadas'][1], 'celulas, temp')
+
+    def test_excel_de_varios_lotes_y_validaciones(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        self.crear_indicadores()
+        r = self.web.get(f'/api/informes-proceso/lotes/?proceso={self.proceso.id}&lotes={self.lote.id}')
+        self.assertEqual(r.status_code, 200)
+        libro = load_workbook(BytesIO(r.content))
+        self.assertEqual(libro.sheetnames, ['Información', 'Datos', 'Indicadores'])
+        filas = list(libro['Datos'].iter_rows(min_row=2, values_only=True))
+        self.assertTrue(any(f[9] == 'celulas' and f[12] == 0.5 for f in filas))
+        self.assertEqual(self.web.get(f'/api/informes-proceso/{self.lote.id}/pdf/?etapa=99999').status_code, 404)
+        self.assertEqual(self.web.get(f'/api/informes-proceso/lotes/?proceso={self.proceso.id}&lotes=').status_code, 400)

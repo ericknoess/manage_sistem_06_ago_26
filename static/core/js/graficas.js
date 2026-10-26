@@ -15,7 +15,11 @@
 //       textoPunto: (serie, punto) => html,   // detalle del punto (si no trae `texto`)
 //       textoX: 'Edad del lote (h)', alto: 260,
 //       tema: 'oscuro' | 'claro',      // claro = fondo blanco (usa COLORES_SERIES_CLARO para las series)
+//       tipoX: 'numero' | 'fecha',     // fecha: x en segundos epoch; marcas y guía con fecha y hora
+//       rangoX: [x0, x1] | null,       // rango fijo (gráficas apiladas alineadas); el zoom lo sustituye
+//       grupoGuia: 'nombre',           // las gráficas del mismo grupo mueven juntas su guía vertical
 //   });
+//   Una serie con `tenue: true` y color se dibuja delgada y transparente en su color (gráficas superpuestas).
 //
 // Al pasar el cursor: guía vertical con la edad, la serie más cercana se ilumina y una ficha muestra el punto.
 // Estilos en static/core/css/graficas.css. Devuelve { curvaVisible, rango: [x0, x1] }.
@@ -41,6 +45,23 @@
         for (let v = Math.ceil(min / paso) * paso; v <= max + paso * 1e-9; v += paso) lista.push(Number(v.toFixed(10)));
         return lista;
     }
+
+    // Fechas (x en segundos epoch): marcas en pasos "redondos" de horas o días
+    const fechaCorta = (seg) => {
+        const d = new Date(seg * 1000);
+        const dos = (n) => String(n).padStart(2, '0');
+        return `${dos(d.getDate())}/${dos(d.getMonth() + 1)} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+    };
+    function marcasFecha(min, max, cuantas) {
+        const H = 3600, D = 86400;
+        const pasos = [H, 2 * H, 3 * H, 6 * H, 12 * H, D, 2 * D, 7 * D, 14 * D, 30 * D, 90 * D];
+        const paso = pasos.find(p => (max - min) / p <= cuantas) || pasos[pasos.length - 1];
+        const desfase = new Date().getTimezoneOffset() * 60;   // marcas en horas locales redondas
+        const lista = [];
+        for (let v = Math.ceil((min - desfase) / paso) * paso + desfase; v <= max; v += paso) lista.push(v);
+        return lista;
+    }
+    window.fechaCortaGrafica = fechaCorta;
 
     function lineasLimite(lim) {
         lim = lim || {};
@@ -83,7 +104,9 @@
         const {
             series = [], vivo = null, curva = [], objetivo = null, limites = null, banda = false, mostrarPuntos = true,
             zoom = null, alZoom = null, alElegirSerie = null, textoPunto = null, textoX = 'Edad (h)', alto = 260, tema = 'oscuro',
+            tipoX = 'numero', rangoX = null, grupoGuia = null,
         } = opciones;
+        const textoEjeX = tipoX === 'fecha' ? fechaCorta : (v) => `${corto(v)} h`;
         const neutro = NEUTRO[tema] || NEUTRO.oscuro;
         const lineas = lineasLimite(limites);
         const esperado = numero(objetivo);
@@ -94,8 +117,13 @@
         // Dominio de edades: el zoom, o lo que abarcan los datos; sin datos, la curva esperada
         const xsDatos = [...ordenadas.flatMap(s => s.puntos.map(q => q.x)), ...(actual ? [actual.x] : [])];
         let xMin, xMax;
-        if (zoom) {
-            [xMin, xMax] = zoom;
+        if (zoom || rangoX) {
+            [xMin, xMax] = zoom || rangoX;
+        } else if (xsDatos.length && tipoX === 'fecha') {
+            xMin = Math.min(...xsDatos);
+            xMax = Math.max(...xsDatos);
+            const margen = Math.max(1800, (xMax - xMin) * 0.04);
+            xMin -= margen; xMax += margen;
         } else if (xsDatos.length) {
             xMin = Math.min(0, ...xsDatos);
             xMax = Math.max(...xsDatos);
@@ -155,9 +183,9 @@
             el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(v), y2: Y(v), class: 'tg-rejilla' }, svg);
             el('text', { x: m.izq - 7, y: Y(v) + 3, class: 'tg-eje', 'text-anchor': 'end' }, svg).textContent = corto(v);
         });
-        marcas(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 70))).forEach(v => {
+        (tipoX === 'fecha' ? marcasFecha(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 95))) : marcas(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 70)))).forEach(v => {
             el('line', { x1: X(v), x2: X(v), y1: m.arr, y2: alto - m.aba, class: 'tg-rejilla tg-rejilla--v' }, svg);
-            el('text', { x: X(v), y: alto - m.aba + 15, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = corto(v);
+            el('text', { x: X(v), y: alto - m.aba + 15, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = tipoX === 'fecha' ? fechaCorta(v) : corto(v);
         });
         el('text', { x: m.izq + anchoUtil / 2, y: alto - 4, class: 'tg-eje tg-eje--titulo', 'text-anchor': 'middle' }, svg).textContent = textoX;
 
@@ -198,6 +226,10 @@
                 el('path', { d: camino(s.orden), class: 'tg-serie tg-serie--fondo' }, fondo);
                 return;
             }
+            if (s.tenue) {
+                el('path', { d: camino(s.orden), class: 'tg-serie tg-serie--tenue', style: `stroke:${s.color}` }, fondo);
+                return;
+            }
             if (unaSola) {
                 const grad = el('linearGradient', { id: `area-${uid}`, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
                 el('stop', { offset: '0%', 'stop-color': s.color, 'stop-opacity': 0.28 }, grad);
@@ -216,21 +248,22 @@
         // Puntos (las series de fondo solo si se pide) y su posición en pantalla para buscar el más cercano
         const cercanos = [];
         ordenadas.forEach(s => {
-            const conPunto = s.color || mostrarPuntos;
+            const conPunto = (s.color && !s.tenue) || mostrarPuntos;
             s.puntos.forEach(q => {
                 if (!dentro(q.x)) return;
                 const px = X(q.x), py = Y(q.y);
                 cercanos.push({ px, py, q, s });
                 if (!conPunto) return;
+                const fuerte = s.color && !s.tenue;
                 el('circle', {
-                    cx: px, cy: py, r: s.color ? 4 : 2.6,
-                    class: `tg-punto${s.color ? '' : ' tg-punto--fondo'}${q.estado ? ` tg-punto--${q.estado}` : ''}`,
+                    cx: px, cy: py, r: fuerte ? 4 : 2.6,
+                    class: `tg-punto${fuerte ? '' : ' tg-punto--fondo'}${q.estado ? ` tg-punto--${q.estado}` : ''}`,
                     style: s.color ? `fill:${s.color}` : '',
-                }, s.color ? frente : fondo);
+                }, fuerte ? frente : fondo);
             });
         });
         // Nombre de cada serie destacada al final de su línea (sin encimarse); el texto va en tinta, el color en la marca
-        const etiquetas = ordenadas.filter(s => s.color && s.nombre && ordenadas.length > 1).map(s => {
+        const etiquetas = ordenadas.filter(s => s.color && !s.tenue && s.nombre && ordenadas.length > 1).map(s => {
             const visibles = s.orden.filter(q => dentro(q.x));
             if (!visibles.length) return null;
             const ultimo = visibles[visibles.length - 1];
@@ -276,19 +309,40 @@
             }
             return mejor;
         };
+        const ponerGuia = (px) => {
+            guia.setAttribute('visibility', 'visible');
+            guiaLinea.setAttribute('x1', px); guiaLinea.setAttribute('x2', px);
+            guiaTexto.setAttribute('x', px);
+            guiaTexto.textContent = textoEjeX(aEdad(px));
+            const anchoPastilla = guiaTexto.textContent.length * 6 + 14;
+            guiaFondo.setAttribute('x', px - anchoPastilla / 2); guiaFondo.setAttribute('width', anchoPastilla);
+        };
         const ocultar = () => {
             [guia, iluminada, anillo].forEach(n => n.setAttribute('visibility', 'hidden'));
             ficha.hidden = true;
             cercanoActual = null;
+            if (grupoGuia) document.dispatchEvent(new CustomEvent('tg-guia', { detail: { grupo: grupoGuia, x: null, origen: svg } }));
         };
+        // Guía sincronizada: otra gráfica del grupo movió su guía (se quita al redibujar este contenedor)
+        if (contenedor._quitarGuia) contenedor._quitarGuia();
+        if (grupoGuia) {
+            const alGuia = (e) => {
+                if (e.detail.grupo !== grupoGuia || e.detail.origen === svg) return;
+                if (e.detail.x === null || e.detail.x < xMin || e.detail.x > xMax) { guia.setAttribute('visibility', 'hidden'); return; }
+                ponerGuia(X(e.detail.x));
+            };
+            document.addEventListener('tg-guia', alGuia);
+            contenedor._quitarGuia = () => document.removeEventListener('tg-guia', alGuia);
+        } else {
+            contenedor._quitarGuia = null;
+        }
         const mover = (p) => {
             const px = Math.min(Math.max(p.x, m.izq), m.izq + anchoUtil);
             guia.setAttribute('visibility', 'visible');
             guiaLinea.setAttribute('x1', px); guiaLinea.setAttribute('x2', px);
             guiaTexto.setAttribute('x', px);
-            guiaTexto.textContent = `${corto(aEdad(px))} h`;
-            const anchoPastilla = guiaTexto.textContent.length * 6 + 14;
-            guiaFondo.setAttribute('x', px - anchoPastilla / 2); guiaFondo.setAttribute('width', anchoPastilla);
+            ponerGuia(px);
+            if (grupoGuia) document.dispatchEvent(new CustomEvent('tg-guia', { detail: { grupo: grupoGuia, x: aEdad(px), origen: svg } }));
 
             if (arrastre) {
                 const x0 = Math.min(arrastre, px), x1 = Math.max(arrastre, px);
@@ -310,7 +364,7 @@
             } else {
                 iluminada.setAttribute('visibility', 'hidden');
             }
-            ficha.innerHTML = (c.q.texto || (textoPunto && c.s ? textoPunto(c.s, c.q) : `${corto(c.q.y)} a ${corto(c.q.x)} h`))
+            ficha.innerHTML = (c.q.texto || (textoPunto && c.s ? textoPunto(c.s, c.q) : `${corto(c.q.y)} · ${textoEjeX(c.q.x)}`))
                 + (c.s && alElegirSerie ? `<div class="tg-ayuda__pista">${c.s.destacada ? 'Clic para quitar el color' : 'Clic para destacar'}</div>` : '');
             ficha.style.setProperty('--tg-color', c.s && c.s.color ? c.s.color : neutro.ficha);
             ficha.hidden = false;

@@ -19,7 +19,7 @@ from .formulas import ErrorFormula, evaluar
 from .models import IndicadorProceso, ParametroProceso, TomaDatos
 from .serializers import IndicadorProcesoSerializer, ParametroProcesoSerializer
 from .services import (
-    MAX_LOTES_ANALISIS, MOTIVO_MINIMO, ErrorCaptura, analisis_lotes, avisos_limites, corregir_valor, detalle_captura, nombre_fase, operacion_admite_adicional,
+    MAX_LOTES_ANALISIS, MOTIVO_MINIMO, ErrorCaptura, analisis_lotes, datos_informe, filas_lotes_excel, avisos_limites, corregir_valor, detalle_captura, nombre_fase, operacion_admite_adicional,
     plan_de_operacion, preparar_valores, registrar_toma, registrar_toma_adicional, tabla_lote, texto_decimal,
     validar_formula_parametro,
 )
@@ -252,6 +252,7 @@ class AnalisisProcesoViewSet(viewsets.ViewSet):
     Gráficas de proceso (solo lectura):
       GET /api/analisis-proceso/?proceso=<id>&lotes=1,2,3[&etapa=<id>]   series por parámetro, curvas e indicadores
       GET /api/analisis-proceso/lotes/?proceso=<id>                       lotes de la receta con cuántas tomas tienen
+      GET /api/analisis-proceso/recetas/                                  plantillas con etapas, actividades y lotes
     """
 
     def _proceso(self, request):
@@ -276,6 +277,17 @@ class AnalisisProcesoViewSet(viewsets.ViewSet):
         return Response(analisis_lotes(proceso, [lotes[i] for i in ids if i in lotes], etapa))
 
     @action(detail=False, methods=['get'])
+    def recetas(self, request):
+        """Plantillas (recetas) para la barra lateral: etapas, actividades y lotes con datos de cada una."""
+        qs = (ProcesoMaestro.objects.annotate(
+                  n_etapas=Count('etapas', distinct=True), n_actividades=Count('operaciones', distinct=True),
+                  n_lotes=Count('lotes_instanciados', distinct=True),
+                  n_con_datos=Count('lotes_instanciados', filter=Q(lotes_instanciados__fases__tomas_datos__isnull=False), distinct=True))
+              .order_by('-activo', 'nombre'))
+        return Response([{'id': p.id, 'nombre': p.nombre, 'activo': p.activo, 'etapas': p.n_etapas, 'actividades': p.n_actividades,
+                          'lotes': p.n_lotes, 'lotes_con_datos': p.n_con_datos} for p in qs])
+
+    @action(detail=False, methods=['get'])
     def lotes(self, request):
         proceso = self._proceso(request)
         qs = (LoteProduccion.objects.filter(proceso_maestro=proceso)
@@ -288,3 +300,101 @@ class AnalisisProcesoViewSet(viewsets.ViewSet):
                        'estado_display': l.get_estado_display(), 'archivado': l.archivado, 'tomas': l.tomas,
                        'inicio': l.fecha_inicio_planeada} for l in qs],
         })
+
+
+def _descarga(contenido, tipo, nombre):
+    from django.http import HttpResponse
+    respuesta = HttpResponse(contenido, content_type=tipo)
+    respuesta['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return respuesta
+
+
+def _nombre_archivo(*partes):
+    import re
+    texto = '_'.join(str(p) for p in partes if p)
+    return re.sub(r'[^A-Za-z0-9._-]+', '-', texto)
+
+
+TIPO_PDF = 'application/pdf'
+TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+class InformeProcesoViewSet(viewsets.ViewSet):
+    """
+    Informes de datos de proceso (solo lectura; cada emisión queda en la bitácora):
+      GET /api/informes-proceso/<lote>/pdf/[?etapa=<id>]     informe del lote o de una etapa en PDF
+          &combinar=<etapa>-<parámetro>,…&vista=apiladas|superpuestas   sección de gráficas combinadas (opcional)
+      GET /api/informes-proceso/<lote>/excel/[?etapa=<id>]   el mismo informe en Excel
+      GET /api/informes-proceso/lotes/?proceso=&lotes=1,2[&etapa=]   Excel de varios lotes (hasta 200)
+    """
+
+    def _lote_y_etapa(self, request, pk):
+        try:
+            lote = LoteProduccion.objects.select_related('proceso_maestro').get(pk=pk)
+        except (LoteProduccion.DoesNotExist, ValueError):
+            raise NotFound("El lote no existe.")
+        etapa = request.query_params.get('etapa') or None
+        if etapa:
+            try:
+                etapa = int(etapa)
+            except ValueError:
+                raise NotFound("Etapa no válida.")
+            if not lote.proceso_maestro.etapas.filter(pk=etapa).exists():
+                raise NotFound("La etapa no es de la receta del lote.")
+        return lote, etapa
+
+    def _emitir(self, request, pk, formato):
+        from . import informes
+        lote, etapa = self._lote_y_etapa(request, pk)
+        combinar = [c for c in (request.query_params.get('combinar') or '').split(',') if c.strip()]
+        datos = datos_informe(lote, etapa, combinar=combinar, vista=request.query_params.get('vista') or 'apiladas')
+        emisor = quien(request)[2]
+        if formato == 'PDF':
+            contenido, tipo, extension = informes.pdf_lote(datos, emisor), TIPO_PDF, 'pdf'
+        else:
+            contenido, tipo, extension = informes.excel_lote(datos, emisor), TIPO_XLSX, 'xlsx'
+        registrar(request, 'DATOS_PROCESO', 'GENERAR_INFORME',
+                  f"Informe de datos de proceso ({formato}) del lote {lote.identificador_lote}"
+                  + (f", etapa {datos['etapa']}" if datos['etapa'] else ''),
+                  objeto=lote, lote=lote, cambios={'formato': [None, formato], 'huella': [None, datos['huella']],
+                                                   'tomas': [None, len(datos['tomas'])],
+                                                   'combinadas': [None, ', '.join(c['columna']['codigo'] for c in datos['combinadas'])]})
+        nombre = _nombre_archivo('Informe', lote.identificador_lote, datos['etapa'],
+                                 timezone.localtime(datos['generado']).strftime('%Y%m%d-%H%M')) + f'.{extension}'
+        return _descarga(contenido, tipo, nombre)
+
+    @action(detail=True, methods=['get'])
+    def pdf(self, request, pk=None):
+        return self._emitir(request, pk, 'PDF')
+
+    @action(detail=True, methods=['get'])
+    def excel(self, request, pk=None):
+        return self._emitir(request, pk, 'EXCEL')
+
+    @action(detail=False, methods=['get'])
+    def lotes(self, request):
+        from . import informes
+        try:
+            proceso = ProcesoMaestro.objects.get(pk=int(request.query_params.get('proceso', '')))
+            ids = list(dict.fromkeys(int(x) for x in request.query_params.get('lotes', '').split(',') if x.strip()))
+            etapa = int(request.query_params['etapa']) if request.query_params.get('etapa') else None
+        except (ValueError, ProcesoMaestro.DoesNotExist):
+            return Response({'error': "Receta, lotes o etapa no válidos."}, status=status.HTTP_400_BAD_REQUEST)
+        if not ids or len(ids) > MAX_LOTES_ANALISIS:
+            return Response({'error': f"Elige entre 1 y {MAX_LOTES_ANALISIS} lotes."}, status=status.HTTP_400_BAD_REQUEST)
+        etapa_obj = proceso.etapas.filter(pk=etapa).first() if etapa else None
+        if etapa and not etapa_obj:
+            return Response({'error': "La etapa no es de esta receta."}, status=status.HTTP_400_BAD_REQUEST)
+        por_id = {l.id: l for l in LoteProduccion.objects.filter(proceso_maestro=proceso, pk__in=ids).select_related('proceso_maestro')}
+        lotes = [por_id[i] for i in ids if i in por_id]
+        filas, indicadores_por_lote, indicadores = filas_lotes_excel(lotes, etapa)
+        emisor = quien(request)[2]
+        contenido = informes.excel_lotes(proceso, etapa_obj.nombre if etapa_obj else None, filas, indicadores_por_lote,
+                                         indicadores, lotes, emisor)
+        registrar(request, 'DATOS_PROCESO', 'GENERAR_INFORME',
+                  f"Excel de datos de proceso de {len(lotes)} lotes de la receta {proceso.nombre}"
+                  + (f", etapa {etapa_obj.nombre}" if etapa_obj else ''),
+                  objeto=proceso, cambios={'formato': [None, 'EXCEL'], 'lotes': [None, ', '.join(l.identificador_lote for l in lotes)[:2000]]})
+        nombre = _nombre_archivo('Datos', proceso.nombre, etapa_obj.nombre if etapa_obj else None, f'{len(lotes)}-lotes',
+                                 timezone.localtime().strftime('%Y%m%d-%H%M')) + '.xlsx'
+        return _descarga(contenido, TIPO_XLSX, nombre)

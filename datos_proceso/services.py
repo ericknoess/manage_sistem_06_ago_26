@@ -845,6 +845,36 @@ def referencias_receta(proceso, etapa_id=None):
     return resultado
 
 
+def estructura_receta(proceso, etapa_id=None):
+    """
+    Parámetros numéricos de la receta como en el diseñador: por etapa (en su orden) y, dentro, por actividad y sección.
+    Devuelve [{etapa_id, etapa, bloques: [{titulo, parametros: [snapshot…]}]}]. Un parámetro aparece una vez por etapa
+    (en la primera actividad que lo captura), con la configuración (límites, curva) de ese uso.
+    """
+    usos = (ParametroSeccion.objects
+            .filter(seccion__operacion__proceso=proceso, parametro__tipo_dato='NUMERO')
+            .select_related('parametro', 'seccion__operacion__etapa')
+            .order_by('seccion__operacion__etapa__orden', 'seccion__operacion__etapa_id', 'seccion__operacion__orden',
+                      'seccion__operacion_id', 'seccion__orden', 'seccion_id', 'orden'))
+    if etapa_id:
+        usos = usos.filter(seccion__operacion__etapa_id=etapa_id)
+    etapas, vistos = [], set()
+    for ps in usos:
+        op = ps.seccion.operacion
+        clave_etapa = op.etapa_id
+        if not etapas or etapas[-1]['etapa_id'] != clave_etapa:
+            etapas.append({'etapa_id': clave_etapa, 'etapa': op.etapa.nombre if op.etapa_id else 'Sin etapa', 'bloques': []})
+        if (clave_etapa, ps.parametro_id) in vistos:
+            continue
+        vistos.add((clave_etapa, ps.parametro_id))
+        titulo = f"[{op.identificador_paso}] {op.nombre} · {ps.seccion.nombre}"
+        bloques = etapas[-1]['bloques']
+        if not bloques or bloques[-1]['titulo'] != titulo:
+            bloques.append({'titulo': titulo, 'parametros': []})
+        bloques[-1]['parametros'].append(_snapshot_parametro(ps))
+    return etapas
+
+
 def curva_del_lote(lote, parametro_id, etapa_id=None, fases=None):
     """Curva esperada y eje de un parámetro tal como se copiaron al lote; ([], 'LOTE') si no tiene."""
     for fase in fases if fases is not None else lote.fases.select_related('operacion_maestra'):
@@ -974,24 +1004,29 @@ def analisis_lotes(proceso, lotes, etapa_id=None):
     """
     from .models import IndicadorProceso
     lotes = list(lotes)[:MAX_LOTES_ANALISIS]
-    referencias = referencias_receta(proceso, etapa_id)
+    estructura = estructura_receta(proceso, etapa_id)
     fases = fases_por_lote(lotes)
     series, ceros = series_lotes(lotes, fases=fases)   # todas las etapas: los indicadores pueden ser de otra etapa
     indicadores = list(IndicadorProceso.objects.filter(proceso=proceso, activo=True).select_related('parametro', 'etapa'))
 
     tareas = {}
     parametros = []
-    for pid, ref in sorted(referencias.items(), key=lambda par: par[1]['orden']):
-        por_lote = {}
-        for lote in lotes:
-            puntos = [p for p in series[lote.id].get(pid, []) if not etapa_id or p['etapa_id'] == etapa_id]
-            if puntos:
-                por_lote[str(lote.id)] = _compactar(puntos, tareas)
-        parametros.append({
-            'parametro': pid, 'codigo': ref['codigo'], 'nombre': ref['nombre'], 'unidad': ref['unidad'],
-            'decimales': ref['decimales'], 'calculado': bool(ref['formula']), 'limites': ref['limites'],
-            'referencia': ref['referencia'], 'series': por_lote,
-        })
+    for grupo in estructura:
+        for bloque in grupo['bloques']:
+            for ref in bloque['parametros']:
+                pid = ref['parametro']
+                por_lote = {}
+                for lote in lotes:
+                    puntos = [p for p in series[lote.id].get(pid, []) if p['etapa_id'] == grupo['etapa_id']]
+                    if puntos:
+                        por_lote[str(lote.id)] = _compactar(puntos, tareas)
+                parametros.append({
+                    'clave': f"{grupo['etapa_id'] or 0}-{pid}", 'etapa_id': grupo['etapa_id'], 'etapa': grupo['etapa'],
+                    'bloque': bloque['titulo'],
+                    'parametro': pid, 'codigo': ref['codigo'], 'nombre': ref['nombre'], 'unidad': ref['unidad'],
+                    'decimales': ref['decimales'], 'calculado': bool(ref['formula']), 'limites': ref['limites'],
+                    'referencia': ref['referencia'], 'series': por_lote,
+                })
 
     lotes_json, valores = [], {}
     ahora = timezone.now()
@@ -1005,6 +1040,7 @@ def analisis_lotes(proceso, lotes, etapa_id=None):
         })
     return {
         'proceso': proceso.id, 'etapa': etapa_id, 'lotes': lotes_json, 'parametros': parametros,
+        'etapas': [{'id': g['etapa_id'], 'nombre': g['etapa']} for g in estructura],
         'tareas': list(tareas),   # en orden de índice
         'indicadores': [{
             'codigo': i.codigo, 'nombre': i.nombre, 'unidad': i.unidad, 'tipo': i.tipo, 'tipo_display': i.get_tipo_display(),
@@ -1012,3 +1048,241 @@ def analisis_lotes(proceso, lotes, etapa_id=None):
         } for i in indicadores],
         'valores_indicadores': valores,
     }
+
+
+# ==============================================================================
+# INFORMES (fase 3): datos de un lote o de varios, listos para PDF y Excel (datos_proceso/informes.py)
+# ==============================================================================
+
+def _huella(contenido):
+    """SHA-256 de los datos del informe: dos impresiones con la misma huella traen exactamente los mismos datos."""
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps(contenido, sort_keys=True, default=str, ensure_ascii=False).encode('utf-8')).hexdigest()
+
+
+def correcciones_lote(lote, etapa_id=None):
+    """Correcciones de datos de proceso del lote según la bitácora, con su firma electrónica."""
+    from auditoria.models import RegistroAuditoria
+    registros = (RegistroAuditoria.objects.filter(lote=lote, categoria='DATOS_PROCESO', accion='CORREGIR_DATO')
+                 .select_related('fase__operacion_maestra', 'firma').order_by('fecha', 'id'))
+    if etapa_id:
+        registros = registros.filter(fase__operacion_maestra__etapa_id=etapa_id)
+    salida = []
+    for r in registros:
+        firma = getattr(r, 'firma', None)
+        salida.append({
+            'fecha': r.fecha, 'tarea': nombre_fase(r.fase) if r.fase else '', 'actor': r.actor, 'motivo': r.motivo,
+            'cambios': [{'codigo': c, 'antes': v[0], 'despues': v[1]} for c, v in (r.cambios or {}).items()
+                        if isinstance(v, (list, tuple)) and len(v) == 2],
+            'firma': {'nombre': firma.nombre_firmante, 'significado': firma.significado, 'fecha': firma.fecha,
+                      'metodo': firma.get_metodo_display()} if firma else None,
+        })
+    return salida
+
+
+MAX_COMBINADAS = 6
+VISTAS_COMBINADAS = ('apiladas', 'superpuestas')
+
+
+def _columna(snapshot):
+    return {'parametro': snapshot['parametro'], 'codigo': snapshot['codigo'], 'nombre': snapshot['nombre'],
+            'unidad': snapshot['unidad'], 'tipo': snapshot.get('tipo', 'NUMERO'), 'decimales': snapshot['decimales'],
+            'calculado': bool(snapshot.get('formula')), 'limites': snapshot['limites'], 'referencia': snapshot['referencia']}
+
+
+def _serie_informe(columna, tomas, eje):
+    """Puntos (edad, valor, fuera de especificación) de una columna en unas tomas, contra la edad indicada."""
+    clave = 'edad_etapa_h' if eje == 'ETAPA' else 'edad_lote_h'
+    pid = columna['parametro']
+    return sorted((t[clave], float(t['valores'][pid]['numero']), t['valores'][pid]['fuera_especificacion'])
+                  for t in tomas if pid in t['valores'] and t['valores'][pid]['numero'] is not None and t[clave] is not None)
+
+
+def datos_informe(lote, etapa_id=None, combinar=None, vista='apiladas'):
+    """
+    Todo lo que lleva el informe de un lote (o de una etapa), organizado como en el diseñador:
+    `etapas` = [{etapa, columnas, tomas, bloques: [{titulo, series}]}] (cada etapa con sus columnas y sus gráficas por
+    actividad · sección), más indicadores, fuera de límites, adicionales, correcciones firmadas y la huella SHA-256.
+    `combinar` = claves "etapa-parámetro" (como en la pestaña Comparar) para la sección de gráficas combinadas, que se
+    dibujan `vista` = 'apiladas' (mismo eje de edad del lote) o 'superpuestas' (cada una escalada a 0–100 %).
+    """
+    from .models import IndicadorProceso
+    fases = list(lote.fases.select_related('operacion_maestra__etapa'))
+    ceros = edades_cero(lote, fases)
+    etapa = next((f.operacion_maestra.etapa for f in fases if f.operacion_maestra.etapa_id == etapa_id), None) if etapa_id else None
+    estructura = estructura_receta(lote.proceso_maestro, etapa_id)
+
+    tomas_qs = (TomaDatos.objects.filter(fase__lote=lote).select_related('fase__operacion_maestra__etapa')
+                .prefetch_related('valores__parametro').order_by('momento', 'id'))
+    if etapa_id:
+        tomas_qs = tomas_qs.filter(fase__operacion_maestra__etapa_id=etapa_id)
+
+    tomas, fuera, adicionales, extras = [], [], [], {}
+    for toma in tomas_qs:
+        fase = toma.fase
+        etapa_toma = fase.operacion_maestra.etapa
+        valores = {}
+        for v in toma.valores.all():
+            if not v.vigente:
+                continue
+            p = v.parametro
+            valores[p.id] = {'texto': _texto_valor(v.valor_numero, v.valor_texto), 'numero': v.valor_numero,
+                             'fuera_especificacion': v.fuera_especificacion, 'fuera_alerta': v.fuera_alerta,
+                             'corregido': bool(v.reemplaza_id), 'calculado': v.calculado, 'limites': v.limites or {}}
+            # Por si se capturó algo que ya no está en la receta (o no es numérico): también se informa
+            extras.setdefault((etapa_toma.id if etapa_toma else None, p.id), {
+                'parametro': p.id, 'codigo': p.codigo, 'nombre': p.nombre, 'unidad': p.unidad, 'tipo': p.tipo_dato,
+                'decimales': p.decimales, 'calculado': v.calculado, 'limites': v.limites or {}, 'referencia': {}})
+        fila = {
+            'toma': toma.id, 'tarea': nombre_fase(fase), 'etapa': etapa_toma.nombre if etapa_toma else 'Sin etapa',
+            'etapa_id': etapa_toma.id if etapa_toma else None, 'momento': toma.momento,
+            'edad_lote_h': edad_horas(toma.momento, ceros.get('lote')),
+            'edad_etapa_h': edad_horas(toma.momento, ceros.get(etapa_toma.id if etapa_toma else None)),
+            'adicional': toma.adicional, 'motivo': toma.motivo,
+            'muestras': ', '.join(f"{c}" for c in (toma.codigos_muestra or {}).values() if c),
+            'registrado_por': toma.registrado_por_nombre, 'valores': valores,
+        }
+        tomas.append(fila)
+        if toma.adicional:
+            adicionales.append(fila)
+
+    # Etapas como en el diseñador: columnas configuradas (en su orden) + lo capturado fuera de la receta
+    etapas, nombres = [], {g['etapa_id']: g['etapa'] for g in estructura}
+    ids_con_tomas = list(dict.fromkeys(t['etapa_id'] for t in tomas))
+    orden_etapas = [g['etapa_id'] for g in estructura] + [e for e in ids_con_tomas if e not in nombres]
+    for eid in orden_etapas:
+        grupo = next((g for g in estructura if g['etapa_id'] == eid), {'bloques': []})
+        tomas_etapa = [t for t in tomas if t['etapa_id'] == eid]
+        columnas, vistos = [], set()
+        for bloque in grupo['bloques']:
+            for snap in bloque['parametros']:
+                columnas.append(_columna(snap))
+                vistos.add(snap['parametro'])
+        for (e, pid), c in extras.items():
+            if e == eid and pid not in vistos:
+                columnas.append(c)
+                vistos.add(pid)
+        bloques = []
+        for bloque in grupo['bloques']:
+            series = []
+            for snap in bloque['parametros']:
+                col = next(c for c in columnas if c['parametro'] == snap['parametro'])
+                eje = (col['referencia'] or {}).get('eje_edad', 'LOTE')
+                puntos = _serie_informe(col, tomas_etapa, eje)
+                if puntos:
+                    series.append({'columna': col, 'eje': eje, 'puntos': puntos, 'etapa': nombres.get(eid, 'Sin etapa')})
+            if series:
+                bloques.append({'titulo': bloque['titulo'], 'series': series})
+        if tomas_etapa or bloques:
+            nombre = nombres.get(eid) or (tomas_etapa[0]['etapa'] if tomas_etapa else 'Sin etapa')
+            etapas.append({'etapa_id': eid, 'etapa': nombre, 'columnas': columnas, 'tomas': tomas_etapa, 'bloques': bloques,
+                           'edad_cero': ceros.get(eid)})
+
+    # Fuera de límites (con el nombre de la columna de su etapa)
+    for e in etapas:
+        for t in e['tomas']:
+            for pid, v in t['valores'].items():
+                if not (v['fuera_especificacion'] or v['fuera_alerta']):
+                    continue
+                c = next((c for c in e['columnas'] if c['parametro'] == pid), None)
+                lim = v['limites']
+                rango = (lambda a, b: f"{lim.get(a) or '−∞'} a {lim.get(b) or '∞'}")
+                fuera.append({'etapa': e['etapa'], 'tarea': t['tarea'], 'momento': t['momento'], 'edad_lote_h': t['edad_lote_h'],
+                              'parametro': c['nombre'] if c else str(pid), 'unidad': c['unidad'] if c else '', 'valor': v['texto'],
+                              'tipo': 'Especificación' if v['fuera_especificacion'] else 'Alerta',
+                              'rango': rango('especificacion_min', 'especificacion_max') if v['fuera_especificacion']
+                              else rango('alerta_min', 'alerta_max')})
+    fuera.sort(key=lambda f: f['momento'])
+
+    # Gráficas combinadas: varias columnas contra la edad del lote (como la pestaña Comparar)
+    combinadas = []
+    for clave in list(dict.fromkeys(combinar or []))[:MAX_COMBINADAS]:
+        try:
+            eid_txt, pid_txt = str(clave).split('-', 1)
+            eid, pid = (int(eid_txt) or None), int(pid_txt)
+        except ValueError:
+            continue
+        e = next((x for x in etapas if x['etapa_id'] == eid), None)
+        col = next((c for c in (e['columnas'] if e else []) if c['parametro'] == pid and c['tipo'] == 'NUMERO'), None)
+        if col:
+            puntos = _serie_informe(col, e['tomas'], 'LOTE')
+            if puntos:
+                combinadas.append({'columna': col, 'etapa': e['etapa'], 'puntos': puntos})
+
+    indicadores = [i for i in IndicadorProceso.objects.filter(proceso=lote.proceso_maestro, activo=True).select_related('parametro', 'etapa')
+                   if not etapa_id or i.etapa_id in (None, etapa_id)]
+    valores_ind = calcular_indicadores(lote, indicadores, fases=fases) if indicadores else {}
+    lista_ind = []
+    for i in indicadores:
+        r = valores_ind.get(i.codigo, {'valor': None, 'nota': ''})
+        meta_min = float(i.meta_min) if i.meta_min is not None else None
+        meta_max = float(i.meta_max) if i.meta_max is not None else None
+        estado = ''
+        if r['valor'] is not None and (meta_min is not None or meta_max is not None):
+            estado = ('Bajo meta' if meta_min is not None and r['valor'] < meta_min
+                      else 'Sobre meta' if meta_max is not None and r['valor'] > meta_max else 'En meta')
+        lista_ind.append({'codigo': i.codigo, 'nombre': i.nombre, 'unidad': i.unidad, 'tipo': i.get_tipo_display(),
+                          'etapa': i.etapa.nombre if i.etapa_id else 'Todo el lote',
+                          'valor': r['valor'], 'nota': r['nota'], 'meta_min': meta_min, 'meta_max': meta_max, 'estado': estado})
+
+    correcciones = correcciones_lote(lote, etapa_id)
+    contenido = {
+        'lote': lote.identificador_lote, 'etapa': etapa_id,
+        'tomas': [{**t, 'valores': {str(k): [v['texto'], v['corregido']] for k, v in t['valores'].items()}} for t in tomas],
+        'correcciones': correcciones,
+    }
+    fechas_reales = [f.fecha_inicio_real for f in fases if f.fecha_inicio_real]
+    fines = [f.fecha_fin_real for f in fases if f.fecha_fin_real]
+    return {
+        'lote': lote, 'receta': lote.proceso_maestro.nombre, 'etapa': etapa.nombre if etapa else None, 'etapa_id': etapa_id,
+        'inicio_real': min(fechas_reales) if fechas_reales else None,
+        'fin_real': max(fines) if lote.estado == 'COMPLETADO' and fines else None,
+        'edad_cero_lote': ceros.get('lote'), 'edad_cero_etapa': ceros.get(etapa_id) if etapa_id else None,
+        'etapas': etapas, 'tomas': tomas, 'fuera': fuera, 'adicionales': adicionales,
+        'correcciones': correcciones, 'indicadores': lista_ind,
+        'combinadas': combinadas, 'vista_combinadas': vista if vista in VISTAS_COMBINADAS else 'apiladas',
+        'huella': _huella(contenido), 'generado': timezone.now(),
+    }
+
+
+def filas_lotes_excel(lotes, etapa_id=None):
+    """
+    Datos vigentes de varios lotes en formato largo (una fila por valor), para el Excel de los lotes elegidos.
+    Devuelve (filas, indicadores_por_lote, definiciones de indicadores).
+    """
+    from .models import IndicadorProceso
+    lotes = list(lotes)
+    if not lotes:
+        return [], {}, []
+    fases = fases_por_lote(lotes)
+    ceros = {l.id: edades_cero(l, fases[l.id]) for l in lotes}
+    por_id = {l.id: l for l in lotes}
+    filtro = Q(toma__fase__lote__in=lotes, vigente=True)
+    if etapa_id:
+        filtro &= Q(toma__fase__operacion_maestra__etapa_id=etapa_id)
+    valores = (ValorParametro.objects.filter(filtro)
+               .select_related('parametro', 'toma__fase__operacion_maestra__etapa')
+               .order_by('toma__fase__lote_id', 'toma__momento', 'id'))
+    filas = []
+    for v in valores:
+        toma, fase = v.toma, v.toma.fase
+        etapa = fase.operacion_maestra.etapa
+        lote = por_id[fase.lote_id]
+        filas.append({
+            'lote': lote.identificador_lote, 'estado': lote.get_estado_display(), 'etapa': etapa.nombre if etapa else '',
+            'tarea': nombre_fase(fase), 'momento': toma.momento,
+            'edad_lote_h': edad_horas(toma.momento, ceros[lote.id].get('lote')),
+            'edad_etapa_h': edad_horas(toma.momento, ceros[lote.id].get(etapa.id if etapa else None)),
+            'adicional': toma.adicional, 'muestras': ', '.join(c for c in (toma.codigos_muestra or {}).values() if c),
+            'codigo': v.parametro.codigo, 'parametro': v.parametro.nombre, 'unidad': v.parametro.unidad,
+            'numero': v.valor_numero, 'texto': v.valor_texto, 'calculado': v.calculado,
+            'fuera_especificacion': v.fuera_especificacion, 'fuera_alerta': v.fuera_alerta,
+            'corregido': bool(v.reemplaza_id), 'registrado_por': v.registrado_por_nombre,
+        })
+    proceso = lotes[0].proceso_maestro
+    indicadores = [i for i in IndicadorProceso.objects.filter(proceso=proceso, activo=True).select_related('parametro', 'etapa')
+                   if not etapa_id or i.etapa_id in (None, etapa_id)]
+    series, _ = series_lotes(lotes, fases=fases)
+    por_lote = {l.id: calcular_indicadores(l, indicadores, series[l.id], fases[l.id]) for l in lotes} if indicadores else {}
+    return filas, por_lote, indicadores

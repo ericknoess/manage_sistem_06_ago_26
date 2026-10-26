@@ -14,7 +14,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 ## Comandos
 - Servidor: `python manage.py runserver`
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
-- Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow); el `venv/` del proyecto no tiene Pillow
+- Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab); el `venv/` del proyecto no tiene Pillow
 - Pruebas: `python manage.py test datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
@@ -64,13 +64,24 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   incubación con motivo. Edad = hora real de la toma − edad 0 (`edades_cero`). Al capturar, cada parámetro numérico muestra su
   gráfica de tendencia (SVG propio, sin librerías): datos anteriores de la etapa (`tendencias`), valor que se escribe, límites y esperado. Front: `static/core/js/captura.js` (web y tablet),
   `datos_proceso/static/datos_proceso/js/disenador_captura.js` (diseñador). Pruebas: `python manage.py test datos_proceso.tests`.
-  Gráficas de proceso (/graficas/, API `/api/analisis-proceso/`, puntos compactos y 4 consultas para 200 lotes): pestañas Lotes
+  Gráficas de proceso (/graficas/, API `/api/analisis-proceso/`, puntos compactos y 4 consultas para 200 lotes): barra de
+  plantillas (recetas) como en el diseñador (`/api/analisis-proceso/recetas/`); gráficas por etapa y, dentro, por actividad ·
+  sección (`estructura_receta`: un parámetro por etapa, con los límites y la curva de ese uso; chips para ver una etapa); pestañas Lotes
   (elegir hasta 200; se recuerda por receta en el navegador), Gráficas (cada parámetro contra la edad: lotes en gris, hasta 8
   destacados con color fijo de `COLORES_SERIES`, banda P10–P90 y mediana, curva esperada, límites; zoom por arrastre sincronizado
-  por eje de edad) e Indicadores (tabla ordenable con promedio, mín–máx y % en meta). `IndicadorProceso` (por receta, configurable en esa
+  por eje de edad), Comparar (varios parámetros de cualquier etapa: apilados con el mismo eje X —edad del lote o fecha— y guía
+  sincronizada `grupoGuia`, o superpuestos escalando cada uno a 0–100 %; nunca dos ejes Y) e Indicadores (tabla ordenable con
+  promedio, mín–máx y % en meta). `IndicadorProceso` (por receta, configurable en esa
   pantalla, `/api/indicadores-proceso/`): área bajo la curva por trapecios, apego % contra la curva esperada (en la edad de la curva),
   último, máximo o fórmula con otros indicadores (ej. gramos = abc_cel / 1000 - 5.5); se calculan al consultar, no se guardan.
   Gráfica compartida (SVG propio, sin librerías): `static/core/js/graficas.js` + `static/core/css/graficas.css`.
+  Informes (fase 3, `/api/informes-proceso/`): PDF (reportlab) y Excel (openpyxl) de un lote o de una etapa
+  (`<lote>/pdf|excel/?etapa=`) y Excel de varios lotes (`lotes/?proceso=&lotes=`). Los datos salen de `datos_informe` /
+  `filas_lotes_excel` en services.py y el formato de `datos_proceso/informes.py`. Organizados como el diseñador: una sección
+  (y en Excel una hoja) por etapa con sus columnas y sus gráficas por actividad · sección; opcionalmente gráficas combinadas
+  (`&combinar=<etapa>-<parámetro>,…&vista=apiladas|superpuestas`; en Excel, gráficas nativas apiladas). Llevan indicadores, tomas,
+  fuera de límites, adicionales, correcciones con su firma (de la bitácora) y huella SHA-256 de los datos; cada emisión se
+  registra (`GENERAR_INFORME`). Front: `static/core/js/informes.js` (`abrirInformeLote`, `descargarArchivo`).
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
   Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
@@ -102,7 +113,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   cuenta celular, carnet del lote contra la curva Modelo_2024, desviaciones, CAPAs, expedientes y tablero de tareas.
 - Objetivo (cambiado el 2026-10-23): llevar la lógica de Cultivo al MES, en su propia base y configurable desde pantallas
   (app `datos_proceso`). Fases: 1) catálogo, captura en tablet/web, edad 0 ✅; 2) gráficas por etapa, curvas de referencia
-  e indicadores (área bajo la curva, gramos estimados) ✅; 3) informes por etapa (PDF/Excel); 4) importar el histórico de Cultivo.
+  e indicadores (área bajo la curva, gramos estimados) ✅; 3) informes por etapa (PDF/Excel) ✅; 4) importar el histórico de Cultivo.
   Desviaciones, CAPAs y expedientes quedan para después.
 - Se trabaja primero en la copia local `../cultivo_local` (ver su CLAUDE.md); a producción solo se lleva lo
   probado y con autorización explícita del usuario. En el servidor, solo lectura salvo que el usuario lo pida.

@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/graficas.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/informes.css' %}">
     <link rel="stylesheet" href="{% static 'datos_proceso/css/graficas_proceso.css' %}">
     <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
     <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
@@ -27,21 +28,28 @@
         </nav>
     </header>
 
-    <section class="barra-herramientas" aria-label="Receta y etapa">
-        <div class="grupo-filtros">
-            <label class="filtro-etiquetado">Receta
-                <select id="filtroProceso" onchange="cambiarProceso()"><option value="">Cargando…</option></select>
-            </label>
-            <label class="filtro-etiquetado">Etapa
-                <select id="filtroEtapa" onchange="cambiarEtapa()"><option value="">Todo el lote</option></select>
-            </label>
+    <div class="disposicion">
+    <!-- PLANTILLAS (como en el diseñador de procesos) -->
+    <aside class="barra-plantillas" aria-label="Plantillas">
+        <div class="barra-plantillas__titulo">🧫 Plantillas
+            <label class="filtro-check" title="Mostrar también las recetas archivadas"><input type="checkbox" id="verArchivadas" onchange="pintarPlantillas()"> Archivadas</label>
         </div>
+        <div id="listaPlantillas" class="barra-plantillas__lista"><span class="estado-vacio">Cargando…</span></div>
+        <!-- Estado de la pantalla (los cambia la barra y los chips de etapa) -->
+        <select id="filtroProceso" hidden aria-hidden="true"></select>
+        <select id="filtroEtapa" hidden aria-hidden="true"><option value="">Todas las etapas</option></select>
+    </aside>
+
+    <div class="contenido-principal">
+    <section class="barra-herramientas barra-receta" aria-label="Receta elegida">
+        <div class="receta-elegida" id="recetaElegida">Elige una plantilla a la izquierda.</div>
         <button class="btn-secundario" id="btnIndicadores" onclick="abrirIndicadores()" disabled>⚙️ Indicadores de la receta</button>
     </section>
 
     <nav class="pestanas" role="tablist" aria-label="Secciones">
         <button type="button" role="tab" class="pestana" data-pestana="lotes" onclick="mostrarPestana('lotes')">🧪 Lotes <span class="pestana__conteo" id="conteoPestanaLotes">0</span></button>
         <button type="button" role="tab" class="pestana" data-pestana="graficas" onclick="mostrarPestana('graficas')">📈 Gráficas</button>
+        <button type="button" role="tab" class="pestana" data-pestana="comparar" onclick="mostrarPestana('comparar')">🧩 Comparar</button>
         <button type="button" role="tab" class="pestana" data-pestana="indicadores" onclick="mostrarPestana('indicadores')">📐 Indicadores</button>
     </nav>
 
@@ -76,8 +84,9 @@
                         <th class="col-check"><input type="checkbox" id="checkTodos" title="Elegir o quitar los lotes filtrados" onchange="elegirFiltrados(this.checked)"></th>
                         <th>Lote</th><th>Estado</th><th>Inicio planeado</th><th title="Tomas de datos registradas">Tomas</th>
                         <th title="Los lotes destacados llevan color en las gráficas (máx. 8)">Destacar</th>
+                        <th title="Informe del lote en PDF o Excel">Informe</th>
                     </tr></thead>
-                    <tbody id="cuerpoLotes"><tr><td colspan="6" class="estado-vacio">Elige una receta.</td></tr></tbody>
+                    <tbody id="cuerpoLotes"><tr><td colspan="7" class="estado-vacio">Elige una receta.</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -96,11 +105,38 @@
                 <label class="interruptor"><input type="checkbox" id="opcionBanda" onchange="cambiarOpcion()"> Banda P10–P90 y mediana</label>
                 <label class="interruptor"><input type="checkbox" id="opcionPuntos" onchange="cambiarOpcion()"> Puntos de todos los lotes</label>
                 <button type="button" class="btn-secundario" id="btnRestablecerZoom" onclick="restablecerZoom()" hidden>↺ Restablecer zoom</button>
+                <button type="button" class="btn-secundario btn-excel" onclick="exportarExcelElegidos(this)" title="Datos de todos los lotes elegidos, una fila por valor">⬇️ Excel de los lotes elegidos</button>
             </div>
         </div>
+        <div class="filtro-etapas" id="filtroEtapas" role="tablist" aria-label="Etapas"></div>
         <div class="filtro-parametros" id="filtroParametros"></div>
-        <p class="pista-graficas">🖱️ Arrastra sobre una gráfica para acercar (las de la misma edad se acercan juntas) · doble clic para volver · clic en una línea para destacarla.</p>
+        <p class="pista-graficas">🖱️ Arrastra sobre una gráfica para acercar (las de la misma edad se acercan juntas) · doble clic para volver · clic en una línea para destacarla · ⤢ para verla en grande.</p>
         <div id="rejillaGraficas" class="rejilla-graficas"></div>
+    </section>
+
+    <!-- PESTAÑA: COMPARAR VARIOS PARÁMETROS -->
+    <section class="panel-pestana" data-panel="comparar" hidden>
+        <div class="barra-graficas">
+            <div class="grupo-filtros">
+                <label class="filtro-etiquetado">Eje X
+                    <select id="compEje" onchange="cambiarComparar(true)">
+                        <option value="LOTE">Edad del lote</option>
+                        <option value="FECHA">Fecha y hora</option>
+                    </select>
+                </label>
+                <div class="segmentado" role="radiogroup" aria-label="Vista">
+                    <button type="button" role="radio" data-vista="apiladas" onclick="cambiarVistaComparar('apiladas')"
+                            title="Una gráfica por parámetro, alineadas con el mismo eje X">☰ Apiladas</button>
+                    <button type="button" role="radio" data-vista="superpuestas" onclick="cambiarVistaComparar('superpuestas')"
+                            title="Todas en una gráfica; cada parámetro escalado de su mínimo (0 %) a su máximo (100 %)">≋ Superpuestas (0–100 %)</button>
+                </div>
+                <label class="interruptor"><input type="checkbox" id="compSoloDestacados" onchange="cambiarComparar()"> Solo lotes destacados</label>
+            </div>
+            <button type="button" class="btn-secundario" id="btnZoomComparar" onclick="compZoom = null; pintarComparar()" hidden>↺ Restablecer zoom</button>
+        </div>
+        <div class="comparar-parametros" id="compParametros"></div>
+        <p class="pista-graficas" id="compPista"></p>
+        <div id="compGraficas" class="comparar-graficas"></div>
     </section>
 
     <!-- PESTAÑA: INDICADORES -->
@@ -112,8 +148,13 @@
                 </table>
             </div>
         </div>
-        <p class="pista-graficas">Clic en un encabezado para ordenar · clic en un lote para destacarlo en las gráficas.</p>
+        <div class="pie-indicadores">
+            <p class="pista-graficas">Clic en un encabezado para ordenar · clic en un lote para destacarlo en las gráficas.</p>
+            <button type="button" class="btn-secundario btn-excel" onclick="exportarExcelElegidos(this)">⬇️ Excel de los lotes elegidos</button>
+        </div>
     </section>
+    </div><!-- /contenido-principal -->
+    </div><!-- /disposicion -->
 
     <!-- MODAL: GRÁFICA AMPLIADA -->
     <div class="modal-overlay modal-grafica" id="modalGrafica" style="display: none;" onclick="if (event.target === this) cerrarGraficaGrande()">
@@ -187,6 +228,7 @@
 
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'core/js/graficas.js' %}"></script>
+    <script src="{% static 'core/js/informes.js' %}"></script>
     <script src="{% static 'datos_proceso/js/graficas_proceso.js' %}"></script>
 </body>
 </html>

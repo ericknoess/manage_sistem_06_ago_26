@@ -1,8 +1,11 @@
 // datos_proceso/static/datos_proceso/js/graficas_proceso.js
-// Gráficas de proceso, en tres pestañas:
+// Gráficas de proceso. A la izquierda, las plantillas (recetas) como en el diseñador; a la derecha, tres pestañas:
 //   Lotes:       elegir hasta 200 lotes de la receta (búsqueda, estado, fechas, con datos) y destacar hasta 8.
-//   Gráficas:    cada parámetro contra la edad; los lotes elegidos van en gris tenue, los destacados con color; banda P10–P90 y
+//   Gráficas:    por etapa de la receta y, dentro, por actividad · sección (como en el diseñador); cada parámetro contra la edad:
+//                los lotes elegidos van en gris tenue, los destacados con color; banda P10–P90 y
 //                mediana, curva esperada y límites. Zoom por arrastre (sincronizado entre gráficas de la misma edad).
+//   Comparar:    varios parámetros a la vez (ej. flujo y temperatura): apilados con el mismo eje X y guía sincronizada,
+//                o superpuestos en una gráfica escalando cada uno de 0 a 100 % (sin dos ejes Y).
 //   Indicadores: tabla ordenable por lote con promedio, mínimo y máximo.
 // API: /api/analisis-proceso/ (series compactas e indicadores), /api/analisis-proceso/lotes/, /api/indicadores-proceso/.
 // La URL acepta ?proceso=<id>&lotes=1,2 (ej. desde Piso de planta). La selección se recuerda por receta en este navegador.
@@ -19,7 +22,7 @@ let parametrosNumericos = [];
 let indicadorEnEdicion = null;
 let peticionAnalisis = 0;
 let pestana = 'lotes';
-let zoomPorEje = { LOTE: null, ETAPA: null };
+let zoomPorEje = {};             // {'LOTE': [x0, x1], 'ETAPA-<id>': …}: zoom compartido por las gráficas con la misma edad
 let parametrosOcultos = new Set();   // códigos de parámetros que el usuario ocultó (se recuerdan)
 let ordenIndicadores = { columna: null, sentido: 1 };
 
@@ -63,6 +66,7 @@ function mostrarPestana(nombre) {
     if (nombre !== 'lotes' && !analisisVigente) cargarAnalisis();
     else if (nombre === 'graficas') pintarGraficas();
     else if (nombre === 'indicadores') pintarIndicadores();
+    else if (nombre === 'comparar') pintarComparar();
 }
 
 // ------------------------------------------------------------------
@@ -72,42 +76,70 @@ async function iniciar() {
     const url = new URLSearchParams(location.search);
     parametrosOcultos = new Set(leerPreferencia('ocultos') || []);
     try {
-        procesos = await fetch('/api/procesos-maestros/').then(r => r.json());
+        procesos = await fetch('/api/analisis-proceso/recetas/').then(r => r.json());
     } catch (e) {
-        document.getElementById('filtroProceso').innerHTML = '<option value="">⚠️ No se pudieron cargar las recetas</option>';
+        document.getElementById('listaPlantillas').innerHTML = '<span class="estado-vacio">⚠️ No se pudieron cargar las plantillas.</span>';
         return;
     }
-    procesos.sort((a, b) => (b.activo - a.activo) || a.nombre.localeCompare(b.nombre));
     const select = document.getElementById('filtroProceso');
-    select.innerHTML = '<option value="">— Elige una receta —</option>' + procesos.map(p =>
-        `<option value="${p.id}">${escaparHtml(p.nombre)}${p.activo === false ? ' (archivada)' : ''}</option>`).join('');
+    select.innerHTML = '<option value=""></option>' + procesos.map(p => `<option value="${p.id}">${escaparHtml(p.nombre)}</option>`).join('');
     fetch('/api/parametros-proceso/?activo=true').then(r => r.json())
         .then(lista => { parametrosNumericos = lista.filter(p => p.tipo_dato === 'NUMERO'); }).catch(() => {});
 
     const inicial = url.get('proceso') || leerPreferencia('proceso');
     const lotesUrl = url.get('lotes') ? url.get('lotes').split(',').map(Number).filter(Boolean) : null;
     mostrarPestana(lotesUrl ? 'graficas' : (leerPreferencia('pestana') || 'lotes'));
-    if (inicial && procesos.some(p => String(p.id) === String(inicial))) {
+    const receta = procesos.find(p => String(p.id) === String(inicial));
+    if (receta && !receta.activo) document.getElementById('verArchivadas').checked = true;
+    pintarPlantillas();
+    if (receta) {
         select.value = inicial;
         await cambiarProceso({ lotesUrl });
     }
 }
 
+// Barra de plantillas (recetas), como en el diseñador de procesos
+function pintarPlantillas() {
+    const archivadas = document.getElementById('verArchivadas').checked;
+    const actual = document.getElementById('filtroProceso').value;
+    const lista = procesos.filter(p => archivadas || p.activo || String(p.id) === actual);
+    document.getElementById('listaPlantillas').innerHTML = lista.length ? lista.map(p => `
+        <button type="button" class="plantilla ${String(p.id) === actual ? 'plantilla--activa' : ''} ${p.activo ? '' : 'plantilla--archivada'}"
+                onclick="elegirPlantilla(${p.id})" aria-pressed="${String(p.id) === actual}">
+            <span class="plantilla__nombre">${escaparHtml(p.nombre)}${p.activo ? '' : ' <small>📦 archivada</small>'}</span>
+            <span class="plantilla__detalle">${p.etapas} etapa${p.etapas === 1 ? '' : 's'} · ${p.actividades} actividad${p.actividades === 1 ? '' : 'es'}</span>
+            <span class="plantilla__detalle">${p.lotes_con_datos} de ${p.lotes} lote${p.lotes === 1 ? '' : 's'} con datos</span>
+        </button>`).join('') : '<span class="estado-vacio">No hay plantillas.</span>';
+}
+
+function elegirPlantilla(id) {
+    const select = document.getElementById('filtroProceso');
+    if (select.value === String(id)) return;
+    select.value = String(id);
+    cambiarProceso();
+}
+
 async function cambiarProceso({ lotesUrl = null } = {}) {
     const proceso = document.getElementById('filtroProceso').value;
     document.getElementById('btnIndicadores').disabled = !proceso;
+    pintarPlantillas();
+    const receta = procesos.find(p => String(p.id) === proceso);
+    document.getElementById('recetaElegida').innerHTML = receta
+        ? `<span class="receta-elegida__eyebrow">Plantilla</span> <strong>${escaparHtml(receta.nombre)}</strong>
+           <small>${receta.etapas} etapa${receta.etapas === 1 ? '' : 's'} · ${receta.actividades} actividad${receta.actividades === 1 ? '' : 'es'}</small>`
+        : 'Elige una plantilla a la izquierda.';
     infoReceta = null; analisis = null; analisisVigente = false;
     elegidos = new Set(); destacados = [];
-    zoomPorEje = { LOTE: null, ETAPA: null };
+    zoomPorEje = {};
     if (!proceso) {
-        pintarTablaLotes(); pintarGraficas(); pintarIndicadores();
+        pintarTablaLotes(); pintarGraficas(); pintarIndicadores(); pintarComparar();
         return;
     }
     guardarPreferencia('proceso', proceso);
-    document.getElementById('cuerpoLotes').innerHTML = '<tr><td colspan="6" class="estado-vacio">Cargando lotes…</td></tr>';
+    document.getElementById('cuerpoLotes').innerHTML = '<tr><td colspan="7" class="estado-vacio">Cargando lotes…</td></tr>';
     infoReceta = await fetch(`/api/analisis-proceso/lotes/?proceso=${proceso}`).then(r => r.json());
     const guardada = leerPreferencia(`seleccion-${proceso}`) || {};
-    document.getElementById('filtroEtapa').innerHTML = '<option value="">Todo el lote</option>'
+    document.getElementById('filtroEtapa').innerHTML = '<option value="">Todas las etapas</option>'
         + infoReceta.etapas.map(e => `<option value="${e.id}">${escaparHtml(e.nombre)}</option>`).join('');
     if (infoReceta.etapas.some(e => String(e.id) === String(guardada.etapa))) document.getElementById('filtroEtapa').value = guardada.etapa;
 
@@ -126,13 +158,14 @@ async function cambiarProceso({ lotesUrl = null } = {}) {
     }
     document.getElementById('opcionBanda').checked = guardada.banda ?? elegidos.size >= 6;
     document.getElementById('opcionPuntos').checked = guardada.puntos ?? elegidos.size <= 12;
+    leerComparar();
     pintarTablaLotes();
     await cargarIndicadores();
     if (pestana !== 'lotes') await cargarAnalisis();
 }
 
 function cambiarEtapa() {
-    zoomPorEje = { LOTE: null, ETAPA: null };
+    zoomPorEje = {};
     guardarSeleccion();
     cargarAnalisis();
 }
@@ -142,7 +175,7 @@ async function cargarAnalisis() {
     analisisVigente = true;
     if (!proceso || !elegidos.size) {
         analisis = null;
-        pintarGraficas(); pintarIndicadores();
+        pintarGraficas(); pintarIndicadores(); pintarComparar();
         return;
     }
     const numero = ++peticionAnalisis;
@@ -156,7 +189,7 @@ async function cargarAnalisis() {
         if (numero !== peticionAnalisis) return;  // llegó una respuesta más nueva
         if (!res.ok) throw new Error(data.error || data.detail || 'No se pudo cargar el análisis.');
         analisis = data;
-        pintarGraficas(); pintarIndicadores();
+        pintarGraficas(); pintarIndicadores(); pintarComparar();
     } catch (err) {
         if (numero !== peticionAnalisis) return;
         analisisVigente = false;
@@ -233,14 +266,14 @@ function alternarDestacado(id) {
     guardarSeleccion();
     pintarTablaLotes();
     if (!analisisVigente && pestana !== 'lotes') cargarAnalisis();
-    else { pintarGraficas(); pintarIndicadores(); }
+    else { pintarGraficas(); pintarIndicadores(); pintarComparar(); }
 }
 
 function pintarTablaLotes() {
     document.getElementById('conteoPestanaLotes').textContent = elegidos.size;
     const cuerpo = document.getElementById('cuerpoLotes');
     if (!infoReceta) {
-        cuerpo.innerHTML = '<tr><td colspan="6" class="estado-vacio">Elige una receta.</td></tr>';
+        cuerpo.innerHTML = '<tr><td colspan="7" class="estado-vacio">Elige una receta.</td></tr>';
         document.getElementById('resumenLotes').textContent = '';
         return;
     }
@@ -263,20 +296,40 @@ function pintarTablaLotes() {
             <td><button type="button" class="btn-destacar ${color ? 'btn-destacar--activo' : ''}" onclick="alternarDestacado(${l.id})"
                     title="${color ? 'Quitar el color' : 'Destacar con color en las gráficas'}">
                 <i class="chip-lote__color" style="${color ? `background:${color}` : ''}"></i>${color ? 'Destacado' : 'Destacar'}</button></td>
+            <td><button type="button" class="btn-destacar" title="Informe del lote en PDF o Excel"
+                    onclick="abrirInformeLote({ loteId: ${l.id}, procesoId: ${infoReceta.proceso.id}, identificador: '${escaparHtml(l.identificador).replace(/'/g, '&#39;')}' })">🧾 Informe</button></td>
         </tr>`;
-    }).join('') : '<tr><td colspan="6" class="estado-vacio">Ningún lote coincide con los filtros.</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="estado-vacio">Ningún lote coincide con los filtros.</td></tr>';
 }
 
 // ------------------------------------------------------------------
 // Pestaña Gráficas
 // ------------------------------------------------------------------
+async function exportarExcelElegidos(boton) {
+    const proceso = document.getElementById('filtroProceso').value;
+    if (!proceso || !elegidos.size) { alert('Elige una receta y al menos un lote.'); return; }
+    const etapa = document.getElementById('filtroEtapa').value;
+    const texto = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = '⏳ Generando…';
+    try {
+        await descargarArchivo(`/api/informes-proceso/lotes/?proceso=${proceso}&lotes=${[...elegidos].join(',')}${etapa ? `&etapa=${etapa}` : ''}`, 'datos.xlsx');
+    } catch (err) {
+        alert(err.message);
+    } finally {
+        boton.disabled = false;
+        boton.textContent = texto;
+    }
+}
+
 function cambiarOpcion() {
     guardarSeleccion();
     pintarGraficas();
+    pintarComparar();
 }
 
 function restablecerZoom() {
-    zoomPorEje = { LOTE: null, ETAPA: null };
+    zoomPorEje = {};
     pintarGraficas();
 }
 
@@ -286,7 +339,19 @@ function destacarPorNombre(input) {
     if (lote && !destacados.includes(lote.id)) alternarDestacado(lote.id);
 }
 
+function elegirEtapa(id) {
+    document.getElementById('filtroEtapa').value = id ? String(id) : '';
+    cambiarEtapa();
+    pintarBarraGraficas();
+}
+
 function pintarBarraGraficas() {
+    const etapaActual = document.getElementById('filtroEtapa').value;
+    const etapas = infoReceta ? infoReceta.etapas : [];
+    document.getElementById('filtroEtapas').innerHTML = etapas.length > 1 ? '<span class="destacados__titulo">Etapas</span>'
+        + [{ id: '', nombre: 'Todas' }, ...etapas].map(e => `
+            <button type="button" role="tab" class="chip-etapa ${String(e.id) === etapaActual ? 'chip-etapa--activa' : ''}"
+                    aria-selected="${String(e.id) === etapaActual}" onclick="elegirEtapa('${e.id}')">${escaparHtml(e.nombre)}</button>`).join('') : '';
     const lotesPorId = Object.fromEntries((analisis ? analisis.lotes : []).map(l => [l.id, l]));
     document.getElementById('chipsDestacados').innerHTML = destacados.length ? destacados.map(id => `
         <button type="button" class="chip-lote chip-lote--elegido" onclick="alternarDestacado(${id})" title="Quitar el color">
@@ -294,9 +359,10 @@ function pintarBarraGraficas() {
         </button>`).join('') : '<span class="sin-dato">Ninguno: clic en una línea para destacarla.</span>';
     document.getElementById('listaDestacar').innerHTML = (analisis ? analisis.lotes : [])
         .filter(l => !destacados.includes(l.id)).map(l => `<option value="${escaparHtml(l.identificador)}">`).join('');
-    document.getElementById('btnRestablecerZoom').hidden = !(zoomPorEje.LOTE || zoomPorEje.ETAPA);
+    document.getElementById('btnRestablecerZoom').hidden = !Object.values(zoomPorEje).some(Boolean);
 
-    const parametros = analisis ? analisis.parametros.filter(p => Object.keys(p.series).length) : [];
+    const codigos = new Set();
+    const parametros = analisis ? analisis.parametros.filter(p => Object.keys(p.series).length && !codigos.has(p.codigo) && codigos.add(p.codigo)) : [];
     document.getElementById('filtroParametros').innerHTML = parametros.length ? '<span class="destacados__titulo">Parámetros</span>' + parametros.map(p => `
         <button type="button" class="chip-parametro ${parametrosOcultos.has(p.codigo) ? '' : 'chip-parametro--activo'}"
                 onclick="alternarParametro('${escaparHtml(p.codigo)}')">${escaparHtml(p.nombre)}</button>`).join('') : '';
@@ -322,14 +388,15 @@ function textoPunto(p, serie, q) {
 function htmlTarjeta(p, ampliada = false) {
     return `
         <header class="tarjeta-grafica__titulo">
-            <span class="tarjeta-grafica__nombre" ${ampliada ? '' : `onclick="abrirGraficaGrande(${p.parametro})" title="Ampliar"`}>
+            <span class="tarjeta-grafica__nombre" ${ampliada ? '' : `onclick="abrirGraficaGrande('${p.clave}')" title="Ampliar"`}>
                 ${escaparHtml(p.nombre)} ${p.unidad ? `<small>${escaparHtml(p.unidad)}</small>` : ''}
                 ${p.calculado ? '<span class="etiqueta-calculado" title="Calculado con su fórmula">ƒ</span>' : ''}</span>
             <span class="tarjeta-grafica__acciones">
                 <span class="tarjeta-grafica__resumen"></span>
-                ${ampliada ? '' : `<button type="button" class="btn-ampliar" onclick="abrirGraficaGrande(${p.parametro})" title="Abrir en grande">⤢ Ampliar</button>`}
+                ${ampliada ? '' : `<button type="button" class="btn-ampliar" onclick="abrirGraficaGrande('${p.clave}')" title="Abrir en grande">⤢ Ampliar</button>`}
             </span>
         </header>
+        ${ampliada ? `<div class="tarjeta-grafica__ubicacion">Etapa ${escaparHtml(p.etapa)} · ${escaparHtml(p.bloque)}</div>` : ''}
         <div class="tg-leyenda tg-leyenda--claro"></div>
         <div class="tarjeta-grafica__lienzo"></div>
         <div class="tarjeta-grafica__nota"></div>`;
@@ -341,8 +408,9 @@ function dibujarTarjeta(tarjeta, p, alto) {
     const mostrarPuntos = document.getElementById('opcionPuntos').checked;
     const lotesPorId = Object.fromEntries(analisis.lotes.map(l => [String(l.id), l]));
     const ref = p.referencia || {};
-    const ejeClave = ref.eje_edad === 'ETAPA' ? 'ETAPA' : 'LOTE';
-    const indice = ejeClave === 'ETAPA' ? 1 : 0;
+    const porEtapa = ref.eje_edad === 'ETAPA';
+    const ejeClave = porEtapa ? `ETAPA-${p.etapa_id}` : 'LOTE';   // la edad de cada etapa es distinta: zoom propio
+    const indice = porEtapa ? 1 : 0;
     let sinEdad = 0;
     const series = Object.entries(p.series).map(([id, puntos]) => {
         const lote = lotesPorId[id];
@@ -364,7 +432,7 @@ function dibujarTarjeta(tarjeta, p, alto) {
         alZoom: (rango) => { zoomPorEje[ejeClave] = rango; pintarGraficas(); },
         alElegirSerie: (id) => alternarDestacado(id),
         textoPunto: (serie, q) => textoPunto(p, serie, q), tema: 'claro',
-        textoX: ejeClave === 'ETAPA' ? 'Edad de la etapa (h)' : 'Edad del lote (h)',
+        textoX: porEtapa ? `Edad de la etapa ${p.etapa} (h)` : 'Edad del lote (h)',
     });
     tarjeta.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
         series: conColor.map(s => ({ color: s.color, etiqueta: escaparHtml(s.nombre) })),
@@ -402,12 +470,36 @@ function pintarGraficas() {
     const parametros = parametrosVisibles();
     if (!parametros.length) {
         const conDatos = analisis.parametros.some(p => Object.keys(p.series).length);
+        const vacio = !analisis.parametros.length;
         rejilla.innerHTML = `<div class="panel estado-vacio">${conDatos ? 'Todos los parámetros están ocultos: actívalos arriba.'
-            : 'Los lotes elegidos no tienen datos en esta receta o etapa.'}</div>`;
+            : vacio ? 'Esta plantilla (o etapa) no captura parámetros numéricos: configúralos en el diseñador de procesos.'
+            : 'Los lotes elegidos no tienen datos en esta plantilla o etapa.'}</div>`;
         return;
     }
-    rejilla.innerHTML = parametros.map(p => `<article class="tarjeta-grafica" data-parametro="${p.parametro}">${htmlTarjeta(p)}</article>`).join('');
-    parametros.forEach(p => dibujarTarjeta(rejilla.querySelector(`[data-parametro="${p.parametro}"]`), p, 290));
+    // Como en el diseñador: una sección por etapa y, dentro, un bloque por actividad · sección de captura
+    const grupos = [];
+    parametros.forEach(p => {
+        let g = grupos[grupos.length - 1];
+        if (!g || g.etapa_id !== p.etapa_id) grupos.push(g = { etapa_id: p.etapa_id, etapa: p.etapa, bloques: [] });
+        let b = g.bloques[g.bloques.length - 1];
+        if (!b || b.titulo !== p.bloque) g.bloques.push(b = { titulo: p.bloque, parametros: [] });
+        b.parametros.push(p);
+    });
+    rejilla.innerHTML = grupos.map(g => `
+        <section class="seccion-etapa" aria-label="Etapa ${escaparHtml(g.etapa)}">
+            <header class="seccion-etapa__titulo">
+                <span class="seccion-etapa__icono">📁</span> Etapa <strong>${escaparHtml(g.etapa)}</strong>
+                <small>${g.bloques.reduce((n, b) => n + b.parametros.length, 0)} gráficas</small>
+            </header>
+            ${g.bloques.map(b => `
+                <div class="bloque-actividad">
+                    <div class="bloque-actividad__titulo">${escaparHtml(b.titulo)}</div>
+                    <div class="rejilla-tarjetas">
+                        ${b.parametros.map(p => `<article class="tarjeta-grafica" data-clave="${p.clave}">${htmlTarjeta(p)}</article>`).join('')}
+                    </div>
+                </div>`).join('')}
+        </section>`).join('');
+    parametros.forEach(p => dibujarTarjeta(rejilla.querySelector(`[data-clave="${p.clave}"]`), p, 290));
     pintarGraficaGrande();
 }
 
@@ -416,8 +508,8 @@ function pintarGraficas() {
 // ------------------------------------------------------------------
 let parametroAmpliado = null;
 
-function abrirGraficaGrande(parametroId) {
-    parametroAmpliado = parametroId;
+function abrirGraficaGrande(clave) {
+    parametroAmpliado = clave;
     document.getElementById('modalGrafica').style.display = 'flex';
     document.body.classList.add('sin-desplazamiento');
     pintarGraficaGrande();
@@ -432,16 +524,16 @@ function cerrarGraficaGrande() {
 
 function moverGraficaGrande(delta) {
     const lista = parametrosVisibles();
-    const i = lista.findIndex(p => p.parametro === parametroAmpliado);
+    const i = lista.findIndex(p => p.clave === parametroAmpliado);
     if (i < 0 || lista.length < 2) return;
-    parametroAmpliado = lista[(i + delta + lista.length) % lista.length].parametro;
+    parametroAmpliado = lista[(i + delta + lista.length) % lista.length].clave;
     pintarGraficaGrande();
 }
 
 function pintarGraficaGrande() {
     if (parametroAmpliado === null) return;
     const lista = parametrosVisibles();
-    const i = lista.findIndex(p => p.parametro === parametroAmpliado);
+    const i = lista.findIndex(p => p.clave === parametroAmpliado);
     if (i < 0) { cerrarGraficaGrande(); return; }
     const p = lista[i];
     const tarjeta = document.getElementById('tarjetaGrande');
@@ -455,8 +547,200 @@ function pintarGraficaGrande() {
 let temporizadorAncho = null;
 window.addEventListener('resize', () => {
     clearTimeout(temporizadorAncho);
-    temporizadorAncho = setTimeout(pintarGraficas, 200);   // también redibuja la ampliada
+    temporizadorAncho = setTimeout(() => { pintarGraficas(); pintarComparar(); }, 200);   // también redibuja la ampliada
 });
+
+// ------------------------------------------------------------------
+// Pestaña Comparar: varios parámetros de los lotes elegidos
+// ------------------------------------------------------------------
+const MAX_COMPARAR = 6;
+let compSeleccion = [];          // claves (etapa-parámetro) en el orden en que se eligieron
+let compVista = 'apiladas';
+let compZoom = null;
+
+function claveComparar() { return `comparar-${document.getElementById('filtroProceso').value}`; }
+
+function guardarComparar() {
+    guardarPreferencia(claveComparar(), { seleccion: compSeleccion, vista: compVista,
+        eje: document.getElementById('compEje').value, soloDestacados: document.getElementById('compSoloDestacados').checked });
+}
+
+function leerComparar() {
+    const g = leerPreferencia(claveComparar()) || {};
+    compSeleccion = g.seleccion || [];
+    compVista = g.vista || 'apiladas';
+    document.getElementById('compEje').value = g.eje || 'LOTE';
+    document.getElementById('compSoloDestacados').checked = !!g.soloDestacados;
+    compZoom = null;
+}
+
+function cambiarComparar(reiniciarZoom = false) {
+    if (reiniciarZoom) compZoom = null;
+    guardarComparar();
+    pintarComparar();
+}
+
+function cambiarVistaComparar(vista) {
+    compVista = vista;
+    cambiarComparar();
+}
+
+function alternarComparar(clave) {
+    const i = compSeleccion.indexOf(clave);
+    if (i >= 0) compSeleccion.splice(i, 1);
+    else if (compSeleccion.length >= MAX_COMPARAR) { alert(`Compara hasta ${MAX_COMPARAR} parámetros a la vez.`); return; }
+    else compSeleccion.push(clave);
+    cambiarComparar();
+}
+
+function textoPuntoComparar(p, lote, q) {
+    const [edad, , valor, estado, adicional, momento, tarea] = q.crudo;
+    return `<strong>${escaparHtml(lote)}</strong> · ${escaparHtml(p.nombre)}<br>
+        <strong>${corto(valor)}</strong>${p.unidad ? ' ' + escaparHtml(p.unidad) : ''}${edad !== null ? ` a ${corto(edad)} h` : ''}<br>
+        <span class="tg-ayuda__tenue">${escaparHtml(analisis.tareas[tarea] || '')}${adicional ? ' · adicional' : ''}<br>
+        ${new Date(momento * 1000).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</span>
+        ${estado === 2 ? '<br>🚨 Fuera de especificación' : estado === 1 ? '<br>⚠️ Fuera de alerta' : ''}`;
+}
+
+function pintarComparar() {
+    if (pestana !== 'comparar') return;
+    document.querySelectorAll('.segmentado [data-vista]').forEach(b => {
+        b.classList.toggle('segmentado--activo', b.dataset.vista === compVista);
+        b.setAttribute('aria-checked', b.dataset.vista === compVista);
+    });
+    const caja = document.getElementById('compGraficas');
+    const chips = document.getElementById('compParametros');
+    if (!analisis) {
+        chips.innerHTML = '';
+        caja.innerHTML = `<div class="panel estado-vacio">${!document.getElementById('filtroProceso').value ? 'Elige una plantilla.'
+            : !elegidos.size ? 'No hay lotes elegidos: elígelos en la pestaña 🧪 Lotes.' : 'Cargando…'}</div>`;
+        return;
+    }
+    const conDatos = analisis.parametros.filter(p => Object.keys(p.series).length);
+    // Los elegidos de otra etapa (si hay una filtrada) se conservan, solo no se muestran
+    const visibles = compSeleccion.filter(c => conDatos.some(p => p.clave === c));
+
+    // Parámetros a elegir, agrupados por etapa (como en el diseñador)
+    const porEtapa = [];
+    conDatos.forEach(p => {
+        let g = porEtapa[porEtapa.length - 1];
+        if (!g || g.etapa_id !== p.etapa_id) porEtapa.push(g = { etapa: p.etapa, etapa_id: p.etapa_id, parametros: [] });
+        g.parametros.push(p);
+    });
+    const superpuestas = compVista === 'superpuestas';
+    const etapaFiltrada = (infoReceta ? infoReceta.etapas : []).find(e => String(e.id) === document.getElementById('filtroEtapa').value);
+    const aviso = etapaFiltrada ? `<div class="aviso-etapa">Solo se muestran parámetros de la etapa <strong>${escaparHtml(etapaFiltrada.nombre)}</strong>.
+        <button type="button" class="btn-secundario" onclick="elegirEtapa('')">Ver todas las etapas</button></div>` : '';
+    chips.innerHTML = aviso + porEtapa.map(g => `
+        <div class="comparar-etapa"><span class="destacados__titulo">Etapa ${escaparHtml(g.etapa)}</span>
+            ${g.parametros.map(p => {
+                const i = visibles.indexOf(p.clave);
+                const color = superpuestas && i >= 0 ? COLORES_SERIES_CLARO[i] : '';
+                return `<button type="button" class="chip-parametro ${i >= 0 ? 'chip-parametro--activo chip-parametro--elegido' : 'chip-parametro--libre'}"
+                        onclick="alternarComparar('${p.clave}')" aria-pressed="${i >= 0}">
+                    ${color ? `<i class="chip-lote__color" style="background:${color}"></i>` : ''}${escaparHtml(p.nombre)}${p.unidad ? ` <small>${escaparHtml(p.unidad)}</small>` : ''}</button>`;
+            }).join('')}
+        </div>`).join('') || '<span class="sin-dato">Los lotes elegidos no tienen datos.</span>';
+    document.getElementById('compPista').textContent = visibles.length
+        ? `${visibles.length} de ${MAX_COMPARAR} parámetros · arrastra para acercar (todas juntas) · doble clic para volver · clic en una línea para destacar el lote.`
+        : 'Elige dos o más parámetros (de cualquier etapa) para compararlos.';
+    document.getElementById('btnZoomComparar').hidden = !compZoom;
+    if (!visibles.length) { caja.innerHTML = ''; return; }
+
+    const eje = document.getElementById('compEje').value;
+    const indice = eje === 'FECHA' ? 5 : 0;
+    const soloDestacados = document.getElementById('compSoloDestacados').checked;
+    const lotesPorId = Object.fromEntries(analisis.lotes.map(l => [String(l.id), l]));
+    const elegidosParametros = visibles.map(c => conDatos.find(p => p.clave === c));
+    const seriesDe = (p) => Object.entries(p.series)
+        .filter(([id]) => !soloDestacados || destacados.includes(Number(id)))
+        .map(([id, puntos]) => ({ id: Number(id), lote: lotesPorId[id] ? lotesPorId[id].identificador : id,
+            puntos: puntos.filter(q => q[indice] !== null).map(q => ({ x: q[indice], y: q[2], crudo: q,
+                estado: q[3] === 2 ? 'fuera' : q[3] === 1 ? 'alerta' : '' })) }))
+        .filter(s => s.puntos.length);
+    const xs = elegidosParametros.flatMap(p => seriesDe(p).flatMap(s => s.puntos.map(q => q.x)));
+    if (!xs.length) {
+        caja.innerHTML = `<div class="panel estado-vacio">${soloDestacados ? 'Los lotes destacados no tienen datos de estos parámetros.' : 'Sin datos.'}</div>`;
+        return;
+    }
+    // Mismo rango X para todas: así quedan alineadas una debajo de otra
+    let x0 = Math.min(...xs), x1 = Math.max(...xs);
+    if (eje === 'FECHA') { const m = Math.max(1800, (x1 - x0) * 0.04); x0 -= m; x1 += m; }
+    else { x0 = Math.min(0, x0); x1 = Math.max(x1 + Math.max(6, (x1 - x0) * 0.06), 24); }
+    const comunes = {
+        tema: 'claro', tipoX: eje === 'FECHA' ? 'fecha' : 'numero', rangoX: [x0, x1], zoom: compZoom, grupoGuia: 'comparar',
+        textoX: eje === 'FECHA' ? 'Fecha y hora' : 'Edad del lote (h)',
+        alZoom: (rango) => { compZoom = rango; pintarComparar(); }, alElegirSerie: (id) => alternarDestacado(id),
+        mostrarPuntos: document.getElementById('opcionPuntos').checked,
+    };
+
+    if (!superpuestas) {
+        caja.innerHTML = elegidosParametros.map(p => `
+            <article class="tarjeta-grafica tarjeta-grafica--apilada" data-clave="${p.clave}">
+                <header class="tarjeta-grafica__titulo">
+                    <span>${escaparHtml(p.nombre)} ${p.unidad ? `<small>${escaparHtml(p.unidad)}</small>` : ''}
+                        <small class="tarjeta-grafica__etapa">Etapa ${escaparHtml(p.etapa)}</small></span>
+                    <span class="tarjeta-grafica__resumen"></span>
+                </header>
+                <div class="tg-leyenda tg-leyenda--claro"></div>
+                <div class="tarjeta-grafica__lienzo tarjeta-grafica__lienzo--apilada"></div>
+            </article>`).join('');
+        elegidosParametros.forEach(p => {
+            const tarjeta = caja.querySelector(`[data-clave="${p.clave}"]`);
+            const series = seriesDe(p).map(s => {
+                const color = colorDe(s.id);
+                return { id: s.id, nombre: s.lote, color, destacada: !!color, puntos: s.puntos };
+            }).sort((a, b) => (a.destacada - b.destacada) || (destacados.indexOf(a.id) - destacados.indexOf(b.id)));
+            const ref = p.referencia || {};
+            const curva = eje === 'LOTE' && ref.eje_edad !== 'ETAPA' ? ref.curva || [] : [];   // la curva va contra la edad del lote
+            const r = graficaLineas(tarjeta.querySelector('.tarjeta-grafica__lienzo'), {
+                ...comunes, series, limites: p.limites, curva, objetivo: ref.objetivo, alto: 230,
+                banda: document.getElementById('opcionBanda').checked,
+                textoPunto: (serie, q) => textoPuntoComparar(p, serie.nombre, q),
+            });
+            const conColor = series.filter(s => s.destacada);
+            tarjeta.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
+                series: conColor.map(s => ({ color: s.color, etiqueta: escaparHtml(s.nombre) })), fondo: series.length - conColor.length,
+                banda: document.getElementById('opcionBanda').checked && series.length >= 3, curva: r.curvaVisible,
+                objetivo: ref.objetivo !== null && ref.objetivo !== undefined, limites: p.limites,
+            });
+            tarjeta.querySelector('.tarjeta-grafica__resumen').textContent = `${series.length} lote${series.length === 1 ? '' : 's'}`;
+        });
+        return;
+    }
+
+    // Superpuestas: cada parámetro escalado a 0–100 % de su propio rango; el color es el parámetro,
+    // los lotes destacados van con línea gruesa y el resto delgada
+    const series = [], rangos = [];
+    elegidosParametros.forEach((p, i) => {
+        const color = COLORES_SERIES_CLARO[i];
+        const propias = seriesDe(p);
+        const valores = propias.flatMap(s => s.puntos.map(q => q.y));
+        const vMin = Math.min(...valores), vMax = Math.max(...valores);
+        const escala = (v) => vMax > vMin ? (v - vMin) / (vMax - vMin) * 100 : 50;
+        rangos.push({ p, color, vMin, vMax });
+        propias.forEach(s => {
+            const destacado = destacados.includes(s.id);
+            series.push({ id: s.id, nombre: `${s.lote} · ${p.nombre}`, color, tenue: !destacado, destacada: destacado,
+                puntos: s.puntos.map(q => ({ ...q, y: escala(q.y) })), lote: s.lote, parametro: p });
+        });
+    });
+    series.sort((a, b) => a.destacada - b.destacada);
+    caja.innerHTML = `
+        <article class="tarjeta-grafica tarjeta-grafica--superpuesta">
+            <header class="tarjeta-grafica__titulo"><span>${elegidosParametros.map(p => escaparHtml(p.nombre)).join(' · ')}
+                <small>escalados de 0 a 100 % de su rango</small></span></header>
+            <div class="tg-leyenda tg-leyenda--claro">${rangos.map(r => `<span><i class="tg-l" style="border-color:${r.color}"></i>
+                ${escaparHtml(r.p.nombre)} <small>(${escaparHtml(r.p.etapa)}: ${corto(r.vMin)} → ${corto(r.vMax)}${r.p.unidad ? ' ' + escaparHtml(r.p.unidad) : ''})</small></span>`).join('')}
+                <span class="sin-dato">Línea gruesa: lotes destacados · delgada: los demás</span></div>
+            <div class="tarjeta-grafica__lienzo tarjeta-grafica__lienzo--superpuesta"></div>
+            <div class="tarjeta-grafica__nota">0 % = el valor más bajo de cada parámetro en estos lotes y 100 % = el más alto; la ficha muestra el valor real.</div>
+        </article>`;
+    graficaLineas(caja.querySelector('.tarjeta-grafica__lienzo'), {
+        ...comunes, series, alto: Math.max(360, Math.min(window.innerHeight - 330, 620)), mostrarPuntos: false,
+        textoPunto: (serie, q) => textoPuntoComparar(serie.parametro, serie.lote, q),
+    });
+}
 
 // ------------------------------------------------------------------
 // Pestaña Indicadores
