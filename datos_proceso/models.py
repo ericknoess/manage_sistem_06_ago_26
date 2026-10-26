@@ -127,6 +127,25 @@ class _SoloAgregar(models.Model):
         raise PermissionError("Los datos de proceso capturados no se pueden eliminar (integridad de datos GxP).")
 
 
+class PlanParametros(_SoloAgregar):
+    """
+    Lista de parámetros de una sección (snapshots con límites y curva) tal como se pidió, guardada una sola vez.
+    Las fases y tomas la referencian por su huella SHA-256 (ver planes.py). Inmutable: no se edita ni se borra.
+    """
+    huella = models.CharField(max_length=64, primary_key=True)
+    parametros = models.JSONField()
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Lista de parámetros de un plan"
+        verbose_name_plural = "Listas de parámetros de planes"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise PermissionError("Una lista de parámetros de un plan no se modifica (integridad de datos GxP).")
+        super().save(*args, **kwargs)
+
+
 class TomaDatos(_SoloAgregar):
     """
     Un evento de captura en una fase del lote: el muestreo M-12h, el cierre de una actividad o una muestra adicional.

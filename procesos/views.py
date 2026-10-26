@@ -239,8 +239,8 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         base = LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO').select_related('proceso_maestro').order_by('-created_at')
         if self.action in ('list', 'gantt'):
             # Listas sin tareas: el avance se cuenta en la base (un lote puede tener miles de tareas)
-            return base.annotate(n_fases=Count('fases', distinct=True),
-                                 n_fases_cerradas=Count('fases', filter=Q(fases__estado__in=['COMPLETADA', 'OMITIDA']), distinct=True))
+            return base.annotate(n_fases=Count('fases'),
+                                 n_fases_cerradas=Count('fases', filter=Q(fases__estado__in=['COMPLETADA', 'OMITIDA'])))
         return base.prefetch_related('fases__operacion_maestra__etapa', 'fases__operadores_asignados', 'fases__materiales__material', 'fases__materiales__entregas__devoluciones', 'fases__equipos__tipo', 'fases__equipos__reservas__equipo', 'fases__tomas_datos')
 
     def get_serializer_class(self):
@@ -504,8 +504,10 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     def alertas(self, request):
         """{fase_id: [mensajes]} de las fases por iniciar con cruces de personal, operadores sin turno
         o materiales que por un adelanto debían estar listos antes de ahora."""
-        fases = self.get_queryset().filter(estado='PENDIENTE', lote__estado__in=['PLANEADO', 'EN_PROGRESO'],
-                                           fin_programado__gt=timezone.now())
+        # Consulta ligera: las alertas hacen sus propias consultas y de cada fase solo usan horarios y estado
+        fases = (FaseLote.objects.filter(estado='PENDIENTE', lote__estado__in=['PLANEADO', 'EN_PROGRESO'], lote__archivado=False,
+                                         fin_programado__gt=timezone.now())
+                 .select_related('operacion_maestra', 'lote').defer('plan_captura'))
         return Response(alertas_programacion(fases))
 
     @staticmethod

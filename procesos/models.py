@@ -299,6 +299,13 @@ class FaseLote(models.Model):
         verbose_name = "Fase de Lote"
         verbose_name_plural = "Fases de Lote"
         ordering = ['operacion_maestra__identificador_paso', 'indice_muestreo']
+        # Consultas por ventana de fechas (Planificación), por lote y por estado con cientos de lotes de miles de tareas
+        indexes = [
+            models.Index(fields=['inicio_programado'], name='fase_inicio_prog_idx'),
+            models.Index(fields=['fin_programado'], name='fase_fin_prog_idx'),
+            models.Index(fields=['lote', 'es_subtarea_muestreo'], name='fase_lote_muestreo_idx'),
+            models.Index(fields=['estado', 'fin_programado'], name='fase_estado_fin_idx'),
+        ]
 
     def __str__(self):
         nombre_mostrar = self.nombre_tarea_dinamica if self.es_subtarea_muestreo else self.operacion_maestra.nombre

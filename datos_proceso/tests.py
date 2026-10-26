@@ -196,6 +196,22 @@ class RecetaYPlanTests(CapturaBase):
         self.assertEqual(self.actividad(self.t2).plan_captura, {})
         self.assertEqual([s['nombre'] for s in self.actividad(self.t3).plan_captura['secciones']], ['Cuenta'])
 
+    def test_los_planes_guardan_cada_lista_de_parametros_una_sola_vez(self):
+        from .models import PlanParametros
+        from .planes import expandir_plan
+        m6 = self.muestreo(1)
+        self.assertNotIn('parametros', m6.plan_captura['secciones'][0])           # en la base va la huella
+        self.assertEqual(len(m6.plan_captura['secciones'][0]['parametros_ref']), 64)
+        # 5 muestreos + la cuenta final comparten 4 listas distintas (Reactor, Metabolitos, Cuenta de T2 y de T3)
+        self.assertEqual(PlanParametros.objects.count(), 4)
+        completo = expandir_plan(m6.plan_captura)
+        self.assertEqual([p['codigo'] for p in completo['secciones'][0]['parametros']][:2], ['temp', 'rot_l'])
+        lista = PlanParametros.objects.first()
+        with self.assertRaises(PermissionError):
+            lista.save()
+        with self.assertRaises(PermissionError):
+            lista.delete()
+
     def test_editar_la_receta_no_cambia_un_lote_en_curso(self):
         SeccionCaptura.objects.filter(operacion=self.t2, nombre='Metabolitos').delete()
         self.assertIn('Metabolitos', [s['nombre'] for s in self.muestreo(2).plan_captura['secciones']])

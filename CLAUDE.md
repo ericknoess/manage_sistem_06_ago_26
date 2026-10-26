@@ -7,14 +7,16 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 
 ## Stack
 - Python 3.11.9, Django 4.2, Django REST Framework
-- SQLite en desarrollo (PostgreSQL previsto vía psycopg2)
+- SQLite en desarrollo; PostgreSQL en producción (variables `DB_*`, ver Comandos)
 - Frontend: plantillas Django + JavaScript puro (fetch a la API), Tailwind CSS (CDN), GSAP
 - Pruebas: pytest + pytest-django
 
 ## Comandos
 - Servidor: `python manage.py runserver`
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
-- Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab); el `venv/` del proyecto no tiene Pillow
+- Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab + psycopg2); el `venv/` del proyecto no tiene Pillow
+- Base de datos: SQLite por defecto; PostgreSQL si se define `DB_NAME` (+ `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`).
+  Producción: además `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0` y `DJANGO_ALLOWED_HOSTS`. Las pruebas pasan en ambas.
 - Pruebas: `python manage.py test datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
@@ -35,6 +37,11 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   `/api/lotes/` es una lista ligera sin tareas (avance contado en la base); el detalle `/api/lotes/<id>/` sí las trae.
   El Gantt usa `/api/lotes/gantt/` (barras por etapa con Min/Max en la base; abiertos y terminados en los últimos 30 días,
   `?todos=1` para todos). Una pantalla o endpoint nuevo que liste tareas debe filtrar igual.
+  Planes de captura compactos (`datos_proceso/planes.py`): cada lista de parámetros de una sección se guarda una vez en
+  `PlanParametros` (huella SHA-256, inmutable) y fases/tomas guardan `parametros_ref`; leer siempre con
+  `_parametros_de_plan`/`parametros_de_seccion` o `expandir_plan`, y guardar con `compactar_plan(es)`.
+  Medido en PostgreSQL con 300 lotes de ~1000 tareas (303 mil tareas, 1.4 M valores, 588 MB): Planificación semana 0.5 s,
+  lote en Piso de planta 0.2 s, lista de lotes 0.6 s, Gantt 0.3 s, gráficas de 50 lotes 1.7 s y de 200 lotes 7.7 s (35 MB).
 - Inicio en planta (`evaluar_inicio` en `procesos/services.py`): la dependencia con la predecesora debe cumplirse (FS completada,
   SS iniciada; el muestreo espera a su incubación) y la ventana `OperacionProceso.tolerancia_antes_horas`/`tolerancia_despues_horas`
   (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige

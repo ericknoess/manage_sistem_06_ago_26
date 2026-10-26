@@ -18,6 +18,7 @@ from django.utils import timezone
 from procesos.models import FaseLote, OperacionProceso
 from .formulas import ErrorFormula, evaluar, variables
 from .models import ParametroProceso, SeccionCaptura, ParametroSeccion, TomaDatos, ValorParametro
+from .planes import compactar_plan, compactar_planes, expandir_plan, parametros_de_seccion
 
 LIMITES = ('especificacion_min', 'especificacion_max', 'alerta_min', 'alerta_max')
 MOTIVO_MINIMO = 10
@@ -146,7 +147,10 @@ def generar_plan_captura(lote):
         if plan:
             fase.plan_captura = plan
             actualizar.append(fase)
-    FaseLote.objects.bulk_update(actualizar, ['plan_captura'])
+    # Cada lista de parámetros se guarda una vez (planes.py); la fase guarda su huella
+    for fase, compacto in zip(actualizar, compactar_planes([f.plan_captura for f in actualizar])):
+        fase.plan_captura = compacto
+    FaseLote.objects.bulk_update(actualizar, ['plan_captura'], batch_size=500)
     return len(actualizar)
 
 
@@ -317,8 +321,8 @@ def calcular(parametros, capturados):
 
 
 def _parametros_de_plan(plan):
-    """[(nombre de sección, snapshot)] en el orden del formulario."""
-    return [(s['nombre'], p) for s in (plan or {}).get('secciones', []) for p in s['parametros']]
+    """[(nombre de sección, snapshot)] en el orden del formulario. Acepta planes compactos; los snapshots son de solo lectura."""
+    return [(s['nombre'], p) for s in (plan or {}).get('secciones', []) for p in parametros_de_seccion(s)]
 
 
 def preparar_valores(plan, crudos):
@@ -473,7 +477,7 @@ def registrar_toma_adicional(fase, crudos, actor, motivo, momento=None, codigo_m
         raise ErrorCaptura("Captura al menos un valor.")
     codigo = (codigo_muestra or '').strip()[:60]
     toma = TomaDatos.objects.create(
-        fase=fase, momento=momento, adicional=True, motivo=motivo, plan=plan,
+        fase=fase, momento=momento, adicional=True, motivo=motivo, plan=compactar_plan(plan),
         codigos_muestra={'Muestra adicional': codigo} if codigo else {},
         registrado_por_usuario=actor['usuario'], registrado_por_operador=actor['operador'],
         registrado_por_nombre=actor['nombre'][:150],
@@ -574,7 +578,7 @@ def resumen_captura(fase):
     plan = fase.plan_captura or {}
     if not plan.get('secciones'):
         return None
-    obligatorios = sum(1 for s in plan['secciones'] for p in s['parametros'] if p['obligatorio'])
+    obligatorios = sum(1 for _, p in _parametros_de_plan(plan) if p['obligatorio'])
     return {
         'requerida': obligatorios > 0, 'capturada': toma_del_calendario(fase) is not None,
         'secciones': [s['nombre'] for s in plan['secciones']], 'obligatorios': obligatorios,
@@ -666,7 +670,7 @@ def detalle_captura(fase):
     tomas = list(fase.tomas_datos.prefetch_related('valores').all())
     toma = next((t for t in tomas if not t.adicional), None)
     abierto = not (lote.archivado or lote.estado in ('COMPLETADO', 'ABORTADO'))
-    plan = fase.plan_captura or {}
+    plan = expandir_plan(fase.plan_captura or {})
     plan_adicional = plan_de_operacion(fase.operacion_maestra, None) if operacion_admite_adicional(fase) else {}
     for seccion in plan_adicional.get('secciones', []):
         seccion['codigo_muestra'] = ''  # la muestra adicional lleva su propio código (opcional)
@@ -749,9 +753,13 @@ def _punto(v, ceros):
 
 
 def fases_por_lote(lotes):
-    """{lote_id: [fases]} de varios lotes en una sola consulta."""
+    """
+    {lote_id: [actividades principales]} de varios lotes en una sola consulta, para las edades 0 (`edades_cero` solo usa
+    las principales). Sin los muestreos: con 200 lotes de mil tareas, cargarlos tomaba la mayor parte del tiempo.
+    """
     resultado = {lote.id: [] for lote in lotes}
-    for fase in FaseLote.objects.filter(lote__in=lotes).select_related('operacion_maestra').defer('plan_captura'):
+    for fase in (FaseLote.objects.filter(lote__in=lotes, es_subtarea_muestreo=False)
+                 .select_related('operacion_maestra').defer('plan_captura')):
         resultado[fase.lote_id].append(fase)
     return resultado
 

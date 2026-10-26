@@ -22,6 +22,7 @@ from django.db import transaction
 from auditoria.services import registrar
 from procesos.models import EtapaProceso, FaseLote, LoteProduccion, OperacionProceso, ProcesoMaestro
 from .models import IndicadorProceso, ParametroProceso, ParametroSeccion, SeccionCaptura, TomaDatos, ValorParametro
+from .planes import compactar_planes
 from .services import _snapshot_parametro
 
 NOMBRE_RECETA = 'EPO – Cultivo (histórico)'
@@ -379,14 +380,16 @@ def importar_lote(datos_lote, registros, receta, estructura, corte):
         fase.fin_base_cpm = fase.fin_programado = fase.fecha_fin_real = momento + timedelta(hours=op.duracion_muestreo_horas)
         fase.plan_captura = plan
         nuevos.append((fase, r, plan, claves))
-    for fase, *_ in nuevos:
+    compactos = compactar_planes([plan for _, _, plan, _ in nuevos])
+    for (fase, *_), compacto in zip(nuevos, compactos):
+        fase.plan_captura = compacto
         fase.save()
 
     nombre = lambda r: f"{(r.get('registro') or '').strip() or 'Sin nombre'} (Cultivo)"
     tomas = TomaDatos.objects.bulk_create([
-        TomaDatos(fase=fase, momento=r['fecha_obj'], plan=plan, registrado_por_nombre=nombre(r)[:150],
+        TomaDatos(fase=fase, momento=r['fecha_obj'], plan=compacto, registrado_por_nombre=nombre(r)[:150],
                   codigos_muestra={s['nombre']: s['codigo_muestra'] for s in plan['secciones'] if s['codigo_muestra']})
-        for fase, r, plan, _ in nuevos])
+        for (fase, r, plan, _), compacto in zip(nuevos, compactos)])
     valores = []
     for toma, (fase, r, plan, _) in zip(tomas, nuevos):
         for seccion in plan['secciones']:
