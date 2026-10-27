@@ -90,11 +90,18 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   (elegir hasta 200; se recuerda por receta en el navegador), Gráficas (cada parámetro contra la edad: lotes en gris, hasta 8
   destacados con color fijo de `COLORES_SERIES`, banda P10–P90 y mediana, curva esperada, límites; zoom por arrastre sincronizado
   por eje de edad), Comparar (varios parámetros de cualquier etapa: apilados con el mismo eje X —edad del lote o fecha— y guía
-  sincronizada `grupoGuia`, o superpuestos escalando cada uno a 0–100 %; nunca dos ejes Y) e Indicadores (tabla ordenable con
+  sincronizada `grupoGuia`, superpuestos escalando cada uno a 0–100 %, o «Ejes múltiples»: hasta 4 parámetros, cada uno con su eje Y en sus unidades y su color,
+  alternando izquierda/derecha — opción `ejesY` de `graficaLineas`; las series van escaladas a 0–100 con `rangoY: [0, 100]` y el rango de cada
+  parámetro es P2–P98 + margen, así que los atípicos se marcan ▲▼ en el borde; en superpuestas y ejes múltiples el color es el parámetro y
+  cada lote destacado lleva un tipo de trazo (`trazo` de la serie, `TRAZOS_SERIES`: continuo, guiones, puntos, guion-punto; los primeros 4)) e Indicadores (tabla ordenable con
   promedio, mín–máx y % en meta). `IndicadorProceso` (por receta, configurable en esa
   pantalla, `/api/indicadores-proceso/`): área bajo la curva por trapecios, apego % contra la curva esperada (en la edad de la curva),
   último, máximo o fórmula con otros indicadores (ej. gramos = abc_cel / 1000 - 5.5); se calculan al consultar, no se guardan.
   Gráfica compartida (SVG propio, sin librerías): `static/core/js/graficas.js` + `static/core/css/graficas.css`.
+  Dibuja zonas de color por límites (verde en especificación, ámbar alerta, rojo fuera), líneas suaves monótonas (no inventan
+  picos), nombres de destacados en pastillas dentro del área, halo en puntos fuera de límites y, con 5+ lotes, escala robusta
+  (P2–P98 + margen; los atípicos de lotes en gris se marcan ▲/▼ en el borde; destacados, límites y curva siempre caben).
+  `animar: true` traza las líneas al cargar (Gráficas lo pide solo al cambiar receta, etapa o lotes; nunca en la captura).
   Informes (fase 3, `/api/informes-proceso/`): PDF (reportlab) y Excel (openpyxl) de un lote o de una etapa
   (`<lote>/pdf|excel/?etapa=`) y Excel de varios lotes (`lotes/?proceso=&lotes=`). Los datos salen de `datos_informe` /
   `filas_lotes_excel` en services.py y el formato de `datos_proceso/informes.py`. Organizados como el diseñador: una sección

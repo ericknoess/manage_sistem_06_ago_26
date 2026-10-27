@@ -5,7 +5,7 @@
 //                los lotes elegidos van en gris tenue, los destacados con color; banda P10–P90 y
 //                mediana, curva esperada y límites. Zoom por arrastre (sincronizado entre gráficas de la misma edad).
 //   Comparar:    varios parámetros a la vez (ej. flujo y temperatura): apilados con el mismo eje X y guía sincronizada,
-//                o superpuestos en una gráfica escalando cada uno de 0 a 100 % (sin dos ejes Y).
+//                superpuestos en una gráfica escalando cada uno de 0 a 100 %, o con ejes múltiples (cada uno en sus unidades, hasta 4).
 //   Indicadores: tabla ordenable por lote con promedio, mínimo y máximo.
 // API: /api/analisis-proceso/ (series compactas e indicadores), /api/analisis-proceso/lotes/, /api/indicadores-proceso/.
 // La URL acepta ?proceso=<id>&lotes=1,2 (ej. desde Piso de planta). La selección se recuerda por receta en este navegador.
@@ -25,6 +25,7 @@ let pestana = 'lotes';
 let zoomPorEje = {};             // {'LOTE': [x0, x1], 'ETAPA-<id>': …}: zoom compartido por las gráficas con la misma edad
 let parametrosOcultos = new Set();   // códigos de parámetros que el usuario ocultó (se recuerdan)
 let ordenIndicadores = { columna: null, sentido: 1 };
+let vistaAnimada = '';            // receta|etapa|lotes ya dibujados: las líneas se trazan animadas solo al cambiar de vista
 
 const corto = (v) => numeroCorto(v);
 const colorDe = (id) => COLORES_SERIES_CLARO[destacados.indexOf(id)] || null;   // gráficas en fondo blanco
@@ -439,7 +440,7 @@ function htmlTarjeta(p, ampliada = false) {
 }
 
 // Dibuja un parámetro en una tarjeta (de la rejilla o del modal ampliado)
-function dibujarTarjeta(tarjeta, p, alto) {
+function dibujarTarjeta(tarjeta, p, alto, animar = false) {
     const banda = document.getElementById('opcionBanda').checked;
     const mostrarPuntos = document.getElementById('opcionPuntos').checked;
     const lotesPorId = Object.fromEntries(analisis.lotes.map(l => [String(l.id), l]));
@@ -467,7 +468,7 @@ function dibujarTarjeta(tarjeta, p, alto) {
         banda, mostrarPuntos, zoom: zoomPorEje[ejeClave],
         alZoom: (rango) => { zoomPorEje[ejeClave] = rango; pintarGraficas(); },
         alElegirSerie: (id) => alternarDestacado(id),
-        textoPunto: (serie, q) => textoPunto(p, serie, q), tema: 'claro',
+        textoPunto: (serie, q) => textoPunto(p, serie, q), tema: 'claro', animar,
         textoX: porEtapa ? `Edad de la etapa ${p.etapa} (h)` : 'Edad del lote (h)',
     });
     tarjeta.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
@@ -482,6 +483,8 @@ function dibujarTarjeta(tarjeta, p, alto) {
     const notas = [];
     if (sinEdad) notas.push(`${sinEdad} dato(s) sin edad (a su lote le falta la edad 0) no se grafican.`);
     if (banda && series.length < 3) notas.push('La banda necesita al menos 3 lotes con datos.');
+    if (r.fueraEscala) notas.push(`▲▼ ${r.fueraEscala} dato(s) atípicos de lotes en gris quedan fuera de la escala `
+        + '(marcados en el borde; pasa el cursor para ver su valor o acerca la gráfica).');
     tarjeta.querySelector('.tarjeta-grafica__nota').textContent = notas.join(' ');
 }
 
@@ -542,7 +545,10 @@ function pintarGraficas() {
                     </div>
                 </div>`).join('')}
         </section>`).join('');
-    parametros.forEach(p => dibujarTarjeta(rejilla.querySelector(`[data-clave="${p.clave}"]`), p, 290));
+    const vista = [document.getElementById('filtroProceso').value, document.getElementById('filtroEtapa').value, [...elegidos].sort().join(',')].join('|');
+    const animar = vista !== vistaAnimada;
+    vistaAnimada = vista;
+    parametros.forEach(p => dibujarTarjeta(rejilla.querySelector(`[data-clave="${p.clave}"]`), p, 290, animar));
     pintarGraficaGrande();
 }
 
@@ -597,6 +603,7 @@ window.addEventListener('resize', () => {
 // Pestaña Comparar: varios parámetros de los lotes elegidos
 // ------------------------------------------------------------------
 const MAX_COMPARAR = 6;
+const MAX_EJES = 4;              // vista de ejes múltiples: más ejes ya no se pueden leer
 let compSeleccion = [];          // claves (etapa-parámetro) en el orden en que se eligieron
 let compVista = 'apiladas';
 let compZoom = null;
@@ -671,6 +678,7 @@ function pintarComparar() {
         g.parametros.push(p);
     });
     const superpuestas = compVista === 'superpuestas';
+    const multiEje = compVista === 'ejes';
     const etapaFiltrada = (infoReceta ? infoReceta.etapas : []).find(e => String(e.id) === document.getElementById('filtroEtapa').value);
     const aviso = etapaFiltrada ? `<div class="aviso-etapa">Solo se muestran parámetros de la etapa <strong>${escaparHtml(etapaFiltrada.nombre)}</strong>.
         <button type="button" class="btn-secundario" onclick="elegirEtapa('')">Ver todas las etapas</button></div>` : '';
@@ -678,21 +686,24 @@ function pintarComparar() {
         <div class="comparar-etapa"><span class="destacados__titulo">Etapa ${escaparHtml(g.etapa)}</span>
             ${g.parametros.map(p => {
                 const i = visibles.indexOf(p.clave);
-                const color = superpuestas && i >= 0 ? COLORES_SERIES_CLARO[i] : '';
+                const color = (superpuestas || (multiEje && i < MAX_EJES)) && i >= 0 ? COLORES_SERIES_CLARO[i] : '';
                 return `<button type="button" class="chip-parametro ${i >= 0 ? 'chip-parametro--activo chip-parametro--elegido' : 'chip-parametro--libre'}"
                         onclick="alternarComparar('${p.clave}')" aria-pressed="${i >= 0}">
                     ${color ? `<i class="chip-lote__color" style="background:${color}"></i>` : ''}${escaparHtml(p.nombre)}${p.unidad ? ` <small>${escaparHtml(p.unidad)}</small>` : ''}</button>`;
             }).join('')}
         </div>`).join('') || '<span class="sin-dato">Los lotes elegidos no tienen datos.</span>';
-    document.getElementById('compPista').textContent = visibles.length
+    // «Solo lotes destacados» sin ningún destacado dejaría la gráfica vacía: se ignora y se avisa
+    const filtroDestacados = document.getElementById('compSoloDestacados').checked;
+    const soloDestacados = filtroDestacados && destacados.length > 0;
+    document.getElementById('compPista').textContent = (visibles.length
         ? `${visibles.length} de ${MAX_COMPARAR} parámetros · arrastra para acercar (todas juntas) · doble clic para volver · clic en una línea para destacar el lote.`
-        : 'Elige dos o más parámetros (de cualquier etapa) para compararlos.';
+        : 'Elige dos o más parámetros (de cualquier etapa) para compararlos.')
+        + (filtroDestacados && !destacados.length ? ' ⚠️ «Solo lotes destacados» no aplica: no hay lotes destacados, se muestran todos.' : '');
     document.getElementById('btnZoomComparar').hidden = !compZoom;
     if (!visibles.length) { caja.innerHTML = ''; return; }
 
     const eje = document.getElementById('compEje').value;
     const indice = eje === 'FECHA' ? 5 : 0;
-    const soloDestacados = document.getElementById('compSoloDestacados').checked;
     const lotesPorId = Object.fromEntries(analisis.lotes.map(l => [String(l.id), l]));
     const elegidosParametros = visibles.map(c => conDatos.find(p => p.clave === c));
     const seriesDe = (p) => Object.entries(p.series)
@@ -703,7 +714,10 @@ function pintarComparar() {
         .filter(s => s.puntos.length);
     const xs = elegidosParametros.flatMap(p => seriesDe(p).flatMap(s => s.puntos.map(q => q.x)));
     if (!xs.length) {
-        caja.innerHTML = `<div class="panel estado-vacio">${soloDestacados ? 'Los lotes destacados no tienen datos de estos parámetros.' : 'Sin datos.'}</div>`;
+        caja.innerHTML = `<div class="panel estado-vacio">${soloDestacados
+            ? `Los lotes destacados no tienen datos de estos parámetros.
+               <button type="button" class="btn-secundario" onclick="document.getElementById('compSoloDestacados').checked = false; cambiarComparar();">Ver todos los lotes</button>`
+            : 'Sin datos.'}</div>`;
         return;
     }
     // Mismo rango X para todas: así quedan alineadas una debajo de otra
@@ -717,7 +731,7 @@ function pintarComparar() {
         mostrarPuntos: document.getElementById('opcionPuntos').checked,
     };
 
-    if (!superpuestas) {
+    if (!superpuestas && !multiEje) {
         caja.innerHTML = elegidosParametros.map(p => `
             <article class="tarjeta-grafica tarjeta-grafica--apilada" data-clave="${p.clave}">
                 <header class="tarjeta-grafica__titulo">
@@ -753,34 +767,69 @@ function pintarComparar() {
     }
 
     // Superpuestas: cada parámetro escalado a 0–100 % de su propio rango; el color es el parámetro,
-    // los lotes destacados van con línea gruesa y el resto delgada
+    // los lotes destacados van con línea gruesa y el resto delgada.
+    // Ejes múltiples: igual, pero cada parámetro dibuja su eje con sus valores reales (hasta MAX_EJES).
+    // Color = parámetro; tipo de trazo = lote destacado (continuo, guiones, puntos, guion-punto; los primeros 4)
+    const enGrafica = multiEje ? elegidosParametros.slice(0, MAX_EJES) : elegidosParametros;
     const series = [], rangos = [];
-    elegidosParametros.forEach((p, i) => {
+    enGrafica.forEach((p, i) => {
         const color = COLORES_SERIES_CLARO[i];
         const propias = seriesDe(p);
         const valores = propias.flatMap(s => s.puntos.map(q => q.y));
-        const vMin = Math.min(...valores), vMax = Math.max(...valores);
+        // Rango de cada parámetro sin valores atípicos (P2–P98 + margen): los que quedan fuera se marcan en el borde
+        const orden = [...valores].sort((a, b) => a - b);
+        const cuantil = (f) => orden[Math.round(f * (orden.length - 1))];
+        let vMin = orden[0], vMax = orden[orden.length - 1];
+        if (orden.length >= 30) {
+            const ancho = (cuantil(0.98) - cuantil(0.02)) || Math.abs(cuantil(0.98)) * 0.1 || 1;
+            vMax = Math.min(vMax, cuantil(0.98) + ancho * 0.6);
+            vMin = Math.max(vMin, cuantil(0.02) - ancho * 0.6);
+        }
+        const atipicos = valores.filter(v => v > vMax || v < vMin).length;
         const escala = (v) => vMax > vMin ? (v - vMin) / (vMax - vMin) * 100 : 50;
-        rangos.push({ p, color, vMin, vMax });
+        rangos.push({ p, color, vMin, vMax, atipicos });
         propias.forEach(s => {
-            const destacado = destacados.includes(s.id);
+            const n = destacados.indexOf(s.id);
+            const destacado = n >= 0 && n < TRAZOS_SERIES.length;
             series.push({ id: s.id, nombre: `${s.lote} · ${p.nombre}`, color, tenue: !destacado, destacada: destacado,
+                ...(destacado ? { trazo: TRAZOS_SERIES[n] } : {}),
                 puntos: s.puntos.map(q => ({ ...q, y: escala(q.y) })), lote: s.lote, parametro: p });
         });
     });
     series.sort((a, b) => a.destacada - b.destacada);
+    const sobran = elegidosParametros.length - enGrafica.length;
+    // Leyenda de lotes: cada destacado (hasta 4) con su tipo de trazo
+    const lotesConTrazo = destacados.slice(0, TRAZOS_SERIES.length)
+        .filter(id => series.some(s => s.id === id && s.destacada))
+        .map((id, i) => ({ nombre: (analisis.lotes.find(l => l.id === id) || {}).identificador || id, trazo: TRAZOS_SERIES[destacados.indexOf(id)] }));
+    const muestraTrazo = (t) => `<svg class="tg-l-trazo" viewBox="0 0 26 8" aria-hidden="true"><line x1="2" y1="4" x2="24" y2="4" stroke-dasharray="${t}"/></svg>`;
+    const leyendaLotes = lotesConTrazo.length
+        ? `<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><strong>Lotes:</strong>${lotesConTrazo.map(l => `<span>${muestraTrazo(l.trazo)}${escaparHtml(l.nombre)}</span>`).join('')}
+            <span class="sin-dato">${destacados.length > TRAZOS_SERIES.length ? `· solo los primeros ${TRAZOS_SERIES.length} destacados llevan trazo propio (los demás van delgados; para más lotes usa Apiladas)` : '· las delgadas: los demás lotes'}</span></div>`
+        : '<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><span class="sin-dato">Destaca lotes (hasta 4) para verlos con trazo propio: continuo, guiones, puntos o guion-punto.</span></div>';
+    const nota = multiEje
+        ? 'Cada eje está en las unidades de su parámetro (mismo color que su línea). Las escalas son independientes: '
+          + 'que dos líneas se crucen o vayan juntas no significa que sus valores sean iguales.'
+          + (sobran ? ` Solo caben ${MAX_EJES} ejes: ${sobran} parámetro(s) elegido(s) no se dibujan aquí (míralos en Apiladas).` : '')
+        : '0 % = el valor más bajo de cada parámetro en estos lotes y 100 % = el más alto; la ficha muestra el valor real.';
+    const conAtipicos = rangos.some(r => r.atipicos)
+        ? ' Los valores atípicos (muy lejos del resto) quedan fuera de la escala, marcados ▲▼ en el borde; pasa el cursor para ver su valor.' : '';
     caja.innerHTML = `
         <article class="tarjeta-grafica tarjeta-grafica--superpuesta">
-            <header class="tarjeta-grafica__titulo"><span>${elegidosParametros.map(p => escaparHtml(p.nombre)).join(' · ')}
-                <small>escalados de 0 a 100 % de su rango</small></span></header>
+            <header class="tarjeta-grafica__titulo"><span>${enGrafica.map(p => escaparHtml(p.nombre)).join(' · ')}
+                <small>${multiEje ? 'cada uno con su eje' : 'escalados de 0 a 100 % de su rango'}</small></span></header>
             <div class="tg-leyenda tg-leyenda--claro">${rangos.map(r => `<span><i class="tg-l" style="border-color:${r.color}"></i>
-                ${escaparHtml(r.p.nombre)} <small>(${escaparHtml(r.p.etapa)}: ${corto(r.vMin)} → ${corto(r.vMax)}${r.p.unidad ? ' ' + escaparHtml(r.p.unidad) : ''})</small></span>`).join('')}
-                <span class="sin-dato">Línea gruesa: lotes destacados · delgada: los demás</span></div>
+                ${escaparHtml(r.p.nombre)} <small>(${escaparHtml(r.p.etapa)}: ${corto(r.vMin)} → ${corto(r.vMax)}${r.p.unidad ? ' ' + escaparHtml(r.p.unidad) : ''}${r.atipicos ? ` · ▲▼ ${r.atipicos} atípico${r.atipicos === 1 ? '' : 's'}` : ''})</small></span>`).join('')}
+                </div>
+            ${leyendaLotes}
             <div class="tarjeta-grafica__lienzo tarjeta-grafica__lienzo--superpuesta"></div>
-            <div class="tarjeta-grafica__nota">0 % = el valor más bajo de cada parámetro en estos lotes y 100 % = el más alto; la ficha muestra el valor real.</div>
+            <div class="tarjeta-grafica__nota">${nota}${conAtipicos}</div>
         </article>`;
+    // Título de cada eje: la unidad (o el nombre recortado si no tiene) — el nombre completo va en la leyenda
+    const tituloEje = (p) => { const t = p.unidad || p.nombre; return t.length > 9 ? `${t.slice(0, 8)}…` : t; };
     graficaLineas(caja.querySelector('.tarjeta-grafica__lienzo'), {
-        ...comunes, series, alto: Math.max(360, Math.min(window.innerHeight - 330, 620)), mostrarPuntos: false,
+        ...comunes, series, alto: Math.max(360, Math.min(window.innerHeight - 330, 620)), mostrarPuntos: false, rangoY: [0, 100],
+        ejesY: multiEje ? rangos.map(r => ({ color: r.color, titulo: tituloEje(r.p), vMin: r.vMin, vMax: r.vMax })) : null,
         textoPunto: (serie, q) => textoPuntoComparar(serie.parametro, serie.lote, q),
     });
 }

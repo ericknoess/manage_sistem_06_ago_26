@@ -18,8 +18,14 @@
 //       tipoX: 'numero' | 'fecha',     // fecha: x en segundos epoch; marcas y guía con fecha y hora
 //       rangoX: [x0, x1] | null,       // rango fijo (gráficas apiladas alineadas); el zoom lo sustituye
 //       grupoGuia: 'nombre',           // las gráficas del mismo grupo mueven juntas su guía vertical
+//       animar: false,                 // traza las líneas al dibujar (no en redibujados frecuentes)
+//       rangoY: [y0, y1] | null,       // rango de valores fijo (sin zoom): los datos fuera se marcan ▲/▼ en el borde
+//       ejesY: [{ color, titulo, vMin, vMax }] | null,   // ejes múltiples (hasta 4, alternando izquierda y derecha):
+//                                      // las series vienen escaladas a 0–100 y cada eje muestra su valor real (vMin → vMax)
 //   });
 //   Una serie con `tenue: true` y color se dibuja delgada y transparente en su color (gráficas superpuestas).
+//   Una serie con `trazo` (stroke-dasharray, ver TRAZOS_SERIES) se dibuja con ese tipo de línea: en las gráficas
+//   superpuestas el color es el parámetro y el trazo distingue a cada lote destacado.
 //
 // Al pasar el cursor: guía vertical con la edad, la serie más cercana se ilumina y una ficha muestra el punto.
 // Estilos en static/core/css/graficas.css. Devuelve { curvaVisible, rango: [x0, x1] }.
@@ -32,6 +38,8 @@
     window.COLORES_SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
     // Los mismos tonos, en los pasos validados para fondo blanco
     window.COLORES_SERIES_CLARO = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+    // Tipos de trazo en orden fijo (continuo, guiones, puntos, guion-punto); con más de 4 ya no se distinguen
+    window.TRAZOS_SERIES = ['', '9 4', '1.5 4', '10 4 1.5 4'];
     const NEUTRO = { oscuro: { anillo: '#f8fafc', linea: '#e2e8f0', ficha: '#94a3b8' }, claro: { anillo: '#0f172a', linea: '#334155', ficha: '#64748b' } };
 
     window.numeroCorto = (v) => Math.abs(v) >= 1000 ? Number(v).toFixed(0) : Number(Number(v).toPrecision(4)).toString();
@@ -104,7 +112,7 @@
         const {
             series = [], vivo = null, curva = [], objetivo = null, limites = null, banda = false, mostrarPuntos = true,
             zoom = null, alZoom = null, alElegirSerie = null, textoPunto = null, textoX = 'Edad (h)', alto = 260, tema = 'oscuro',
-            tipoX = 'numero', rangoX = null, grupoGuia = null,
+            tipoX = 'numero', rangoX = null, grupoGuia = null, animar = false, ejesY = null, rangoY = null,
         } = opciones;
         const textoEjeX = tipoX === 'fecha' ? fechaCorta : (v) => `${corto(v)} h`;
         const neutro = NEUTRO[tema] || NEUTRO.oscuro;
@@ -149,11 +157,37 @@
             return { curvaVisible: false, rango: [xMin, xMax] };
         }
         let yMin = Math.min(...ys), yMax = Math.max(...ys);
-        const holgura = (yMax - yMin) * 0.1 || Math.abs(yMax) * 0.1 || 1;
-        yMin -= holgura; yMax += holgura;
+        // Con muchos lotes, un valor atípico de un lote en gris no aplasta a los demás: la escala llega hasta un margen
+        // sobre el P2–P98 y ese dato queda marcado en el borde (▲/▼). Destacados, límites, curva y valor actual siempre caben.
+        let recorte = null;
+        const ejes = (ejesY || []).slice(0, 4);
+        if (!zoom && !ejes.length && ordenadas.length >= 5 && ysDatos.length >= 30) {
+            const orden = [...ysDatos].sort((a, b) => a - b);
+            const p02 = cuantil(orden, 0.02), p98 = cuantil(orden, 0.98);
+            const ancho98 = (p98 - p02) || Math.abs(p98) * 0.1 || 1;
+            const fijos = [...ordenadas.filter(s => s.color && !s.tenue).flatMap(s => s.puntos.filter(q => dentro(q.x)).map(q => q.y)),
+                           ...(actual ? [actual.y] : []), ...curvaVisible.map(q => q.y), ...lineas.map(l => l.y),
+                           ...(esperado !== null ? [esperado] : [])];
+            const techo = Math.max(p98 + ancho98 * 0.6, ...fijos), piso = Math.min(p02 - ancho98 * 0.6, ...fijos);
+            if (yMax > techo || yMin < piso) {
+                recorte = { arriba: yMax > techo, abajo: yMin < piso };
+                yMax = Math.min(yMax, techo); yMin = Math.max(yMin, piso);
+            }
+        }
+        if (rangoY && !zoom) {
+            const [y0, y1] = rangoY;
+            if (yMax > y1 + (y1 - y0) * 0.05 || yMin < y0 - (y1 - y0) * 0.05) recorte = { arriba: yMax > y1, abajo: yMin < y0 };
+            yMin = y0 - (y1 - y0) * 0.05; yMax = y1 + (y1 - y0) * 0.05;
+        } else {
+            const holgura = (yMax - yMin) * 0.1 || Math.abs(yMax) * 0.1 || 1;
+            yMin -= holgura; yMax += holgura;
+        }
 
         const ancho = Math.max(contenedor.clientWidth || 0, 280);
-        const m = { izq: 50, der: 16, arr: 12, aba: 36 };
+        const ANCHO_EJE = 60;   // cada eje adicional ocupa esta franja a su lado
+        const m = ejes.length
+            ? { izq: 6 + Math.ceil(ejes.length / 2) * ANCHO_EJE, der: 6 + Math.max(Math.floor(ejes.length / 2) * ANCHO_EJE, 10), arr: ejes.length > 2 ? 40 : 28, aba: 36 }
+            : { izq: 50, der: 16, arr: 12, aba: 36 };
         const anchoUtil = ancho - m.izq - m.der, altoUtil = alto - m.arr - m.aba;
         const X = (v) => m.izq + (v - xMin) / (xMax - xMin) * anchoUtil;
         const Y = (v) => alto - m.aba - (v - yMin) / (yMax - yMin) * altoUtil;
@@ -165,8 +199,32 @@
             return nodo;
         };
         const camino = (pts) => pts.map((q, i) => `${i ? 'L' : 'M'}${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join('');
+        // Línea suave que pasa por cada dato sin inventar picos ni valles (interpolación monótona, Fritsch–Butland)
+        const suave = (pts) => {
+            const p = pts.map(q => [X(q.x), Y(q.y)]);
+            if (p.length < 3) return camino(pts);
+            const n = p.length;
+            const d = [];   // pendiente de cada tramo; null si es un salto vertical (misma edad)
+            for (let i = 0; i < n - 1; i++) {
+                const dx = p[i + 1][0] - p[i][0];
+                d.push(dx > 0.01 ? (p[i + 1][1] - p[i][1]) / dx : null);
+            }
+            const t = p.map((_, i) => {
+                const a = i ? d[i - 1] : null, b = i < n - 1 ? d[i] : null;
+                if (a === null || b === null) return a ?? b ?? 0;
+                return a * b > 0 ? 2 * a * b / (a + b) : 0;
+            });
+            let ruta = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+            for (let i = 0; i < n - 1; i++) {
+                const [x0, y0] = p[i], [x1, y1] = p[i + 1];
+                if (d[i] === null) { ruta += `L${x1.toFixed(1)},${y1.toFixed(1)}`; continue; }
+                const h = (x1 - x0) / 3;
+                ruta += `C${(x0 + h).toFixed(1)},${(y0 + t[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)},${(y1 - t[i + 1] * h).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+            }
+            return ruta;
+        };
 
-        const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, width: ancho, height: alto, class: `tg-svg${tema === 'claro' ? ' tg-svg--claro' : ''}`, role: 'img' });
+        const svg = el('svg', { viewBox: `0 0 ${ancho} ${alto}`, width: ancho, height: alto, class: `tg-svg${tema === 'claro' ? ' tg-svg--claro' : ''}${animar ? ' tg-svg--anima' : ''}`, role: 'img' });
         const uid = Math.random().toString(36).slice(2);
         const defs = el('defs', {}, svg);
         el('rect', { x: m.izq, y: m.arr, width: anchoUtil, height: altoUtil }, el('clipPath', { id: `clip-${uid}` }, defs));
@@ -179,10 +237,35 @@
         el('rect', { x: m.izq, y: m.arr, width: anchoUtil, height: altoUtil, rx: 6, class: 'tg-fondo' }, svg);
 
         // Rejilla y ejes (recesivos)
-        marcas(yMin, yMax, 5).forEach(v => {
-            el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(v), y2: Y(v), class: 'tg-rejilla' }, svg);
-            el('text', { x: m.izq - 7, y: Y(v) + 3, class: 'tg-eje', 'text-anchor': 'end' }, svg).textContent = corto(v);
-        });
+        if (ejes.length) {
+            // Ejes múltiples: el 1.º a la izquierda, el 2.º a la derecha, el 3.º afuera del 1.º…; la rejilla sigue al primero
+            ejes.forEach((e, i) => {
+                const izq = i % 2 === 0, nivel = Math.floor(i / 2);
+                const xEje = izq ? m.izq - nivel * ANCHO_EJE : ancho - m.der + nivel * ANCHO_EJE;
+                const lado = izq ? -1 : 1;
+                const real = (v) => e.vMin + v / 100 * (e.vMax - e.vMin);
+                const norma = (r) => e.vMax > e.vMin ? (r - e.vMin) / (e.vMax - e.vMin) * 100 : 50;
+                el('line', { x1: xEje, x2: xEje, y1: m.arr, y2: alto - m.aba, class: 'tg-eje-y', style: `stroke:${e.color}` }, svg);
+                (e.vMax > e.vMin ? marcas(real(yMin), real(yMax), 5) : [e.vMin]).forEach(r => {
+                    const y = Y(norma(r));
+                    if (y < m.arr - 0.5 || y > alto - m.aba + 0.5) return;
+                    if (i === 0) el('line', { x1: m.izq, x2: ancho - m.der, y1: y, y2: y, class: 'tg-rejilla' }, svg);
+                    el('line', { x1: xEje, x2: xEje + lado * 4, y1: y, y2: y, class: 'tg-eje-y', style: `stroke:${e.color}` }, svg);
+                    el('text', { x: xEje + lado * 6, y: y + 3, class: 'tg-eje', 'text-anchor': izq ? 'end' : 'start' }, svg).textContent = corto(r);
+                });
+                // Título corto arriba del eje, con un punto de su color (el nombre completo va en la leyenda)
+                // (los ejes exteriores, un renglón más arriba para no encimarse con los interiores)
+                const centro = xEje + lado * (ANCHO_EJE / 2 - 2), yTitulo = m.arr - 9.5 - nivel * 13;
+                el('circle', { cx: centro - (e.titulo.length * 2.9) - 6, cy: yTitulo - 4, r: 3.5, fill: e.color }, svg);
+                el('text', { x: centro, y: yTitulo, class: 'tg-eje tg-eje--titulo', 'text-anchor': 'middle' }, svg).textContent = e.titulo;
+                if (nivel) el('line', { x1: xEje, x2: xEje, y1: yTitulo + 3, y2: m.arr, class: 'tg-eje-y', style: `stroke:${e.color}`, opacity: 0.5 }, svg);
+            });
+        } else {
+            marcas(yMin, yMax, 5).forEach(v => {
+                el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(v), y2: Y(v), class: 'tg-rejilla' }, svg);
+                el('text', { x: m.izq - 7, y: Y(v) + 3, class: 'tg-eje', 'text-anchor': 'end' }, svg).textContent = corto(v);
+            });
+        }
         (tipoX === 'fecha' ? marcasFecha(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 95))) : marcas(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 70)))).forEach(v => {
             el('line', { x1: X(v), x2: X(v), y1: m.arr, y2: alto - m.aba, class: 'tg-rejilla tg-rejilla--v' }, svg);
             el('text', { x: X(v), y: alto - m.aba + 15, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = tipoX === 'fecha' ? fechaCorta(v) : corto(v);
@@ -190,6 +273,23 @@
         el('text', { x: m.izq + anchoUtil / 2, y: alto - 4, class: 'tg-eje tg-eje--titulo', 'text-anchor': 'middle' }, svg).textContent = textoX;
 
         const zona = el('g', { 'clip-path': `url(#clip-${uid})` }, svg);
+        // Zonas de color detrás de los datos: en especificación (verde), entre alerta y especificación (ámbar), fuera (rojo)
+        const lim = limites || {};
+        const eMin = numero(lim.especificacion_min), eMax = numero(lim.especificacion_max);
+        const aMin = numero(lim.alerta_min), aMax = numero(lim.alerta_max);
+        const arriba = m.arr, abajo = alto - m.aba;
+        const franja = (yA, yB, tipo) => {   // yA, yB en pixeles
+            const y0 = Math.max(Math.min(yA, yB), arriba), y1 = Math.min(Math.max(yA, yB), abajo);
+            if (y1 - y0 > 0.5) el('rect', { x: m.izq, y: y0, width: anchoUtil, height: y1 - y0, class: `tg-zona tg-zona--${tipo}` }, zona);
+        };
+        if (lineas.length) {
+            const okArriba = aMax ?? eMax, okAbajo = aMin ?? eMin;
+            franja(okArriba !== null ? Y(okArriba) : arriba, okAbajo !== null ? Y(okAbajo) : abajo, 'ok');
+            if (aMax !== null) franja(Y(aMax), eMax !== null ? Y(eMax) : arriba, 'alerta');
+            if (aMin !== null) franja(Y(aMin), eMin !== null ? Y(eMin) : abajo, 'alerta');
+            if (eMax !== null) franja(arriba, Y(eMax), 'fuera');
+            if (eMin !== null) franja(Y(eMin), abajo, 'fuera');
+        }
         lineas.forEach(l => {
             el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(l.y), y2: Y(l.y), class: `tg-limite tg-limite--${l.tipo}` }, zona);
             el('text', { x: ancho - m.der - 4, y: Y(l.y) - 4, class: 'tg-etiqueta', 'text-anchor': 'end' }, zona).textContent = `${l.etiqueta} ${corto(l.y)}`;
@@ -207,37 +307,41 @@
                     const arriba = tramo.map(b => ({ x: b.x, y: b.p90 }));
                     const abajo = [...tramo].reverse().map(b => ({ x: b.x, y: b.p10 }));
                     el('path', { d: `${camino(arriba)}${camino(abajo).replace('M', 'L')}Z`, class: 'tg-banda' }, zona);
-                    el('path', { d: camino(tramo.map(b => ({ x: b.x, y: b.p50 }))), class: 'tg-mediana' }, zona);
+                    el('path', { d: suave(tramo.map(b => ({ x: b.x, y: b.p50 }))), class: 'tg-mediana' }, zona);
                 }
                 tramo = [];
             };
             datosBanda.forEach(b => { if (b) tramo.push(b); else cerrar(); });
             cerrar();
         }
-        if (curvaVisible.length > 1) el('path', { d: camino(curvaVisible), class: 'tg-curva' }, zona);
+        if (curvaVisible.length > 1) el('path', { d: suave(curvaVisible), class: 'tg-curva' }, zona);
 
         // Series: primero las de fondo (gris tenue), encima las destacadas (con color y brillo)
         const fondo = el('g', { class: 'tg-capa-fondo' }, zona);
         const frente = el('g', {}, zona);
-        const unaSola = ordenadas.filter(s => s.color).length === 1 && !datosBanda && ordenadas.length === 1;
+        // Área con degradado bajo la línea cuando hay pocas series con color (no con banda, ni con escalas por parámetro)
+        const conArea = ordenadas.filter(s => s.color && !s.tenue).length <= 2 && !datosBanda && !ejes.length && !ordenadas.some(s => s.tenue);
         ordenadas.forEach(s => {
             if (s.orden.length < 2) return;
             if (!s.color) {
-                el('path', { d: camino(s.orden), class: 'tg-serie tg-serie--fondo' }, fondo);
+                el('path', { d: suave(s.orden), class: 'tg-serie tg-serie--fondo' }, fondo);
                 return;
             }
             if (s.tenue) {
-                el('path', { d: camino(s.orden), class: 'tg-serie tg-serie--tenue', style: `stroke:${s.color}` }, fondo);
+                el('path', { d: suave(s.orden), class: 'tg-serie tg-serie--tenue', style: `stroke:${s.color}` }, fondo);
                 return;
             }
-            if (unaSola) {
-                const grad = el('linearGradient', { id: `area-${uid}`, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
-                el('stop', { offset: '0%', 'stop-color': s.color, 'stop-opacity': 0.28 }, grad);
+            if (conArea) {
+                const idArea = `area-${uid}-${s.id}`;
+                const grad = el('linearGradient', { id: idArea, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+                el('stop', { offset: '0%', 'stop-color': s.color, 'stop-opacity': 0.22 }, grad);
                 el('stop', { offset: '100%', 'stop-color': s.color, 'stop-opacity': 0 }, grad);
                 const base = Y(yMin);
-                el('path', { d: `${camino(s.orden)}L${X(s.orden[s.orden.length - 1].x)},${base}L${X(s.orden[0].x)},${base}Z`, fill: `url(#area-${uid})` }, frente);
+                el('path', { d: `${suave(s.orden)}L${X(s.orden[s.orden.length - 1].x)},${base}L${X(s.orden[0].x)},${base}Z`, fill: `url(#${idArea})`, class: 'tg-area' }, frente);
             }
-            el('path', { d: camino(s.orden), class: 'tg-serie', style: `stroke:${s.color}`, filter: `url(#brillo-${uid})` }, frente);
+            el('path', s.trazo
+                ? { d: suave(s.orden), class: 'tg-serie', 'stroke-dasharray': s.trazo, style: `stroke:${s.color}`, filter: `url(#brillo-${uid})` }
+                : { d: suave(s.orden), class: 'tg-serie tg-trazo', pathLength: 1, style: `stroke:${s.color}`, filter: `url(#brillo-${uid})` }, frente);
         });
         if (actual && ordenadas.length === 1 && ordenadas[0].orden.length) {
             const previos = ordenadas[0].orden.filter(q => q.x <= actual.x);
@@ -247,14 +351,26 @@
 
         // Puntos (las series de fondo solo si se pide) y su posición en pantalla para buscar el más cercano
         const cercanos = [];
+        const marcasFuera = new Map();   // datos fuera de la escala: una marca por columna de 6 px en el borde
+        let fueraEscala = 0;
         ordenadas.forEach(s => {
             const conPunto = (s.color && !s.tenue) || mostrarPuntos;
             s.puntos.forEach(q => {
                 if (!dentro(q.x)) return;
-                const px = X(q.x), py = Y(q.y);
+                const px = X(q.x);
+                if (recorte && (q.y > yMax || q.y < yMin)) {
+                    const lado = q.y > yMax ? 'arriba' : 'abajo';
+                    const py = lado === 'arriba' ? arriba + 6 : abajo - 6;
+                    fueraEscala++;
+                    marcasFuera.set(`${lado}-${Math.round(px / 6)}`, { px, py, lado });
+                    cercanos.push({ px, py, q, s });
+                    return;
+                }
+                const py = Y(q.y);
                 cercanos.push({ px, py, q, s });
                 if (!conPunto) return;
                 const fuerte = s.color && !s.tenue;
+                if (q.estado && fuerte) el('circle', { cx: px, cy: py, r: 8.5, class: `tg-halo tg-halo--${q.estado}` }, frente);
                 el('circle', {
                     cx: px, cy: py, r: fuerte ? 4 : 2.6,
                     class: `tg-punto${fuerte ? '' : ' tg-punto--fondo'}${q.estado ? ` tg-punto--${q.estado}` : ''}`,
@@ -262,6 +378,11 @@
                 }, fuerte ? frente : fondo);
             });
         });
+        marcasFuera.forEach(({ px, py, lado }) => {
+            const p = lado === 'arriba' ? `M${px - 4},${py + 2}L${px},${py - 4}L${px + 4},${py + 2}Z` : `M${px - 4},${py - 2}L${px},${py + 4}L${px + 4},${py - 2}Z`;
+            el('path', { d: p, class: 'tg-fuera-escala' }, svg);
+        });
+
         // Nombre de cada serie destacada al final de su línea (sin encimarse); el texto va en tinta, el color en la marca
         const etiquetas = ordenadas.filter(s => s.color && !s.tenue && s.nombre && ordenadas.length > 1).map(s => {
             const visibles = s.orden.filter(q => dentro(q.x));
@@ -269,12 +390,25 @@
             const ultimo = visibles[visibles.length - 1];
             return { s, x: X(ultimo.x), y: Y(ultimo.y) };
         }).filter(Boolean).sort((a, b) => a.y - b.y);
-        for (let i = 1; i < etiquetas.length; i++) etiquetas[i].y = Math.max(etiquetas[i].y, etiquetas[i - 1].y + 12);
+        // Se reparten hacia abajo sin encimarse y, si se salen por abajo, se empujan hacia arriba (siempre dentro del área)
+        const sep = 16, techoE = arriba + 9, pisoE = abajo - 9;
+        etiquetas.forEach((e, i) => { e.y = Math.max(e.y, techoE, i ? etiquetas[i - 1].y + sep : -Infinity); });
+        for (let i = etiquetas.length - 1; i >= 0; i--) {
+            etiquetas[i].y = Math.min(etiquetas[i].y, i < etiquetas.length - 1 ? etiquetas[i + 1].y - sep : pisoE);
+        }
         etiquetas.forEach(e => {
-            const derecha = e.x + 70 > ancho - m.der;
-            const tx = derecha ? e.x - 9 : e.x + 9;
-            el('rect', { x: derecha ? tx - 3 : tx, y: e.y - 3, width: 3, height: 6, rx: 1, fill: e.s.color }, svg);
-            el('text', { x: derecha ? tx - 6 : tx + 6, y: e.y + 3.5, class: 'tg-nombre', 'text-anchor': derecha ? 'end' : 'start' }, svg).textContent = e.s.nombre;
+            const anchoE = e.s.nombre.length * 6 + (e.s.trazo !== undefined ? 29 : 18);
+            const derecha = e.x + 10 + anchoE > ancho - m.der;
+            const x0 = derecha ? e.x - 10 - anchoE : e.x + 10;
+            const g = el('g', { class: 'tg-pastilla' }, svg);
+            el('rect', { x: x0, y: e.y - 7.5, width: anchoE, height: 15, rx: 7.5, style: `stroke:${e.s.color}` }, g);
+            if (e.s.trazo !== undefined) {
+                el('line', { x1: x0 + 5, x2: x0 + 21, y1: e.y, y2: e.y, 'stroke-dasharray': e.s.trazo, class: 'tg-pastilla__trazo', style: `stroke:${e.s.color}` }, g);
+                el('text', { x: x0 + 25, y: e.y + 3.5, class: 'tg-nombre' }, g).textContent = e.s.nombre;
+            } else {
+                el('circle', { cx: x0 + 8, cy: e.y, r: 3.2, fill: e.s.color }, g);
+                el('text', { x: x0 + 14, y: e.y + 3.5, class: 'tg-nombre' }, g).textContent = e.s.nombre;
+            }
         });
 
         if (actual) {
@@ -358,8 +492,9 @@
             anillo.setAttribute('cx', c.px); anillo.setAttribute('cy', c.py); anillo.setAttribute('visibility', 'visible');
             anillo.style.stroke = c.s && c.s.color ? c.s.color : neutro.anillo;
             if (c.s && c.s.orden.length > 1) {
-                iluminada.setAttribute('d', camino(c.s.orden));
+                iluminada.setAttribute('d', suave(c.s.orden));
                 iluminada.style.stroke = c.s.color || neutro.linea;
+                iluminada.style.strokeDasharray = c.s.trazo || '';
                 iluminada.setAttribute('visibility', 'visible');
             } else {
                 iluminada.setAttribute('visibility', 'hidden');
@@ -399,7 +534,7 @@
         contenedor.innerHTML = '';
         contenedor.appendChild(svg);
         contenedor.appendChild(ficha);
-        return { curvaVisible: curvaVisible.length > 1, rango: [xMin, xMax] };
+        return { curvaVisible: curvaVisible.length > 1, rango: [xMin, xMax], fueraEscala };
     };
 
     // Elementos de leyenda (HTML) para lo que se dibujó
@@ -411,6 +546,7 @@
         if (vivo) items.push('<span><i class="tg-l tg-l--vivo"></i>Valor actual</span>');
         if (curva) items.push('<span><i class="tg-l tg-l--curva"></i>Curva esperada</span>');
         if (objetivo) items.push('<span><i class="tg-l tg-l--esperado"></i>Esperado fijo</span>');
+        if (tipos.size) items.push('<span><i class="tg-l tg-l--zona"></i>Dentro de límites</span>');
         if (tipos.has('fuera')) items.push('<span><i class="tg-l tg-l--fuera"></i>Especificación</span>');
         if (tipos.has('alerta')) items.push('<span><i class="tg-l tg-l--alerta"></i>Alerta</span>');
         return items.join('');

@@ -115,19 +115,33 @@
 .rejilla-tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 0.85rem; }
 .rejilla-graficas.cargando { opacity: 0.55; transition: opacity 0.2s; }
 .tarjeta-grafica {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
-    padding: 0.8rem 0.9rem 0.6rem;
+    padding: 0.85rem 0.9rem 0.6rem;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #ffffff;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 70px);
     color: #0f172a;
+    overflow: hidden;
     box-shadow: 0 12px 30px -16px rgba(0, 0, 0, 0.55);
+    transition: box-shadow 0.2s, transform 0.2s;
 }
+/* Franja de color arriba de cada tarjeta */
+.tarjeta-grafica::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, #2a78d6, #1baf7a 55%, #eda100);
+}
+.tarjeta-grafica:hover { box-shadow: 0 18px 38px -16px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(42, 120, 214, 0.25); }
+.tarjeta-grafica .tg-leyenda { padding-bottom: 0.35rem; border-bottom: 1px dashed #e2e8f0; }
+.tarjeta-grafica--grande:hover { transform: none; }
 .tarjeta-grafica__titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.92rem; font-weight: 700; color: #0f172a; }
 .tarjeta-grafica__titulo small { color: #64748b; font-weight: 400; font-size: 0.75rem; }
-.tarjeta-grafica__resumen { font-size: 0.68rem; font-weight: 600; color: #64748b; white-space: nowrap; }
+.tarjeta-grafica__resumen { padding: 0.1rem 0.55rem; border-radius: 999px; background: #f1f5f9; font-size: 0.68rem; font-weight: 600; color: #475569; white-space: nowrap; }
 .tarjeta-grafica__resumen .valor-fuera { color: #dc2626; }
 .tarjeta-grafica__lienzo { position: relative; min-height: 290px; }
 .tarjeta-grafica__nota { color: #64748b; font-size: 0.66rem; min-height: 0.8rem; }
@@ -329,6 +343,8 @@ body.sin-desplazamiento { overflow: hidden; }
 .tarjeta-grafica--apilada .tarjeta-grafica__lienzo { min-height: 230px; }
 .tarjeta-grafica__etapa { margin-left: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: #e8f0fb; color: #1e40af !important; font-size: 0.66rem !important; }
 .tarjeta-grafica--superpuesta .tg-leyenda small { color: #64748b; }
+.leyenda-trazos { align-items: center; color: #334155; }
+.leyenda-trazos strong { font-weight: 700; color: #0f172a; }
 .aviso-etapa { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.4rem 0.7rem; border: 1px solid rgba(250, 204, 21, 0.4);
     border-radius: 8px; background: rgba(250, 204, 21, 0.08); color: #fde68a; font-size: 0.74rem; }
 .aviso-etapa .btn-secundario { padding: 0.2rem 0.6rem; font-size: 0.7rem; }
