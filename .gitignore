@@ -3,3 +3,6 @@ __pycache__/
 venv/
 media/
 db.sqlite3.respaldo-*
+
+# Salida de collectstatic
+staticfiles/

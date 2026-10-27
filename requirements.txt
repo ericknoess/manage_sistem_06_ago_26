@@ -1,10 +1,10 @@
-# manage_sistem/requirements.txt
-django==4.2.30
-djangorestframework==3.14.0
+# manage_sistem/requirements.txt — versiones con las que se probó la app
+django>=5.1,<5.2
+djangorestframework==3.17.2
 psycopg2-binary==2.9.9
-drf-spectacular==0.27.2
-gunicorn==22.0.0
+pillow==12.3.0
 openpyxl==3.1.5
 reportlab==4.2.5
+gunicorn==22.0.0
 pytest==8.4.2
 pytest-django==4.11.1

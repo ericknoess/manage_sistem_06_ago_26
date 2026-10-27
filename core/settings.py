@@ -146,6 +146,8 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']  # Recursos compartidos (static/core/)
+# Destino de `collectstatic` en producción (lo sirve nginx); no se versiona
+STATIC_ROOT = os.environ.get('DJANGO_STATIC_ROOT') or BASE_DIR / 'staticfiles'
 
 # Cada {% static %} lleva ?v=<hash del contenido>: tras una actualización el navegador baja la versión nueva
 STORAGES = {

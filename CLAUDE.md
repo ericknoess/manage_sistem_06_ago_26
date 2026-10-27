@@ -6,7 +6,7 @@ Gestiona turnos del personal, recetas maestras (ISA-88), lotes de producción,
 planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 
 ## Stack
-- Python 3.11.9, Django 4.2, Django REST Framework
+- Python 3.11.9 (el servidor tiene 3.12), Django 5.1, Django REST Framework 3.17 (versiones en `requirements.txt`)
 - SQLite en desarrollo; PostgreSQL en producción (variables `DB_*`, ver Comandos)
 - Frontend: plantillas Django + JavaScript puro (fetch a la API), Tailwind CSS (CDN), GSAP
 - Pruebas: pytest + pytest-django
@@ -16,7 +16,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Migraciones: `python manage.py makemigrations && python manage.py migrate`
 - Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab + psycopg2); el `venv/` del proyecto no tiene Pillow
 - Base de datos: SQLite por defecto; PostgreSQL si se define `DB_NAME` (+ `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`).
-  Producción: además `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0` y `DJANGO_ALLOWED_HOSTS`. Las pruebas pasan en ambas.
+  Producción: además `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0`, `DJANGO_ALLOWED_HOSTS` y `collectstatic` (a `staticfiles/` o `DJANGO_STATIC_ROOT`, no se versiona). Las pruebas pasan en ambas.
 - Pruebas: `python manage.py test datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
