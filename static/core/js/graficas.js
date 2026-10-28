@@ -19,13 +19,16 @@
 //       rangoX: [x0, x1] | null,       // rango fijo (gráficas apiladas alineadas); el zoom lo sustituye
 //       grupoGuia: 'nombre',           // las gráficas del mismo grupo mueven juntas su guía vertical
 //       animar: false,                 // traza las líneas al dibujar (no en redibujados frecuentes)
-//       rangoY: [y0, y1] | null,       // rango de valores fijo (sin zoom): los datos fuera se marcan ▲/▼ en el borde
+//       rangoY: [y0, y1] | null,       // rango de valores fijo y exacto (sin zoom): los datos fuera se marcan ▲/▼ en el borde
+//       escalaX / escalaY: { min, max, paso } | null,   // escala manual: cualquiera vacío = automático; `paso` = distancia
+//                                      // entre marcas (si da más de 60 marcas se usa la automática). El zoom la sustituye.
 //       ejesY: [{ color, titulo, vMin, vMax }] | null,   // ejes múltiples (hasta 4, alternando izquierda y derecha):
 //                                      // las series vienen escaladas a 0–100 y cada eje muestra su valor real (vMin → vMax)
 //   });
 //   Una serie con `tenue: true` y color se dibuja delgada y transparente en su color (gráficas superpuestas).
 //   Una serie con `trazo` (stroke-dasharray, ver TRAZOS_SERIES) se dibuja con ese tipo de línea: en las gráficas
-//   superpuestas el color es el parámetro y el trazo distingue a cada lote destacado.
+//   superpuestas el color es el parámetro y el trazo distingue a cada lote destacado; `marca` (MARCAS_SERIES:
+//   circulo, cuadro, triangulo, rombo) da a sus puntos esa figura, con contorno marcado.
 //
 // Al pasar el cursor: guía vertical con la edad, la serie más cercana se ilumina y una ficha muestra el punto.
 // Estilos en static/core/css/graficas.css. Devuelve { curvaVisible, rango: [x0, x1] }.
@@ -40,6 +43,18 @@
     window.COLORES_SERIES_CLARO = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
     // Tipos de trazo en orden fijo (continuo, guiones, puntos, guion-punto); con más de 4 ya no se distinguen
     window.TRAZOS_SERIES = ['', '9 4', '1.5 4', '10 4 1.5 4'];
+    // Figura de los puntos, en el mismo orden que los trazos: un lote se reconoce por su línea y por sus puntos.
+    // Se alternan rellenas (contorno oscuro) y huecas (borde grueso de color) para separarlas aún más.
+    window.MARCAS_SERIES = ['circulo', 'cuadro-hueco', 'triangulo', 'rombo-hueco'];
+    // Camino SVG de una figura centrada en (x, y) con "radio" r (misma área visual aproximada)
+    window.caminoMarca = function (tipo, x, y, r) {
+        const f = (n) => n.toFixed(1);
+        tipo = String(tipo).replace('-hueco', '');
+        if (tipo === 'cuadro') { const l = r * 0.9; return `M${f(x - l)},${f(y - l)}h${f(2 * l)}v${f(2 * l)}h${f(-2 * l)}Z`; }
+        if (tipo === 'triangulo') { const l = r * 1.3; return `M${f(x)},${f(y - l)}L${f(x + l * 0.95)},${f(y + l * 0.7)}L${f(x - l * 0.95)},${f(y + l * 0.7)}Z`; }
+        if (tipo === 'rombo') { const l = r * 1.3; return `M${f(x)},${f(y - l)}L${f(x + l)},${f(y)}L${f(x)},${f(y + l)}L${f(x - l)},${f(y)}Z`; }
+        return `M${f(x - r)},${f(y)}a${f(r)},${f(r)} 0 1,0 ${f(2 * r)},0a${f(r)},${f(r)} 0 1,0 ${f(-2 * r)},0Z`;
+    };
     const NEUTRO = { oscuro: { anillo: '#f8fafc', linea: '#e2e8f0', ficha: '#94a3b8' }, claro: { anillo: '#0f172a', linea: '#334155', ficha: '#64748b' } };
 
     window.numeroCorto = (v) => Math.abs(v) >= 1000 ? Number(v).toFixed(0) : Number(Number(v).toPrecision(4)).toString();
@@ -70,6 +85,17 @@
         return lista;
     }
     window.fechaCortaGrafica = fechaCorta;
+
+    // Marcas cada `paso` (escala manual); sin paso válido, las automáticas
+    function marcasPaso(min, max, paso, cuantas) {
+        const p = numero(paso);
+        if (p && p > 0 && (max - min) / p <= 60) {
+            const lista = [];
+            for (let k = Math.ceil(min / p - 1e-9); k * p <= max + p * 1e-9; k++) lista.push(Number((k * p).toFixed(10)));
+            return lista;
+        }
+        return marcas(min, max, cuantas);
+    }
 
     function lineasLimite(lim) {
         lim = lim || {};
@@ -112,7 +138,7 @@
         const {
             series = [], vivo = null, curva = [], objetivo = null, limites = null, banda = false, mostrarPuntos = true,
             zoom = null, alZoom = null, alElegirSerie = null, textoPunto = null, textoX = 'Edad (h)', alto = 260, tema = 'oscuro',
-            tipoX = 'numero', rangoX = null, grupoGuia = null, animar = false, ejesY = null, rangoY = null,
+            tipoX = 'numero', rangoX = null, grupoGuia = null, animar = false, ejesY = null, rangoY = null, escalaX = null, escalaY = null,
         } = opciones;
         const textoEjeX = tipoX === 'fecha' ? fechaCorta : (v) => `${corto(v)} h`;
         const neutro = NEUTRO[tema] || NEUTRO.oscuro;
@@ -141,6 +167,10 @@
             xMax = Math.max(...puntosCurva.map(q => q.x), 24);
         } else {
             xMin = 0; xMax = 24;
+        }
+        if (escalaX && !zoom && tipoX !== 'fecha') {
+            const a = numero(escalaX.min), b = numero(escalaX.max);
+            if ((b ?? xMax) > (a ?? xMin)) { xMin = a ?? xMin; xMax = b ?? xMax; }
         }
         const dentro = (x) => x >= xMin && x <= xMax;
         const curvaVisible = puntosCurva.filter((q, i) => dentro(q.x)
@@ -176,11 +206,19 @@
         }
         if (rangoY && !zoom) {
             const [y0, y1] = rangoY;
-            if (yMax > y1 + (y1 - y0) * 0.05 || yMin < y0 - (y1 - y0) * 0.05) recorte = { arriba: yMax > y1, abajo: yMin < y0 };
-            yMin = y0 - (y1 - y0) * 0.05; yMax = y1 + (y1 - y0) * 0.05;
+            if (yMax > y1 || yMin < y0) recorte = { arriba: yMax > y1, abajo: yMin < y0 };
+            yMin = y0; yMax = y1;
         } else {
             const holgura = (yMax - yMin) * 0.1 || Math.abs(yMax) * 0.1 || 1;
             yMin -= holgura; yMax += holgura;
+        }
+        if (escalaY && !zoom) {   // escala manual: los datos fuera del rango se marcan en el borde
+            const a = numero(escalaY.min), b = numero(escalaY.max);
+            const nMin = a ?? yMin, nMax = b ?? yMax;
+            if (nMax > nMin && (a !== null || b !== null)) {
+                if (ysDatos.some(v => v > nMax || v < nMin)) recorte = recorte || { arriba: true, abajo: true };
+                yMin = nMin; yMax = nMax;
+            }
         }
 
         const ancho = Math.max(contenedor.clientWidth || 0, 280);
@@ -246,7 +284,7 @@
                 const real = (v) => e.vMin + v / 100 * (e.vMax - e.vMin);
                 const norma = (r) => e.vMax > e.vMin ? (r - e.vMin) / (e.vMax - e.vMin) * 100 : 50;
                 el('line', { x1: xEje, x2: xEje, y1: m.arr, y2: alto - m.aba, class: 'tg-eje-y', style: `stroke:${e.color}` }, svg);
-                (e.vMax > e.vMin ? marcas(real(yMin), real(yMax), 5) : [e.vMin]).forEach(r => {
+                (e.vMax > e.vMin ? marcasPaso(real(yMin), real(yMax), e.paso, 5) : [e.vMin]).forEach(r => {
                     const y = Y(norma(r));
                     if (y < m.arr - 0.5 || y > alto - m.aba + 0.5) return;
                     if (i === 0) el('line', { x1: m.izq, x2: ancho - m.der, y1: y, y2: y, class: 'tg-rejilla' }, svg);
@@ -261,12 +299,12 @@
                 if (nivel) el('line', { x1: xEje, x2: xEje, y1: yTitulo + 3, y2: m.arr, class: 'tg-eje-y', style: `stroke:${e.color}`, opacity: 0.5 }, svg);
             });
         } else {
-            marcas(yMin, yMax, 5).forEach(v => {
+            marcasPaso(yMin, yMax, escalaY && escalaY.paso, 5).forEach(v => {
                 el('line', { x1: m.izq, x2: ancho - m.der, y1: Y(v), y2: Y(v), class: 'tg-rejilla' }, svg);
                 el('text', { x: m.izq - 7, y: Y(v) + 3, class: 'tg-eje', 'text-anchor': 'end' }, svg).textContent = corto(v);
             });
         }
-        (tipoX === 'fecha' ? marcasFecha(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 95))) : marcas(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 70)))).forEach(v => {
+        (tipoX === 'fecha' ? marcasFecha(xMin, xMax, Math.max(3, Math.floor(anchoUtil / 95))) : marcasPaso(xMin, xMax, escalaX && escalaX.paso, Math.max(3, Math.floor(anchoUtil / 70)))).forEach(v => {
             el('line', { x1: X(v), x2: X(v), y1: m.arr, y2: alto - m.aba, class: 'tg-rejilla tg-rejilla--v' }, svg);
             el('text', { x: X(v), y: alto - m.aba + 15, class: 'tg-eje', 'text-anchor': 'middle' }, svg).textContent = tipoX === 'fecha' ? fechaCorta(v) : corto(v);
         });
@@ -371,6 +409,15 @@
                 if (!conPunto) return;
                 const fuerte = s.color && !s.tenue;
                 if (q.estado && fuerte) el('circle', { cx: px, cy: py, r: 8.5, class: `tg-halo tg-halo--${q.estado}` }, frente);
+                if (fuerte && s.marca) {
+                    const hueca = s.marca.endsWith('-hueco');
+                    el('path', {
+                        d: caminoMarca(s.marca, px, py, 4.6),
+                        class: `tg-punto tg-punto--marca${hueca ? ' tg-punto--hueca' : ''}${q.estado ? ` tg-punto--${q.estado}` : ''}`,
+                        style: hueca ? `stroke:${s.color}` : `fill:${s.color}`,
+                    }, frente);
+                    return;
+                }
                 el('circle', {
                     cx: px, cy: py, r: fuerte ? 4 : 2.6,
                     class: `tg-punto${fuerte ? '' : ' tg-punto--fondo'}${q.estado ? ` tg-punto--${q.estado}` : ''}`,
@@ -404,6 +451,11 @@
             el('rect', { x: x0, y: e.y - 7.5, width: anchoE, height: 15, rx: 7.5, style: `stroke:${e.s.color}` }, g);
             if (e.s.trazo !== undefined) {
                 el('line', { x1: x0 + 5, x2: x0 + 21, y1: e.y, y2: e.y, 'stroke-dasharray': e.s.trazo, class: 'tg-pastilla__trazo', style: `stroke:${e.s.color}` }, g);
+                if (e.s.marca) {
+                    const hueca = e.s.marca.endsWith('-hueco');
+                    el('path', { d: caminoMarca(e.s.marca, x0 + 13, e.y, 3.2), class: `tg-punto tg-punto--marca${hueca ? ' tg-punto--hueca' : ''}`,
+                                 style: hueca ? `stroke:${e.s.color}` : `fill:${e.s.color}` }, g);
+                }
                 el('text', { x: x0 + 25, y: e.y + 3.5, class: 'tg-nombre' }, g).textContent = e.s.nombre;
             } else {
                 el('circle', { cx: x0 + 8, cy: e.y, r: 3.2, fill: e.s.color }, g);
@@ -534,7 +586,7 @@
         contenedor.innerHTML = '';
         contenedor.appendChild(svg);
         contenedor.appendChild(ficha);
-        return { curvaVisible: curvaVisible.length > 1, rango: [xMin, xMax], fueraEscala };
+        return { curvaVisible: curvaVisible.length > 1, rango: [xMin, xMax], rangoY: [yMin, yMax], fueraEscala };
     };
 
     // Elementos de leyenda (HTML) para lo que se dibujó

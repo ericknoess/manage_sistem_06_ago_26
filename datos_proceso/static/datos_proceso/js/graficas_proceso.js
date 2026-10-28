@@ -607,12 +607,17 @@ const MAX_EJES = 4;              // vista de ejes múltiples: más ejes ya no se
 let compSeleccion = [];          // claves (etapa-parámetro) en el orden en que se eligieron
 let compVista = 'apiladas';
 let compZoom = null;
+let compEscalas = { x: {}, pct: {}, y: {} };   // escalas manuales: {min, max, paso} del eje X, del eje % y de cada parámetro
+let compColores = {};            // color elegido por parámetro (clave → '#rrggbb') en superpuestas y ejes múltiples
+let compVerEscalas = false;      // panel de escalas abierto
+let compAmpliada = false;        // ventana flotante abierta
 
 function claveComparar() { return `comparar-${document.getElementById('filtroProceso').value}`; }
 
 function guardarComparar() {
     guardarPreferencia(claveComparar(), { seleccion: compSeleccion, vista: compVista,
-        eje: document.getElementById('compEje').value, soloDestacados: document.getElementById('compSoloDestacados').checked });
+        eje: document.getElementById('compEje').value, soloDestacados: document.getElementById('compSoloDestacados').checked,
+        escalas: compEscalas, colores: compColores });
 }
 
 function leerComparar() {
@@ -621,6 +626,9 @@ function leerComparar() {
     compVista = g.vista || 'apiladas';
     document.getElementById('compEje').value = g.eje || 'LOTE';
     document.getElementById('compSoloDestacados').checked = !!g.soloDestacados;
+    const e = g.escalas || {};
+    compEscalas = { x: e.x || {}, pct: e.pct || {}, y: e.y || {} };
+    compColores = Object.fromEntries(Object.entries(g.colores || {}).filter(([, c]) => /^#[0-9a-f]{6}$/i.test(c)));
     compZoom = null;
 }
 
@@ -686,7 +694,7 @@ function pintarComparar() {
         <div class="comparar-etapa"><span class="destacados__titulo">Etapa ${escaparHtml(g.etapa)}</span>
             ${g.parametros.map(p => {
                 const i = visibles.indexOf(p.clave);
-                const color = (superpuestas || (multiEje && i < MAX_EJES)) && i >= 0 ? COLORES_SERIES_CLARO[i] : '';
+                const color = (superpuestas || (multiEje && i < MAX_EJES)) && i >= 0 ? colorParametro(p.clave, i) : '';
                 return `<button type="button" class="chip-parametro ${i >= 0 ? 'chip-parametro--activo chip-parametro--elegido' : 'chip-parametro--libre'}"
                         onclick="alternarComparar('${p.clave}')" aria-pressed="${i >= 0}">
                     ${color ? `<i class="chip-lote__color" style="background:${color}"></i>` : ''}${escaparHtml(p.nombre)}${p.unidad ? ` <small>${escaparHtml(p.unidad)}</small>` : ''}</button>`;
@@ -700,8 +708,17 @@ function pintarComparar() {
         : 'Elige dos o más parámetros (de cualquier etapa) para compararlos.')
         + (filtroDestacados && !destacados.length ? ' ⚠️ «Solo lotes destacados» no aplica: no hay lotes destacados, se muestran todos.' : '');
     document.getElementById('btnZoomComparar').hidden = !compZoom;
-    if (!visibles.length) { caja.innerHTML = ''; return; }
+    const ctx = { visibles, conDatos, soloDestacados, superpuestas, multiEje };
+    dibujarComparacion(caja, ctx, false);
+    if (compAmpliada) {
+        if (!visibles.length) cerrarCompararGrande();
+        else dibujarComparacion(document.getElementById('compGrande'), ctx, true);
+    }
+}
 
+// Dibuja la comparación en la pestaña (grande = false) o en la ventana flotante (grande = true)
+function dibujarComparacion(caja, { visibles, conDatos, soloDestacados, superpuestas, multiEje }, grande) {
+    if (!visibles.length) { caja.innerHTML = ''; return; }
     const eje = document.getElementById('compEje').value;
     const indice = eje === 'FECHA' ? 5 : 0;
     const lotesPorId = Object.fromEntries(analisis.lotes.map(l => [String(l.id), l]));
@@ -720,19 +737,41 @@ function pintarComparar() {
             : 'Sin datos.'}</div>`;
         return;
     }
-    // Mismo rango X para todas: así quedan alineadas una debajo de otra
+    // Mismo rango X para todas: así quedan alineadas una debajo de otra (o el que se fijó en Escalas)
     let x0 = Math.min(...xs), x1 = Math.max(...xs);
     if (eje === 'FECHA') { const m = Math.max(1800, (x1 - x0) * 0.04); x0 -= m; x1 += m; }
     else { x0 = Math.min(0, x0); x1 = Math.max(x1 + Math.max(6, (x1 - x0) * 0.06), 24); }
+    const xAuto = [x0, x1];
+    const ex = escalaDe('x');
+    if (eje !== 'FECHA') {
+        const a = numeroEscala(ex.min), b = numeroEscala(ex.max);
+        if ((b ?? x1) > (a ?? x0)) { x0 = a ?? x0; x1 = b ?? x1; }
+    }
     const comunes = {
         tema: 'claro', tipoX: eje === 'FECHA' ? 'fecha' : 'numero', rangoX: [x0, x1], zoom: compZoom, grupoGuia: 'comparar',
         textoX: eje === 'FECHA' ? 'Fecha y hora' : 'Edad del lote (h)',
+        escalaX: eje === 'FECHA' ? null : { paso: ex.paso },
         alZoom: (rango) => { compZoom = rango; pintarComparar(); }, alElegirSerie: (id) => alternarDestacado(id),
         mostrarPuntos: document.getElementById('opcionPuntos').checked,
     };
+    // Filas del panel de escalas: X y luego un eje Y por parámetro (o el de % en superpuestas)
+    const filas = [{ clave: 'x', nombre: eje === 'FECHA' ? 'Eje X (fecha: usa el zoom)' : 'Eje X · edad del lote', unidad: eje === 'FECHA' ? '' : 'h',
+                     auto: xAuto, deshabilitado: eje === 'FECHA' }];
+    const barra = `<div class="barra-comparacion">
+            ${compZoom ? '<span class="barra-comparacion__aviso">🔍 Con zoom, la escala se ajusta a lo visible (doble clic para volver)</span>' : ''}
+            <button type="button" class="btn-ampliar${compVerEscalas ? ' btn-ampliar--activo' : ''}" onclick="alternarEscalas()"
+                    aria-expanded="${compVerEscalas}" title="Fijar mínimo, máximo e incremento de cada eje${superpuestas || multiEje ? ' y el color de cada parámetro' : ''}">⚙ ${superpuestas || multiEje ? 'Escalas y colores' : 'Escalas'}${hayEscalas() || (Object.keys(compColores).length && (superpuestas || multiEje)) ? ' ●' : ''}</button>
+            ${grande ? '' : '<button type="button" class="btn-ampliar" onclick="abrirCompararGrande()" title="Abrir en una ventana grande">⤢ Ampliar</button>'}
+        </div><div class="hueco-escalas"></div>`;
+    let coloresEditables = null;   // colores por parámetro (solo superpuestas y ejes múltiples)
+    const ponerEscalas = () => {
+        const hueco = caja.querySelector('.hueco-escalas');
+        if (hueco) hueco.outerHTML = compVerEscalas ? htmlEscalas(filas, grande, superpuestas || multiEje ? coloresEditables : null) : '';
+    };
 
     if (!superpuestas && !multiEje) {
-        caja.innerHTML = elegidosParametros.map(p => `
+        const alto = grande ? Math.max(220, Math.min(560, Math.floor((window.innerHeight - 200 - (compVerEscalas ? 70 + (elegidosParametros.length + 1) * 34 : 0)) / elegidosParametros.length) - 80)) : 230;
+        caja.innerHTML = barra + elegidosParametros.map(p => `
             <article class="tarjeta-grafica tarjeta-grafica--apilada" data-clave="${p.clave}">
                 <header class="tarjeta-grafica__titulo">
                     <span>${escaparHtml(p.nombre)} ${p.unidad ? `<small>${escaparHtml(p.unidad)}</small>` : ''}
@@ -750,30 +789,36 @@ function pintarComparar() {
             }).sort((a, b) => (a.destacada - b.destacada) || (destacados.indexOf(a.id) - destacados.indexOf(b.id)));
             const ref = p.referencia || {};
             const curva = eje === 'LOTE' && ref.eje_edad !== 'ETAPA' ? ref.curva || [] : [];   // la curva va contra la edad del lote
+            const ey = escalaDe(p.clave);
             const r = graficaLineas(tarjeta.querySelector('.tarjeta-grafica__lienzo'), {
-                ...comunes, series, limites: p.limites, curva, objetivo: ref.objetivo, alto: 230,
-                banda: document.getElementById('opcionBanda').checked,
+                ...comunes, series, limites: p.limites, curva, objetivo: ref.objetivo, alto,
+                banda: document.getElementById('opcionBanda').checked, escalaY: ey,
                 textoPunto: (serie, q) => textoPuntoComparar(p, serie.nombre, q),
             });
+            filas.push({ clave: p.clave, nombre: `${p.nombre} (${p.etapa})`, unidad: p.unidad, auto: r.rangoY || [null, null] });
             const conColor = series.filter(s => s.destacada);
             tarjeta.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
                 series: conColor.map(s => ({ color: s.color, etiqueta: escaparHtml(s.nombre) })), fondo: series.length - conColor.length,
                 banda: document.getElementById('opcionBanda').checked && series.length >= 3, curva: r.curvaVisible,
                 objetivo: ref.objetivo !== null && ref.objetivo !== undefined, limites: p.limites,
             });
-            tarjeta.querySelector('.tarjeta-grafica__resumen').textContent = `${series.length} lote${series.length === 1 ? '' : 's'}`;
+            tarjeta.querySelector('.tarjeta-grafica__resumen').textContent = `${series.length} lote${series.length === 1 ? '' : 's'}`
+                + (r.fueraEscala ? ` · ▲▼ ${r.fueraEscala} fuera de escala` : '');
         });
+        ponerEscalas();
         return;
     }
 
     // Superpuestas: cada parámetro escalado a 0–100 % de su propio rango; el color es el parámetro,
     // los lotes destacados van con línea gruesa y el resto delgada.
-    // Ejes múltiples: igual, pero cada parámetro dibuja su eje con sus valores reales (hasta MAX_EJES).
+    // Ejes múltiples: igual, pero cada parámetro dibuja su eje con sus valores reales (hasta MAX_EJES); su rango
+    // (con margen) va de 0 a 100 y en Escalas se puede fijar mínimo, máximo e incremento de cada eje.
     // Color = parámetro; tipo de trazo = lote destacado (continuo, guiones, puntos, guion-punto; los primeros 4)
     const enGrafica = multiEje ? elegidosParametros.slice(0, MAX_EJES) : elegidosParametros;
     const series = [], rangos = [];
+    coloresEditables = enGrafica.map((p, i) => ({ clave: p.clave, nombre: `${p.nombre} (${p.etapa})`, color: colorParametro(p.clave, i) }));
     enGrafica.forEach((p, i) => {
-        const color = COLORES_SERIES_CLARO[i];
+        const color = colorParametro(p.clave, i);
         const propias = seriesDe(p);
         const valores = propias.flatMap(s => s.puntos.map(q => q.y));
         // Rango de cada parámetro sin valores atípicos (P2–P98 + margen): los que quedan fuera se marcan en el borde
@@ -785,14 +830,22 @@ function pintarComparar() {
             vMax = Math.min(vMax, cuantil(0.98) + ancho * 0.6);
             vMin = Math.max(vMin, cuantil(0.02) - ancho * 0.6);
         }
-        const atipicos = valores.filter(v => v > vMax || v < vMin).length;
-        const escala = (v) => vMax > vMin ? (v - vMin) / (vMax - vMin) * 100 : 50;
-        rangos.push({ p, color, vMin, vMax, atipicos });
+        let lo = vMin, hi = vMax;
+        if (multiEje) {
+            const margen = (vMax - vMin) * 0.05 || Math.abs(vMax) * 0.05 || 1;
+            lo = vMin - margen; hi = vMax + margen;
+            filas.push({ clave: p.clave, nombre: `${p.nombre} (${p.etapa})`, unidad: p.unidad, color, auto: [lo, hi] });
+            const e = escalaDe(p.clave), a = numeroEscala(e.min), b = numeroEscala(e.max);
+            if ((b ?? hi) > (a ?? lo)) { lo = a ?? lo; hi = b ?? hi; }
+        }
+        const atipicos = valores.filter(v => v > (multiEje ? hi : vMax) || v < (multiEje ? lo : vMin)).length;
+        const escala = (v) => hi > lo ? (v - lo) / (hi - lo) * 100 : 50;
+        rangos.push({ p, color, vMin, vMax, lo, hi, atipicos });
         propias.forEach(s => {
             const n = destacados.indexOf(s.id);
             const destacado = n >= 0 && n < TRAZOS_SERIES.length;
             series.push({ id: s.id, nombre: `${s.lote} · ${p.nombre}`, color, tenue: !destacado, destacada: destacado,
-                ...(destacado ? { trazo: TRAZOS_SERIES[n] } : {}),
+                ...(destacado ? { trazo: TRAZOS_SERIES[n], marca: MARCAS_SERIES[n] } : {}),
                 puntos: s.puntos.map(q => ({ ...q, y: escala(q.y) })), lote: s.lote, parametro: p });
         });
     });
@@ -801,25 +854,27 @@ function pintarComparar() {
     // Leyenda de lotes: cada destacado (hasta 4) con su tipo de trazo
     const lotesConTrazo = destacados.slice(0, TRAZOS_SERIES.length)
         .filter(id => series.some(s => s.id === id && s.destacada))
-        .map((id, i) => ({ nombre: (analisis.lotes.find(l => l.id === id) || {}).identificador || id, trazo: TRAZOS_SERIES[destacados.indexOf(id)] }));
-    const muestraTrazo = (t) => `<svg class="tg-l-trazo" viewBox="0 0 26 8" aria-hidden="true"><line x1="2" y1="4" x2="24" y2="4" stroke-dasharray="${t}"/></svg>`;
+        .map(id => ({ nombre: (analisis.lotes.find(l => l.id === id) || {}).identificador || id,
+                      trazo: TRAZOS_SERIES[destacados.indexOf(id)], marca: MARCAS_SERIES[destacados.indexOf(id)] }));
+    const muestraTrazo = (t, m) => `<svg class="tg-l-trazo" viewBox="0 0 30 12" aria-hidden="true"><line x1="2" y1="6" x2="28" y2="6" stroke-dasharray="${t}"/>
+        <path d="${caminoMarca(m, 15, 6, 3.4)}"${String(m).endsWith('-hueco') ? ' class="hueca"' : ''}/></svg>`;
     const leyendaLotes = lotesConTrazo.length
-        ? `<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><strong>Lotes:</strong>${lotesConTrazo.map(l => `<span>${muestraTrazo(l.trazo)}${escaparHtml(l.nombre)}</span>`).join('')}
+        ? `<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><strong>Lotes:</strong>${lotesConTrazo.map(l => `<span>${muestraTrazo(l.trazo, l.marca)}${escaparHtml(l.nombre)}</span>`).join('')}
             <span class="sin-dato">${destacados.length > TRAZOS_SERIES.length ? `· solo los primeros ${TRAZOS_SERIES.length} destacados llevan trazo propio (los demás van delgados; para más lotes usa Apiladas)` : '· las delgadas: los demás lotes'}</span></div>`
-        : '<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><span class="sin-dato">Destaca lotes (hasta 4) para verlos con trazo propio: continuo, guiones, puntos o guion-punto.</span></div>';
+        : '<div class="tg-leyenda tg-leyenda--claro leyenda-trazos"><span class="sin-dato">Destaca lotes (hasta 4) para verlos con trazo y figura propios: continuo ●, guiones □, puntos ▲ o guion-punto ◇.</span></div>';
     const nota = multiEje
         ? 'Cada eje está en las unidades de su parámetro (mismo color que su línea). Las escalas son independientes: '
           + 'que dos líneas se crucen o vayan juntas no significa que sus valores sean iguales.'
           + (sobran ? ` Solo caben ${MAX_EJES} ejes: ${sobran} parámetro(s) elegido(s) no se dibujan aquí (míralos en Apiladas).` : '')
         : '0 % = el valor más bajo de cada parámetro en estos lotes y 100 % = el más alto; la ficha muestra el valor real.';
     const conAtipicos = rangos.some(r => r.atipicos)
-        ? ' Los valores atípicos (muy lejos del resto) quedan fuera de la escala, marcados ▲▼ en el borde; pasa el cursor para ver su valor.' : '';
-    caja.innerHTML = `
-        <article class="tarjeta-grafica tarjeta-grafica--superpuesta">
+        ? ' Los valores fuera de la escala quedan marcados ▲▼ en el borde; pasa el cursor para ver su valor.' : '';
+    caja.innerHTML = barra + `
+        <article class="tarjeta-grafica tarjeta-grafica--superpuesta${grande ? ' tarjeta-grafica--comparar-grande' : ''}">
             <header class="tarjeta-grafica__titulo"><span>${enGrafica.map(p => escaparHtml(p.nombre)).join(' · ')}
                 <small>${multiEje ? 'cada uno con su eje' : 'escalados de 0 a 100 % de su rango'}</small></span></header>
             <div class="tg-leyenda tg-leyenda--claro">${rangos.map(r => `<span><i class="tg-l" style="border-color:${r.color}"></i>
-                ${escaparHtml(r.p.nombre)} <small>(${escaparHtml(r.p.etapa)}: ${corto(r.vMin)} → ${corto(r.vMax)}${r.p.unidad ? ' ' + escaparHtml(r.p.unidad) : ''}${r.atipicos ? ` · ▲▼ ${r.atipicos} atípico${r.atipicos === 1 ? '' : 's'}` : ''})</small></span>`).join('')}
+                ${escaparHtml(r.p.nombre)} <small>(${escaparHtml(r.p.etapa)}: ${corto(r.vMin)} → ${corto(r.vMax)}${r.p.unidad ? ' ' + escaparHtml(r.p.unidad) : ''}${r.atipicos ? ` · ▲▼ ${r.atipicos} fuera de escala` : ''})</small></span>`).join('')}
                 </div>
             ${leyendaLotes}
             <div class="tarjeta-grafica__lienzo tarjeta-grafica__lienzo--superpuesta"></div>
@@ -827,11 +882,139 @@ function pintarComparar() {
         </article>`;
     // Título de cada eje: la unidad (o el nombre recortado si no tiene) — el nombre completo va en la leyenda
     const tituloEje = (p) => { const t = p.unidad || p.nombre; return t.length > 9 ? `${t.slice(0, 8)}…` : t; };
-    graficaLineas(caja.querySelector('.tarjeta-grafica__lienzo'), {
-        ...comunes, series, alto: Math.max(360, Math.min(window.innerHeight - 330, 620)), mostrarPuntos: false, rangoY: [0, 100],
-        ejesY: multiEje ? rangos.map(r => ({ color: r.color, titulo: tituloEje(r.p), vMin: r.vMin, vMax: r.vMax })) : null,
+    // En la ventana flotante: lo que queda de alto (menos el panel de escalas si está abierto)
+    const alto = grande ? Math.max(380, window.innerHeight - 290 - (compVerEscalas ? 40 + filas.length * 34 : 0))
+        : Math.max(360, Math.min(window.innerHeight - 330, 620));
+    const r = graficaLineas(caja.querySelector('.tarjeta-grafica__lienzo'), {
+        ...comunes, series, alto, mostrarPuntos: false,
+        rangoY: multiEje ? [0, 100] : [-5, 105], escalaY: multiEje ? null : escalaDe('pct'),
+        ejesY: multiEje ? rangos.map(g => ({ color: g.color, titulo: tituloEje(g.p), vMin: g.lo, vMax: g.hi, paso: escalaDe(g.p.clave).paso })) : null,
         textoPunto: (serie, q) => textoPuntoComparar(serie.parametro, serie.lote, q),
     });
+    if (!multiEje) filas.push({ clave: 'pct', nombre: 'Eje Y · % de su rango', unidad: '%', auto: r.rangoY || [null, null] });
+    ponerEscalas();
+}
+
+// ------------------------------------------------------------------
+// Comparar: escalas manuales (mínimo, máximo e incremento por eje; se guardan por receta)
+// ------------------------------------------------------------------
+const numeroEscala = (v) => {
+    if (v === null || v === undefined || String(v).trim() === '') return null;
+    const n = Number(String(v).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+};
+// 'x' = eje X, 'pct' = eje de % (superpuestas); cualquier otra clave = un parámetro (etapa-parámetro)
+function escalaDe(clave) {
+    return (clave === 'x' || clave === 'pct' ? compEscalas[clave] : compEscalas.y[clave]) || {};
+}
+// Color de un parámetro en las vistas combinadas: el elegido por el usuario o el de la paleta, por su posición
+function colorParametro(clave, i) {
+    return compColores[clave] || COLORES_SERIES_CLARO[i % COLORES_SERIES_CLARO.length];
+}
+function cambiarColor(clave, valor) {
+    if (!/^#[0-9a-f]{6}$/i.test(valor)) return;
+    compColores[clave] = valor.toLowerCase();
+    guardarComparar();
+    pintarComparar();
+}
+function restablecerColores() {
+    compColores = {};
+    guardarComparar();
+    pintarComparar();
+}
+function hayEscalas() {
+    return [compEscalas.x, compEscalas.pct, ...Object.values(compEscalas.y)].some(e => e && Object.keys(e).length);
+}
+function alternarEscalas() {
+    compVerEscalas = !compVerEscalas;
+    pintarComparar();
+}
+function cambiarEscala(clave, campo, valor) {
+    const destino = clave === 'x' || clave === 'pct' ? compEscalas : compEscalas.y;
+    const e = destino[clave] = destino[clave] || {};
+    const n = numeroEscala(valor);
+    if (n === null) delete e[campo]; else e[campo] = n;
+    if (!Object.keys(e).length) delete destino[clave];
+    guardarComparar();
+    // Se redibuja al soltar el campo; el foco vuelve a la casilla a la que se pasó (Tab)
+    requestAnimationFrame(() => {
+        const activo = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.escala : null;
+        pintarComparar();
+        if (activo) { const campoNuevo = document.querySelector(`[data-escala="${activo}"]`); if (campoNuevo) campoNuevo.focus(); }
+    });
+}
+function restablecerEscala(clave) {
+    if (clave === 'x' || clave === 'pct') delete compEscalas[clave]; else delete compEscalas.y[clave];
+    guardarComparar();
+    pintarComparar();
+}
+function restablecerEscalas() {
+    compEscalas = { x: {}, pct: {}, y: {} };
+    guardarComparar();
+    pintarComparar();
+}
+function htmlEscalas(filas, grande, colores = null) {
+    const donde = grande ? 'g' : 'n';
+    // Colores por parámetro (superpuestas y ejes múltiples); avisa si dos quedan iguales o muy parecidos
+    const parecidos = (a, b) => {
+        const rgb = (c) => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16));
+        const [x, y] = [rgb(a), rgb(b)];
+        return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) < 60;
+    };
+    const htmlColores = colores ? `
+            <div class="colores-parametros">
+                <span class="colores-parametros__titulo">Colores</span>
+                ${colores.map((c, i) => {
+                    const choca = colores.some((o, j) => j !== i && parecidos(o.color, c.color));
+                    return `<label class="color-parametro${choca ? ' color-parametro--choca' : ''}" title="${choca ? 'Se parece mucho al color de otro parámetro' : 'Elegir color'}">
+                        <input type="color" value="${c.color}" onchange="cambiarColor('${c.clave}', this.value)" aria-label="Color de ${escaparHtml(c.nombre)}">
+                        ${escaparHtml(c.nombre)}${choca ? ' ⚠️' : ''}</label>`;
+                }).join('')}
+                <button type="button" class="btn-secundario" onclick="restablecerColores()" ${Object.keys(compColores).length ? '' : 'disabled'}>↺ Colores originales</button>
+            </div>` : '';
+    const auto = (v) => v === null || v === undefined ? 'auto' : corto(v);
+    return `
+        <div class="panel-escalas">
+            <table class="tabla-escalas">
+                <thead><tr><th>Eje</th><th>Mínimo</th><th>Máximo</th><th>Incremento</th><th></th></tr></thead>
+                <tbody>${filas.map(f => {
+                    const e = escalaDe(f.clave);
+                    const error = e.min !== undefined && e.max !== undefined && e.min >= e.max ? 'El mínimo debe ser menor que el máximo: se usa el automático.'
+                        : e.paso !== undefined && e.paso <= 0 ? 'El incremento debe ser mayor que cero: se usa el automático.' : '';
+                    const celda = (campo, marcador) => `<td><input type="text" inputmode="decimal" class="campo-escala" data-escala="${donde}-${f.clave}-${campo}"
+                        value="${e[campo] ?? ''}" placeholder="${marcador}" ${f.deshabilitado ? 'disabled' : ''}
+                        onchange="cambiarEscala('${f.clave}', '${campo}', this.value)" aria-label="${campo} de ${escaparHtml(f.nombre)}"></td>`;
+                    return `<tr class="${error ? 'fila-escala--error' : ''}" title="${error}">
+                        <th>${f.color ? `<i class="chip-lote__color" style="background:${f.color}"></i>` : ''}${escaparHtml(f.nombre)}
+                            ${f.unidad ? `<small>${escaparHtml(f.unidad)}</small>` : ''}${error ? ' ⚠️' : ''}</th>
+                        ${celda('min', auto(f.auto[0]))}${celda('max', auto(f.auto[1]))}${celda('paso', 'auto')}
+                        <td><button type="button" class="btn-restablecer" onclick="restablecerEscala('${f.clave}')" title="Volver a automático"
+                            ${Object.keys(e).length ? '' : 'disabled'}>↺</button></td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+            <p class="panel-escalas__pie">Vacío = automático (en gris, el valor actual). El incremento es la distancia entre las marcas del eje
+                (si da más de 60 marcas se usa el automático). Los datos fuera del rango quedan marcados ▲▼ en el borde. Se guarda para esta receta.
+                <button type="button" class="btn-secundario" onclick="restablecerEscalas()" ${hayEscalas() ? '' : 'disabled'}>↺ Todo automático</button></p>
+            ${htmlColores}
+        </div>`;
+}
+
+// ------------------------------------------------------------------
+// Comparar en una ventana flotante (grande)
+// ------------------------------------------------------------------
+function abrirCompararGrande() {
+    compAmpliada = true;
+    document.getElementById('modalComparar').style.display = 'flex';
+    document.body.classList.add('sin-desplazamiento');
+    pintarComparar();
+}
+function cerrarCompararGrande() {
+    if (!compAmpliada) return;
+    compAmpliada = false;
+    document.getElementById('modalComparar').style.display = 'none';
+    document.getElementById('compGrande').innerHTML = '';
+    document.body.classList.remove('sin-desplazamiento');
 }
 
 // ------------------------------------------------------------------
@@ -1067,7 +1250,7 @@ async function guardarIndicador(evento) {
 }
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { cerrarIndicadores(); cerrarGraficaGrande(); }
+    if (e.key === 'Escape') { cerrarIndicadores(); cerrarGraficaGrande(); cerrarCompararGrande(); }
     if (parametroAmpliado !== null && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
         if (e.key === 'ArrowRight') moverGraficaGrande(1);
         if (e.key === 'ArrowLeft') moverGraficaGrande(-1);

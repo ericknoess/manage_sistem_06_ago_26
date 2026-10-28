@@ -46,6 +46,9 @@
 
 .tg-punto { stroke: var(--tg-fondo); stroke-width: 1.8; }
 .tg-punto--fondo { fill: #64748b; opacity: 0.5; stroke: none; }
+/* Puntos con figura por lote (vistas combinadas): rellenas con contorno oscuro, o huecas con borde grueso de color */
+.tg-svg .tg-punto--marca { stroke: var(--tg-texto); stroke-width: 1.3; stroke-linejoin: round; }
+.tg-svg .tg-punto--hueca { fill: var(--tg-fondo); stroke-width: 2.2; }
 .tg-punto--alerta { stroke: var(--tg-alerta); stroke-width: 2.4; opacity: 1; }
 .tg-punto--fuera { stroke: var(--tg-fuera); stroke-width: 2.4; opacity: 1; }
 .tg-punto--vivo { fill: var(--tg-texto); stroke: #38bdf8; stroke-width: 3; }
@@ -61,8 +64,10 @@
 .tg-nombre { fill: var(--tg-texto); font-size: 10px; font-weight: 700; }
 .tg-pastilla__trazo { stroke-width: 2.2; stroke-linecap: round; }
 /* Muestra del tipo de trazo de un lote en la leyenda (color neutro: el trazo es el lote, el color es el parámetro) */
-.tg-l-trazo { display: inline-block; width: 26px; height: 8px; vertical-align: middle; }
+.tg-l-trazo { display: inline-block; width: 30px; height: 12px; vertical-align: middle; }
 .tg-l-trazo line { stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.tg-l-trazo path { fill: currentColor; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+.tg-l-trazo path.hueca { fill: #ffffff; stroke-width: 1.8; }
 
 /* Animación al cargar: las líneas con color se trazan y los puntos aparecen */
 .tg-svg--anima .tg-trazo { stroke-dasharray: 1; animation: tg-trazar 1.1s cubic-bezier(0.25, 0.8, 0.3, 1) both; }

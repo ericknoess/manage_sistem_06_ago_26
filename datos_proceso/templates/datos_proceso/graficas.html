@@ -173,6 +173,18 @@
         </div>
     </div>
 
+    <!-- MODAL: COMPARAR AMPLIADO -->
+    <div class="modal-overlay modal-grafica" id="modalComparar" style="display: none;" onclick="if (event.target === this) cerrarCompararGrande()">
+        <div class="modal-grafica__caja" role="dialog" aria-modal="true" aria-label="Comparación ampliada">
+            <div class="modal-grafica__barra">
+                <strong class="modal-grafica__titulo">🧩 Comparar</strong>
+                <span class="modal-grafica__pista">Arrastra para acercar · doble clic para volver · ⚙ Escalas fija mínimo, máximo e incremento de cada eje</span>
+                <button type="button" class="btn-cerrar-grafica" onclick="cerrarCompararGrande()" title="Cerrar (Esc)">✕</button>
+            </div>
+            <div class="comparar-grande" id="compGrande"></div>
+        </div>
+    </div>
+
     <!-- MODAL: INDICADORES DE LA RECETA -->
     <div class="modal-overlay" id="modalIndicadores" style="display: none;">
         <div class="modal-content modal-indicadores">

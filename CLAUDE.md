@@ -93,7 +93,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   sincronizada `grupoGuia`, superpuestos escalando cada uno a 0–100 %, o «Ejes múltiples»: hasta 4 parámetros, cada uno con su eje Y en sus unidades y su color,
   alternando izquierda/derecha — opción `ejesY` de `graficaLineas`; las series van escaladas a 0–100 con `rangoY: [0, 100]` y el rango de cada
   parámetro es P2–P98 + margen, así que los atípicos se marcan ▲▼ en el borde; en superpuestas y ejes múltiples el color es el parámetro y
-  cada lote destacado lleva un tipo de trazo (`trazo` de la serie, `TRAZOS_SERIES`: continuo, guiones, puntos, guion-punto; los primeros 4)) e Indicadores (tabla ordenable con
+  cada lote destacado lleva un tipo de trazo y una figura en sus puntos (`trazo`/`marca` de la serie, `TRAZOS_SERIES` y
+  `MARCAS_SERIES`: continuo ●, guiones □, puntos ▲, guion-punto ◇; rellenas con contorno oscuro o huecas; los primeros 4))
+  Comparar tiene «⤢ Ampliar» (ventana flotante, `dibujarComparacion(caja, ctx, grande)`) y «⚙ Escalas»: mínimo, máximo e incremento del eje X
+  y de cada parámetro (o del eje % en superpuestas), guardados por receta en `compEscalas`; en `graficaLineas` son `escalaX`/`escalaY`
+  (`paso` = distancia entre marcas) y, en ejes múltiples, `paso` de cada entrada de `ejesY`.
+  En superpuestas y ejes múltiples el panel también elige el color de cada parámetro (`compColores`, `colorParametro`; avisa si dos se parecen). e Indicadores (tabla ordenable con
   promedio, mín–máx y % en meta). `IndicadorProceso` (por receta, configurable en esa
   pantalla, `/api/indicadores-proceso/`): área bajo la curva por trapecios, apego % contra la curva esperada (en la edad de la curva),
   último, máximo o fórmula con otros indicadores (ej. gramos = abc_cel / 1000 - 5.5); se calculan al consultar, no se guardan.
