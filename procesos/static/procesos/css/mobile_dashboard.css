@@ -376,3 +376,19 @@ body {
 .grupo-dia__conteo { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
 .grupo-dia__tareas { display: flex; flex-direction: column; gap: 1.25rem; padding: 0 1rem 1rem; }
 .grupo-dia__vacio { padding: 0.5rem 0.25rem; color: var(--text-muted); font-style: italic; }
+
+/* Reportar evento GMP desde la tarjeta de la tarea */
+.btn-evento-tarea {
+    width: 100%;
+    margin-top: 0.6rem;
+    min-height: 48px;
+    padding: 0.6rem 1rem;
+    border: 1px dashed rgba(245, 158, 11, 0.6);
+    border-radius: 12px;
+    background: rgba(245, 158, 11, 0.08);
+    color: #fcd34d;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.btn-evento-tarea:active { background: rgba(245, 158, 11, 0.2); }

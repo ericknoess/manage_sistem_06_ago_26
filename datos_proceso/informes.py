@@ -4,10 +4,11 @@
 # El informe sigue al diseñador: una sección por etapa (datos y gráficas por actividad · sección) y, si se piden,
 # gráficas combinadas de varios parámetros (apiladas con el mismo eje, o superpuestas escaladas a 0–100 %).
 #   pdf_lote(datos, emitido_por)   → bytes del PDF (carta horizontal; encabezado, pie con huella y "página X de Y")
-#   excel_lote(datos, emitido_por) → bytes del .xlsx (Resumen, Datos, Fuera de límites, Adicionales, Correcciones)
+#   excel_lote(datos, emitido_por) → bytes del .xlsx (Resumen, Datos, Fuera de límites, Eventos GMP, Adicionales, Correcciones)
 #   excel_lotes(...)               → bytes del .xlsx de varios lotes (Datos en formato largo e Indicadores)
 
 from io import BytesIO
+from xml.sax.saxutils import escape as xml_escape
 
 from django.utils import timezone
 
@@ -38,6 +39,11 @@ FONDO_ENCABEZADO = colors.HexColor('#e8f0fb')
 COLUMNAS_POR_TABLA = 8
 # Colores de las gráficas combinadas superpuestas (uno por parámetro; mismos tonos que la pantalla)
 COLORES_COMBINADAS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300']
+
+
+def _xml(texto):
+    """Texto libre (escrito por usuarios) seguro dentro de un Paragraph de reportlab; respeta saltos de línea."""
+    return xml_escape(texto or '').replace('\n', '<br/>')
 
 
 def _local(momento, formato='%d/%m/%Y %H:%M'):
@@ -338,6 +344,9 @@ def pdf_lote(datos, emitido_por):
                           'Origen', Paragraph(cero_etapa['origen'] if cero_etapa else '—', e['celda'])])
     generales.append(['Tomas de datos', str(len(datos['tomas'])), 'Fuera de límites / correcciones',
                       f"{len(datos['fuera'])} / {len(datos['correcciones'])}"])
+    abiertos = sum(1 for ev in datos['eventos'] if ev['estado'] == 'Abierto')
+    generales.append(['Eventos GMP', f"{len(datos['eventos'])}" + (f" ({abiertos} abierto{'s' if abiertos != 1 else ''})" if abiertos else ''),
+                      'Desviaciones', ', '.join(sorted({ev['numero_desviacion'] for ev in datos['eventos'] if ev['numero_desviacion']})) or '—'])
     t = Table(generales, colWidths=[3.6 * cm, ancho_util / 2 - 3.6 * cm, 4.4 * cm, ancho_util / 2 - 4.4 * cm])
     t.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'), ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
@@ -423,6 +432,28 @@ def pdf_lote(datos, emitido_por):
         h.append(t)
     else:
         h.append(Paragraph('Ningún valor quedó fuera de especificación ni del rango de alerta.', e['normal']))
+
+    # Eventos GMP (fallas, fuera de especificación, desviaciones) con su evaluación firmada
+    h.append(Paragraph('Eventos GMP', e['seccion']))
+    if datos['eventos']:
+        filas = [['Folio', 'Ocurrió', 'Tipo / tarea', 'Qué pasó y acción inmediata', 'Estado y evaluación', 'Firma de Calidad']]
+        for ev in datos['eventos']:
+            x = {k: _xml(v) if isinstance(v, str) else v for k, v in ev.items()}   # texto libre: se escapa para reportlab
+            que = f"<b>{x['titulo']}</b><br/>{x['descripcion']}" + (f"<br/><i>Acción inmediata:</i> {x['accion_inmediata']}" if x['accion_inmediata'] else '')
+            que += f"<br/><font color='#64748b'>Reportó: {x['reporto']} ({x['origen'].lower()})</font>"
+            estado = f"<b>{x['estado']}</b>" + (f" · {x['clasificacion']}" if x['clasificacion'] else '')
+            estado += (f"<br/>Desviación: <b>{x['numero_desviacion']}</b>" if x['numero_desviacion'] else '') + (f"<br/>{x['evaluacion']}" if x['evaluacion'] else '')
+            firma = ev['firma']
+            texto_firma = (f"<b>{_xml(firma['nombre'])}</b><br/>{_xml(firma['significado'])}<br/>{_local(firma['fecha'], '%d/%m/%Y %H:%M:%S')} · {firma['metodo']}"
+                           if firma else '<font color="#dc2626">Pendiente de evaluación</font>')
+            tipo = x['tipo'] + (f"<br/>{x['tarea']}" if x['tarea'] else '') + (f"<br/>Equipo {x['equipo']}" if x['equipo'] else '')
+            filas.append([ev['folio'], _local(ev['ocurrio_en']), Paragraph(tipo, e['celda']), Paragraph(que, e['celda']),
+                          Paragraph(estado, e['celda']), Paragraph(texto_firma, e['celda'])])
+        t = Table(filas, colWidths=[2.3 * cm, 2.4 * cm, 3.6 * cm, ancho_util - 17.7 * cm, 5 * cm, 4.4 * cm], repeatRows=1)
+        t.setStyle(_estilo_tabla())
+        h.append(t)
+    else:
+        h.append(Paragraph('Sin eventos GMP registrados.', e['normal']))
 
     # Muestras adicionales
     if datos['adicionales']:
@@ -614,6 +645,7 @@ def excel_lote(datos, emitido_por):
         ('Alcance', f"Etapa {datos['etapa']}" if datos['etapa'] else 'Todo el lote'),
         ('Inicio real', _fecha_excel(datos['inicio_real'])), ('Fin real', _fecha_excel(datos['fin_real'])),
         ('Edad 0 del lote', _fecha_excel(cero['momento']) if cero else None), ('Origen de la edad 0', cero['origen'] if cero else ''),
+        ('Eventos GMP', f"{len(datos['eventos'])} ({sum(1 for ev in datos['eventos'] if ev['estado'] == 'Abierto')} abiertos)"),
         ('Emitido por', emitido_por), ('Emitido el', _fecha_excel(datos['generado'])),
         ('Huella SHA-256 de los datos', datos['huella']),
     ]:
@@ -645,6 +677,15 @@ def excel_lote(datos, emitido_por):
     _hoja_tabla(hoja, ['Etapa', 'Parámetro', 'Valor', 'Unidad', 'Límite', 'Rango permitido', 'Tarea', 'Toma', 'Edad lote (h)'],
                 [[f['etapa'], f['parametro'], f['valor'], f['unidad'], f['tipo'], f['rango'], f['tarea'], _fecha_excel(f['momento']),
                   f['edad_lote_h']] for f in datos['fuera']], [14, 26, 12, 10, 16, 18, 40, 17, 12])
+
+    hoja = libro.create_sheet('Eventos GMP')
+    _hoja_tabla(hoja, ['Folio', 'Ocurrió', 'Tipo', 'Origen', 'Tarea', 'Equipo', 'Título', 'Descripción', 'Acción inmediata', 'Reportó',
+                       'Estado', 'Clasificación', 'Nº desviación', 'Evaluación', 'Firmante', 'Significado de la firma', 'Fecha de la firma'],
+                [[ev['folio'], _fecha_excel(ev['ocurrio_en']), ev['tipo'], ev['origen'], ev['tarea'], ev['equipo'], ev['titulo'],
+                  ev['descripcion'], ev['accion_inmediata'], ev['reporto'], ev['estado'], ev['clasificacion'], ev['numero_desviacion'],
+                  ev['evaluacion'], (ev['firma'] or {}).get('nombre', ''), (ev['firma'] or {}).get('significado', ''),
+                  _fecha_excel(ev['firma']['fecha']) if ev['firma'] else None] for ev in datos['eventos']],
+                [14, 17, 26, 12, 34, 22, 36, 60, 40, 24, 11, 22, 16, 50, 22, 30, 17])
 
     hoja = libro.create_sheet('Muestras adicionales')
     _hoja_tabla(hoja, ['Tarea', 'Toma', 'Código', 'Motivo', 'Registró'],

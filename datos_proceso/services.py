@@ -1341,10 +1341,13 @@ def datos_informe(lote, etapa_id=None, combinar=None, vista='apiladas'):
                           'valor': r['valor'], 'nota': r['nota'], 'meta_min': meta_min, 'meta_max': meta_max, 'estado': estado})
 
     correcciones = correcciones_lote(lote, etapa_id)
+    from eventos.services import eventos_informe
+    eventos = eventos_informe(lote, etapa_id)
     contenido = {
         'lote': lote.identificador_lote, 'etapa': etapa_id,
         'tomas': [{**t, 'valores': {str(k): [v['texto'], v['corregido']] for k, v in t['valores'].items()}} for t in tomas],
         'correcciones': correcciones,
+        'eventos': eventos,
     }
     fechas_reales = [f.fecha_inicio_real for f in fases if f.fecha_inicio_real]
     fines = [f.fecha_fin_real for f in fases if f.fecha_fin_real]
@@ -1354,7 +1357,7 @@ def datos_informe(lote, etapa_id=None, combinar=None, vista='apiladas'):
         'fin_real': max(fines) if lote.estado == 'COMPLETADO' and fines else None,
         'edad_cero_lote': ceros.get('lote'), 'edad_cero_etapa': ceros.get(etapa_id) if etapa_id else None,
         'etapas': etapas, 'tomas': tomas, 'fuera': fuera, 'adicionales': adicionales,
-        'correcciones': correcciones, 'indicadores': lista_ind,
+        'correcciones': correcciones, 'eventos': eventos, 'indicadores': lista_ind,
         'combinadas': combinadas, 'vista_combinadas': vista if vista in VISTAS_COMBINADAS else 'apiladas',
         'huella': _huella(contenido), 'generado': timezone.now(),
     }

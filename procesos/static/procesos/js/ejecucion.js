@@ -107,6 +107,10 @@ async function renderizarDetalleLote() {
             <button class="btn-secondary btn-historial" title="Informe de datos de proceso en PDF o Excel"
                     onclick="abrirInformeLote({ loteId: ${loteSeleccionado.id}, procesoId: ${loteSeleccionado.proceso_maestro}, identificador: ${JSON.stringify(loteSeleccionado.identificador_lote).replace(/"/g, '&quot;')} })">🧾 Informe</button>
             <button class="btn-secondary btn-historial" onclick="abrirHistorialLote()" title="Quién hizo qué con este lote">📜 Historial</button>
+            <a class="btn-secondary btn-historial btn-eventos-lote" id="enlaceEventosLote" href="/eventos/?lote=${loteSeleccionado.id}"
+               title="Eventos GMP de este lote">⚠️ Eventos</a>
+            ${loteSeleccionado.archivado ? '' : `<button class="btn-secondary btn-historial btn-evento" title="Reportar una falla, desviación u otro evento GMP del lote"
+                onclick="abrirReporteEvento({ lote: ${loteSeleccionado.id}, loteNombre: ${JSON.stringify(loteSeleccionado.identificador_lote).replace(/"/g, '&quot;')}, alGuardar: contarEventosLote })">+ Reportar evento</button>`}
             <span class="badge-status ${headerBadge}">${loteSeleccionado.estado}</span>
         </span>
     `;
@@ -238,10 +242,14 @@ async function renderizarDetalleLote() {
                 let idMostrar = fase.operacion_id_paso || fase.operacion_maestra?.identificador_paso || '-';
                 let nombreMostrar = fase.operacion_nombre || fase.nombre_tarea_dinamica || fase.operacion_maestra?.nombre || 'Operación';
 
+                // Reportar un evento GMP de esta tarea (cualquiera con sesión)
+                const btnEvento = loteSeleccionado.archivado ? '' : `<button class="btn-icon" title="Reportar un evento GMP de esta tarea"
+                    onclick="abrirReporteEvento({ fase: ${fase.id}, faseNombre: ${JSON.stringify(`[${idMostrar}] ${nombreMostrar}`).replace(/"/g, '&quot;')}, loteNombre: ${JSON.stringify(loteSeleccionado.identificador_lote).replace(/"/g, '&quot;')}, alGuardar: contarEventosLote })">⚠️</button>`;
+
                 // ACCIONES CON BLOQUEOS
                 let accionesHtml = '';
                 if (isLocked) {
-                    accionesHtml = `${btnDatos}<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
+                    accionesHtml = `${btnDatos}${btnEvento}<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
                 } else {
                     let btnReprogramar = estaIniciada
                         ? `<button class="btn-icon" title="Bloqueo GxP: Tarea iniciada en planta. No se puede reprogramar." disabled>🔒</button>`
@@ -254,6 +262,7 @@ async function renderizarDetalleLote() {
 
                     accionesHtml = `
                         ${btnDatos}
+                        ${btnEvento}
                         ${btnReprogramar}
                         ${btnAsignar}
                         <button class="btn-icon" data-permiso="ejecutar_fase" title="Forzar Estado (Supervisor)" onclick="cambiarEstadoFase(${fase.id}, '${fase.estado}')">🔄</button>
@@ -279,10 +288,26 @@ async function renderizarDetalleLote() {
 
         html += `</tbody></table></div>`;
         container.innerHTML = html;
+        contarEventosLote();
 
     } catch (err) {
         container.innerHTML = '<div style="color:var(--danger); text-align:center;">Error cargando fases.</div>';
     }
+}
+
+// Botón «Eventos» del lote: muestra cuántos siguen abiertos
+async function contarEventosLote() {
+    if (!loteSeleccionado) return;
+    const loteId = loteSeleccionado.id;
+    try {
+        const res = await fetch(`/api/eventos/resumen/?lote=${loteId}`);
+        const conteo = await res.json();
+        const enlace = document.getElementById('enlaceEventosLote');
+        if (!enlace || !loteSeleccionado || loteSeleccionado.id !== loteId) return;
+        const total = (conteo.ABIERTO || 0) + (conteo.CERRADO || 0) + (conteo.ANULADO || 0);
+        enlace.textContent = conteo.ABIERTO ? `⚠️ Eventos · ${conteo.ABIERTO} abierto${conteo.ABIERTO === 1 ? '' : 's'}` : `⚠️ Eventos (${total})`;
+        enlace.classList.toggle('btn-eventos-lote--abiertos', !!conteo.ABIERTO);
+    } catch (e) { /* sin conteo */ }
 }
 
 // --- FUNCIONES ORIGINALES ---
@@ -400,6 +425,7 @@ async function cambiarEstadoFase(faseId, estadoActual) {
         const avisos = [];
         if (r.data.advertencia_materiales) avisos.push('⚠️ Se inició con material incompleto:\n' + r.data.advertencia_materiales.join('\n'));
         if (r.data.mensaje_cascada) avisos.push(r.data.mensaje_cascada);
+        if (r.data.evento_gmp) avisos.push(`📋 Se abrió el evento GMP ${r.data.evento_gmp} por el inicio fuera de ventana; Calidad lo evaluará.`);
         if (avisos.length) alert(avisos.join('\n\n'));
         await cargarCatalogos();
     } else if (r.data.codigo === 'DATOS_PENDIENTES') {

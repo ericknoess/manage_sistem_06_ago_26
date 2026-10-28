@@ -149,3 +149,7 @@ tbody tr:hover { background-color: rgba(255,255,255,0.02); }
 .modal-historial { width: 640px; max-width: calc(100vw - 2rem); max-height: 85vh; display: flex; flex-direction: column; gap: 0.6rem; }
 .historial-ayuda { margin: 0; font-size: 0.72rem; color: var(--text-muted); }
 .historial-contenido { overflow-y: auto; padding-right: 0.25rem; }
+
+/* Eventos GMP del lote */
+.btn-eventos-lote { text-decoration: none; }
+.btn-eventos-lote--abiertos { border-color: rgba(245, 158, 11, 0.7) !important; color: #fcd34d !important; background: rgba(245, 158, 11, 0.12) !important; }

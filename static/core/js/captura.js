@@ -452,6 +452,7 @@
                 if (!r.ok) { error.textContent = r.data.error || r.data.detail || 'No se pudo corregir.'; error.hidden = false; return; }
                 if (alCambiar) alCambiar();
                 pintarConsulta(r.data);
+                if (r.data.avisos && r.data.avisos.length) alert(r.data.avisos.join('\n'));   // evento GMP abierto por el dato corregido
             };
         }
 

@@ -17,7 +17,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab + psycopg2); el `venv/` del proyecto no tiene Pillow
 - Base de datos: SQLite por defecto; PostgreSQL si se define `DB_NAME` (+ `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`).
   Producción: además `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0`, `DJANGO_ALLOWED_HOSTS` y `collectstatic` (a `staticfiles/` o `DJANGO_STATIC_ROOT`, no se versiona). Las pruebas pasan en ambas.
-- Pruebas: `python manage.py test datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
+- Pruebas: `python manage.py test eventos.tests datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
@@ -123,7 +123,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   `fecha_obj` (Cultivo no guarda la real), así que las edades coinciden. Repetirlo solo agrega muestreos nuevos; los duplicados
   de Cultivo (misma etapa y edad) se resuelven por el registro con más secciones y luego el más reciente. Bitácora `IMPORTAR_HISTORICO`.
 - `usuarios/`: login (`/login/`, `/logout/`), roles y permisos. Los roles son grupos de Django (Administrador, Jefatura,
-  Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004) creados por la migración 0002; los permisos
+  Planeador, Supervisor de turno, Ingeniería de procesos, Operador, Consulta; Almacén desde la 0004; Calidad desde la 0005) creados por la migración 0002; los permisos
   de negocio (`instanciar_lote`, `asignar_personal`, …) están en `Perfil.Meta.permissions`. Usuarios y roles se dan de alta en `/admin/`.
   Toda pantalla pide sesión (`LoginRequeridoMiddleware`), salvo `/mobile/` (PIN del operador, guardado en la sesión del servidor).
   API: `PermisoPorAccion` deja leer a cualquier usuario con sesión y para escribir exige el permiso que declara cada ViewSet en
@@ -141,7 +141,18 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   al registro de la bitácora. Significados en `SIGNIFICADOS`. Front: `static/core/js/firma.js` (`ejecutarConFirma`).
   5 intentos fallidos (login o firma) bloquean la cuenta (`Perfil.bloqueado`, `is_active=False`) o el PIN (`Operador.pin_bloqueado`);
   se desbloquean con la acción del admin o `python manage.py desbloquear_usuario <usuario>`.
-- Pantallas: /login/, /auditoria/ (bitácora), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
+- `eventos/`: eventos GMP de un lote (`EventoGMP`, folio EV-AAAA-NNNN; fallas de equipo, fuera de especificación, desviaciones de
+  procedimiento, material, ambiental, contaminación…). Los reporta cualquiera con sesión (web o tablet con PIN; formulario compartido
+  `static/core/js/eventos.js` + `core/css/eventos.css`, en Piso de planta por lote y por tarea, y en cada tarea de la tablet).
+  Automáticos (`eventos/services.py`): un evento por dato capturado o corregido fuera de especificación (`eventos_fuera_especificacion`,
+  no duplica si ya hay uno abierto del mismo dato) y uno por inicio fuera de ventana (`evento_inicio_fuera_ventana`).
+  Los evalúa y cierra (clasificación: sin impacto / menor / mayor / crítica; las desviaciones llevan su nº del sistema de calidad) o anula
+  (con motivo) quien tenga `evaluar_evento` (Calidad, Supervisor de turno, Jefatura, Administrador), con firma `CERRAR_EVENTO`/`ANULAR_EVENTO`
+  y nunca quien lo reportó (cuatro ojos). No se borran. Un lote con eventos abiertos no se archiva (`EVENTOS_ABIERTOS`).
+  Salen en el PDF (sección «Eventos GMP») y en el Excel (hoja «Eventos GMP») del lote, dentro de la huella. API `/api/eventos/`
+  (`?lote=&estado=&tipo=&desde=&hasta=&q=`, `resumen/`, `opciones/`, `<id>/cerrar/`, `<id>/anular/`); bitácora categoría EVENTO.
+  Investigación y CAPA siguen en el sistema de calidad. Pruebas: `python manage.py test eventos.tests`.
+- Pantallas: /login/, /auditoria/ (bitácora), /eventos/ (eventos GMP), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales),
   /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos), /parametros/ (catálogo de parámetros de proceso),
   /graficas/ (gráficas de proceso e indicadores; acepta ?proceso=&lotes=)
@@ -154,7 +165,8 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Objetivo (cambiado el 2026-10-23): llevar la lógica de Cultivo al MES, en su propia base y configurable desde pantallas
   (app `datos_proceso`). Fases: 1) catálogo, captura en tablet/web, edad 0 ✅; 2) gráficas por etapa, curvas de referencia
   e indicadores (área bajo la curva, gramos estimados) ✅; 3) informes por etapa (PDF/Excel) ✅; 4) importar el histórico de Cultivo ✅ (comando listo; probado en una copia).
-  Desviaciones, CAPAs y expedientes quedan para después.
+  Eventos GMP (registro, eventos automáticos, evaluación de Calidad con firma, informe) ✅ (app `eventos`, 2026-10-28).
+  Investigación, CAPAs y expedientes siguen en el sistema de calidad.
 - Se trabaja primero en la copia local `../cultivo_local` (ver su CLAUDE.md); a producción solo se lleva lo
   probado y con autorización explícita del usuario. En el servidor, solo lectura salvo que el usuario lo pida.
 - Problemas conocidos en producción: `DEBUG = True`, API `/api/EPO/` sin permisos (responde sin sesión),

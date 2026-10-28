@@ -612,7 +612,7 @@ class InformesTests(AnalisisBase):
         r = self.web.get(f'/api/informes-proceso/{self.lote.id}/excel/')
         self.assertEqual(r.status_code, 200)
         libro = load_workbook(BytesIO(r.content))
-        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Fuera de límites', 'Muestras adicionales', 'Correcciones'])
+        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Fuera de límites', 'Eventos GMP', 'Muestras adicionales', 'Correcciones'])
         datos = libro['Datos PO4']
         encabezados = [c.value for c in datos[1]]
         celulas = encabezados.index('Células (MCel/mL)') + 1
@@ -659,7 +659,7 @@ class InformesTests(AnalisisBase):
         self.assertTrue(r.content.startswith(b'%PDF'))
         r = self.web.get(f'/api/informes-proceso/{self.lote.id}/excel/?combinar={clave(self.celulas)},{clave(self.temp)}')
         libro = load_workbook(BytesIO(r.content))
-        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Gráficas combinadas', 'Fuera de límites', 'Muestras adicionales',
+        self.assertEqual(libro.sheetnames, ['Resumen', 'Datos PO4', 'Gráficas combinadas', 'Fuera de límites', 'Eventos GMP', 'Muestras adicionales',
                                             'Correcciones'])
         self.assertEqual(len(libro['Gráficas combinadas']._charts), 2)
         registro = RegistroAuditoria.objects.filter(accion='GENERAR_INFORME').latest('id')

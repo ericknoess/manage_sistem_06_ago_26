@@ -40,6 +40,7 @@ class Perfil(models.Model):
             ('gestionar_catalogos', 'Gestionar catálogos de materiales y equipos'),
             ('gestionar_roster', 'Gestionar turnos, cuadrillas, operadores e incidencias'),
             ('gestionar_usuarios', 'Gestionar usuarios y roles'),
+            ('evaluar_evento', 'Evaluar, cerrar y anular eventos GMP'),
         ]
 
     def __str__(self):

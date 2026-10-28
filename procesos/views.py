@@ -35,6 +35,7 @@ from .models import (
     EquipoOperacion, EquipoFase, ReservaEquipo, EntregaMaterial,
 )
 from actividades.models import Equipo, MaterialInsumo, TipoEquipo
+from eventos.services import evento_inicio_fuera_ventana, eventos_abiertos
 from roster.models import Operador
 from .serializers import (
     ProcesoMaestroSerializer, EtapaProcesoSerializer, OperacionProcesoSerializer,
@@ -294,6 +295,10 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
     def archivar(self, request, pk=None):
         lote = self.get_object()
         if lote.estado != 'COMPLETADO': return Response({"error": "Solo se pueden archivar lotes COMPLETADOS."}, status=status.HTTP_400_BAD_REQUEST)
+        abiertos = eventos_abiertos(lote)
+        if abiertos:
+            return Response({"error": f"El lote tiene {abiertos} evento(s) GMP abierto(s): Calidad debe evaluarlos y cerrarlos antes de archivarlo.",
+                             "codigo": "EVENTOS_ABIERTOS"}, status=status.HTTP_400_BAD_REQUEST)
         firmante, error = _firma_o_respuesta(request, 'ARCHIVAR_LOTE')
         if error:
             return error
@@ -480,8 +485,13 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         if lote.estado != lote_estado_anterior:
             registrar(request, 'LOTE', f"LOTE_{lote.estado}", f"Lote {lote.identificador_lote} pasa a {lote.get_estado_display()}",
                       objeto=lote, lote=lote, cambios={'estado': [lote_estado_anterior, lote.estado]})
+        # Un inicio fuera de la ventana de tolerancia abre un evento GMP para que Calidad lo evalúe
+        evento_gmp = (evento_inicio_fuera_ventana(request, fase, evaluacion['mensaje'], motivo_desviacion)
+                      if evaluacion and evaluacion['desviacion'] else None)
 
         response_data = self.get_serializer(fase).data
+        if evento_gmp:
+            response_data['evento_gmp'] = evento_gmp.folio
         if advertencia_materiales:
             response_data['advertencia_materiales'] = advertencia_materiales
         if ejecutar_auto_ajuste and fases_actualizadas_count > 0:

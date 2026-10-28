@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from auditoria.mixins import AuditoriaMixin
 from auditoria.services import firmar, quien, registrar
+from eventos.services import eventos_fuera_especificacion
 from procesos.models import AsignacionFaseOperador, FaseLote, LoteProduccion, ProcesoMaestro
 from usuarios.firmas import FirmaRechazada, verificar_firma
 from usuarios.permisos import PermisoCaptura, SOLO_SESION, operador_de_sesion, tiene_permiso
@@ -73,6 +74,11 @@ class ParametroProcesoViewSet(AuditoriaMixin, viewsets.ModelViewSet):
                 continue
         resultado = evaluar(formula, valores) if all(c in valores for c in usadas) else None
         return Response({'variables': usadas, 'resultado': resultado})
+
+
+def _avisos_eventos(eventos):
+    """Avisos para quien captura: los eventos GMP que se abrieron por datos fuera de especificación."""
+    return [f"📋 Se abrió el evento GMP {e.folio} ({e.titulo}) para que Calidad lo evalúe." for e in eventos]
 
 
 def _actor(request):
@@ -172,6 +178,7 @@ class CapturaViewSet(viewsets.ViewSet):
             cambios['fuera_de_limites'] = [None, avisos]
         registrar(request, 'DATOS_PROCESO', 'REGISTRAR_DATOS', f"Datos de proceso capturados: {nombre_fase(fase)} · lote {fase.lote.identificador_lote}",
                   objeto=toma, fase=fase, cambios=cambios)
+        avisos += _avisos_eventos(eventos_fuera_especificacion(request, toma))
         return Response({**detalle_captura(fase), 'avisos': avisos}, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='adicional')
@@ -190,6 +197,7 @@ class CapturaViewSet(viewsets.ViewSet):
             cambios['fuera_de_limites'] = [None, avisos]
         registrar(request, 'DATOS_PROCESO', 'MUESTRA_ADICIONAL', f"Muestra adicional: {nombre_fase(fase)} · lote {fase.lote.identificador_lote}",
                   objeto=toma, fase=fase, cambios=cambios, motivo=toma.motivo)
+        avisos += _avisos_eventos(eventos_fuera_especificacion(request, toma))
         return Response({**detalle_captura(fase), 'avisos': avisos}, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='corregir')
@@ -215,9 +223,11 @@ class CapturaViewSet(viewsets.ViewSet):
                                      f"Corrección de datos de proceso: {nombre_fase(fase)} · lote {fase.lote.identificador_lote}",
                                      objeto=toma, fase=fase, cambios=cambios, motivo=motivo)
                 firmar(registro, firmante)
+                # Si el valor corregido sigue (o queda) fuera de especificación, se abre su evento GMP
+                creados = eventos_fuera_especificacion(request, toma)
         except (ErrorCaptura, ValueError, TypeError) as e:
             return self._error(str(e) or "Datos de corrección no válidos.")
-        return Response(detalle_captura(fase))
+        return Response({**detalle_captura(fase), 'avisos': _avisos_eventos(creados)})
 
     @action(detail=False, methods=['get'], url_path='lote')
     def lote(self, request):

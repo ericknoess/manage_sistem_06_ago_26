@@ -272,6 +272,7 @@ function renderizarTareas(tareas, sobrantes = []) {
 
             ${htmlMaterialesTarea(t)}
             ${accionHtml}
+            <button class="btn-evento-tarea" onclick="reportarEventoTarea(${t.fase_id})">⚠️ Reportar evento (falla, desviación…)</button>
         `;
         cuerpos[claveGrupoTarea(t)].appendChild(card);
     });
@@ -285,6 +286,13 @@ function renderizarTareas(tareas, sobrantes = []) {
         ease: "power2.out",
         clearProps: "all"
     });
+}
+
+// Reportar un evento GMP de la tarea (formulario compartido static/core/js/eventos.js)
+function reportarEventoTarea(faseId) {
+    const t = (window.tareasActuales || []).find(x => x.fase_id === faseId);
+    if (!t) return;
+    abrirReporteEvento({ fase: faseId, faseNombre: `[${t.identificador_paso}] ${t.tarea_nombre}`, loteNombre: t.lote_identificador });
 }
 
 // --- ACTUALIZACIÓN TRANSACCIONAL eBR (firmada con PIN) ---
@@ -379,6 +387,7 @@ async function enviarFirmaPin(evento) {
                 onComplete: () => {
                     if (data.advertencia_materiales) alert("⚠️ Iniciaste con material incompleto:\n\n" + data.advertencia_materiales.join("\n"));
                     if (data.mensaje_cascada) alert("✨ Inteligencia Operativa MES:\n\n" + data.mensaje_cascada);
+                    if (data.evento_gmp) alert(`📋 Se abrió el evento GMP ${data.evento_gmp} por iniciar fuera de horario. Calidad lo evaluará.`);
                     cargarTareasPendientes();
                 }
             });

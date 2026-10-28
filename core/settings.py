@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'datos_proceso',
     'usuarios',
     'auditoria',
+    'eventos',
 ]
 
 MIDDLEWARE = [

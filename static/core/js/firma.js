@@ -24,6 +24,8 @@ const SIGNIFICADOS_POR_DEFECTO = {
     RECHAZAR_MATERIAL: 'Rechazo el material entregado',
     DEVOLVER_MATERIAL: 'Devuelvo el material sobrante',
     CORREGIR_DATO: 'Corrijo el dato de proceso registrado',
+    CERRAR_EVENTO: 'Evalúo y cierro el evento GMP',
+    ANULAR_EVENTO: 'Autorizo anular el evento GMP registrado por error',
 };
 
 function escaparFirma(texto) {

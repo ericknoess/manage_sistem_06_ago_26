@@ -16,6 +16,7 @@ NOMBRES_PERMISO = {
     'gestionar_catalogos': 'modificar catálogos',
     'gestionar_roster': 'modificar el roster',
     'gestionar_usuarios': 'gestionar usuarios',
+    'evaluar_evento': 'evaluar eventos GMP',
 }
 
 # Marca para acciones POST que solo consultan (ej. validar disponibilidad): basta con tener sesión.

@@ -19,6 +19,7 @@ class RegistroAuditoria(models.Model):
         ('MATERIAL_LOTE', 'Material de lote'),
         ('EQUIPO_LOTE', 'Equipo de lote'),
         ('DATOS_PROCESO', 'Datos de proceso'),
+        ('EVENTO', 'Evento GMP'),
         ('RECETA', 'Receta maestra'),
         ('CATALOGO', 'Catálogo'),
         ('ROSTER', 'Roster'),
