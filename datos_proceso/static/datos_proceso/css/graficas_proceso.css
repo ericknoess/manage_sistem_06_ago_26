@@ -379,3 +379,17 @@ body.sin-desplazamiento { overflow: hidden; }
 .color-parametro { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text); cursor: pointer; }
 .color-parametro input[type="color"] { width: 30px; height: 24px; padding: 0; border: 1px solid var(--border-color); border-radius: 6px; background: none; cursor: pointer; }
 .color-parametro--choca { color: #fcd34d; }
+
+/* Panel de escalas dentro de una tarjeta blanca (pestaña Gráficas) */
+.panel-escalas--claro { background: #f8fafc; border-color: #e2e8f0; }
+.panel-escalas--claro .tabla-escalas thead th, .panel-escalas--claro .panel-escalas__pie { color: #64748b; }
+.panel-escalas--claro .tabla-escalas tbody th { color: #0f172a; }
+.panel-escalas--claro .tabla-escalas tbody th small { color: #64748b; }
+.panel-escalas--claro .campo-escala { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; }
+.panel-escalas--claro .campo-escala::placeholder { color: #94a3b8; }
+.panel-escalas--claro .btn-restablecer { border-color: #cbd5e1; color: #475569; }
+.nota-escala { display: block; margin-left: 0 !important; font-size: 0.62rem; font-style: italic; }
+.tarjeta-grafica__escalas:empty { display: none; }
+.panel-escalas--claro .campo-escala { width: 100%; min-width: 56px; max-width: 100px; }
+.panel-escalas--claro .tabla-escalas th, .panel-escalas--claro .tabla-escalas td { padding: 0.2rem 0.25rem; }
+.panel-escalas--claro .tabla-escalas tbody th { white-space: normal; }

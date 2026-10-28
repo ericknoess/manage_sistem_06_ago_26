@@ -25,6 +25,8 @@ let pestana = 'lotes';
 let zoomPorEje = {};             // {'LOTE': [x0, x1], 'ETAPA-<id>': …}: zoom compartido por las gráficas con la misma edad
 let parametrosOcultos = new Set();   // códigos de parámetros que el usuario ocultó (se recuerdan)
 let ordenIndicadores = { columna: null, sentido: 1 };
+let escalasGraficas = { x: {}, y: {} };   // pestaña Gráficas: escala manual del eje X (por edad: 'LOTE' o 'ETAPA-<id>') y Y (por parámetro)
+let tarjetasConEscalas = new Set();        // claves de las tarjetas con el panel de escalas abierto
 let vistaAnimada = '';            // receta|etapa|lotes ya dibujados: las líneas se trazan animadas solo al cambiar de vista
 
 const corto = (v) => numeroCorto(v);
@@ -160,6 +162,7 @@ async function cambiarProceso({ lotesUrl = null } = {}) {
     document.getElementById('opcionBanda').checked = guardada.banda ?? elegidos.size >= 6;
     document.getElementById('opcionPuntos').checked = guardada.puntos ?? elegidos.size <= 12;
     leerComparar();
+    leerEscalasGraficas();
     pintarTablaLotes();
     await cargarIndicadores();
     if (pestana !== 'lotes') await cargarAnalisis();
@@ -430,11 +433,14 @@ function htmlTarjeta(p, ampliada = false) {
                 ${p.calculado ? '<span class="etiqueta-calculado" title="Calculado con su fórmula">ƒ</span>' : ''}</span>
             <span class="tarjeta-grafica__acciones">
                 <span class="tarjeta-grafica__resumen"></span>
+                <button type="button" class="btn-ampliar btn-escalas-tarjeta" onclick="alternarEscalasTarjeta('${p.clave}')"
+                        title="Fijar mínimo, máximo e incremento de los ejes">⚙ Escalas</button>
                 ${ampliada ? '' : `<button type="button" class="btn-ampliar" onclick="abrirGraficaGrande('${p.clave}')" title="Abrir en grande">⤢ Ampliar</button>`}
             </span>
         </header>
         ${ampliada ? `<div class="tarjeta-grafica__ubicacion">Etapa ${escaparHtml(p.etapa)} · ${escaparHtml(p.bloque)}</div>` : ''}
         <div class="tg-leyenda tg-leyenda--claro"></div>
+        <div class="tarjeta-grafica__escalas"></div>
         <div class="tarjeta-grafica__lienzo"></div>
         <div class="tarjeta-grafica__nota"></div>`;
 }
@@ -469,6 +475,7 @@ function dibujarTarjeta(tarjeta, p, alto, animar = false) {
         alZoom: (rango) => { zoomPorEje[ejeClave] = rango; pintarGraficas(); },
         alElegirSerie: (id) => alternarDestacado(id),
         textoPunto: (serie, q) => textoPunto(p, serie, q), tema: 'claro', animar,
+        escalaX: escalasGraficas.x[ejeClave] || null, escalaY: escalasGraficas.y[p.clave] || null,
         textoX: porEtapa ? `Edad de la etapa ${p.etapa} (h)` : 'Edad del lote (h)',
     });
     tarjeta.querySelector('.tg-leyenda').innerHTML = leyendaGrafica({
@@ -480,12 +487,84 @@ function dibujarTarjeta(tarjeta, p, alto, animar = false) {
     tarjeta.querySelector('.tarjeta-grafica__resumen').innerHTML = `${series.length} lote${series.length === 1 ? '' : 's'}`
         + (fuera ? ` · <span class="valor-fuera">${fuera} fuera de esp.</span>` : '')
         + (zoomPorEje[ejeClave] ? ` · 🔍 ${zoomPorEje[ejeClave][0].toFixed(1)}–${zoomPorEje[ejeClave][1].toFixed(1)} h` : '');
+    // Botón y panel de escalas de esta tarjeta
+    const conEscala = Object.keys(escalasGraficas.y[p.clave] || {}).length || Object.keys(escalasGraficas.x[ejeClave] || {}).length;
+    const boton = tarjeta.querySelector('.btn-escalas-tarjeta');
+    boton.textContent = `⚙ Escalas${conEscala ? ' ●' : ''}`;
+    boton.classList.toggle('btn-ampliar--activo', tarjetasConEscalas.has(p.clave));
+    boton.setAttribute('aria-expanded', tarjetasConEscalas.has(p.clave));
+    tarjeta.querySelector('.tarjeta-grafica__escalas').innerHTML = tarjetasConEscalas.has(p.clave)
+        ? htmlEscalasTarjeta(p, ejeClave, porEtapa, r.rango, r.rangoY || [null, null], alto > 300) : '';
     const notas = [];
     if (sinEdad) notas.push(`${sinEdad} dato(s) sin edad (a su lote le falta la edad 0) no se grafican.`);
     if (banda && series.length < 3) notas.push('La banda necesita al menos 3 lotes con datos.');
     if (r.fueraEscala) notas.push(`▲▼ ${r.fueraEscala} dato(s) atípicos de lotes en gris quedan fuera de la escala `
         + '(marcados en el borde; pasa el cursor para ver su valor o acerca la gráfica).');
     tarjeta.querySelector('.tarjeta-grafica__nota').textContent = notas.join(' ');
+}
+
+// ------------------------------------------------------------------
+// Pestaña Gráficas: escalas manuales por tarjeta (Y del parámetro; X compartido por las gráficas con la misma edad)
+// ------------------------------------------------------------------
+function claveEscalasGraficas() { return `escalas-${document.getElementById('filtroProceso').value}`; }
+function leerEscalasGraficas() {
+    const g = leerPreferencia(claveEscalasGraficas()) || {};
+    escalasGraficas = { x: g.x || {}, y: g.y || {} };
+    tarjetasConEscalas = new Set();
+}
+function alternarEscalasTarjeta(clave) {
+    if (tarjetasConEscalas.has(clave)) tarjetasConEscalas.delete(clave); else tarjetasConEscalas.add(clave);
+    pintarGraficas();
+}
+function cambiarEscalaGrafica(eje, clave, campo, valor) {
+    const destino = escalasGraficas[eje];
+    const e = destino[clave] = destino[clave] || {};
+    const n = numeroEscala(valor);
+    if (n === null) delete e[campo]; else e[campo] = n;
+    if (!Object.keys(e).length) delete destino[clave];
+    guardarPreferencia(claveEscalasGraficas(), escalasGraficas);
+    // El eje X se comparte: se redibujan todas; el foco vuelve a la casilla a la que se pasó (Tab)
+    requestAnimationFrame(() => {
+        const activo = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.escala : null;
+        pintarGraficas();
+        if (activo) { const campoNuevo = document.querySelector(`[data-escala="${activo}"]`); if (campoNuevo) campoNuevo.focus(); }
+    });
+}
+function restablecerEscalaGrafica(eje, clave) {
+    delete escalasGraficas[eje][clave];
+    guardarPreferencia(claveEscalasGraficas(), escalasGraficas);
+    pintarGraficas();
+}
+function htmlEscalasTarjeta(p, ejeClave, porEtapa, autoX, autoY, grande) {
+    const donde = grande ? 'g' : 'n';
+    const auto = (v) => v === null || v === undefined ? 'auto' : corto(v);
+    const fila = (eje, clave, nombre, unidad, autos, nota) => {
+        const e = escalasGraficas[eje][clave] || {};
+        const error = e.min !== undefined && e.max !== undefined && e.min >= e.max ? 'El mínimo debe ser menor que el máximo: se usa el automático.'
+            : e.paso !== undefined && e.paso <= 0 ? 'El incremento debe ser mayor que cero: se usa el automático.' : '';
+        const celda = (campo, marcador) => `<td><input type="text" inputmode="decimal" class="campo-escala"
+            data-escala="${donde}-${p.clave}-${eje}-${campo}" value="${e[campo] ?? ''}" placeholder="${marcador}"
+            onchange="cambiarEscalaGrafica('${eje}', '${clave}', '${campo}', this.value)" aria-label="${campo} del ${escaparHtml(nombre)}"></td>`;
+        return `<tr class="${error ? 'fila-escala--error' : ''}" title="${error}">
+            <th>${escaparHtml(nombre)} ${unidad ? `<small>${escaparHtml(unidad)}</small>` : ''}${error ? ' ⚠️' : ''}
+                ${nota ? `<small class="nota-escala">${nota}</small>` : ''}</th>
+            ${celda('min', auto(autos[0]))}${celda('max', auto(autos[1]))}${celda('paso', 'auto')}
+            <td><button type="button" class="btn-restablecer" onclick="restablecerEscalaGrafica('${eje}', '${clave}')" title="Volver a automático"
+                ${Object.keys(e).length ? '' : 'disabled'}>↺</button></td></tr>`;
+    };
+    return `
+        <div class="panel-escalas panel-escalas--claro">
+            <table class="tabla-escalas">
+                <thead><tr><th>Eje</th><th>Mínimo</th><th>Máximo</th><th>Incremento</th><th></th></tr></thead>
+                <tbody>
+                    ${fila('y', p.clave, `Eje Y · ${p.nombre}`, p.unidad, autoY, '')}
+                    ${fila('x', ejeClave, porEtapa ? `Eje X · edad de la etapa ${p.etapa}` : 'Eje X · edad del lote', 'h', autoX,
+                           'se aplica a todas las gráficas con esta edad')}
+                </tbody>
+            </table>
+            <p class="panel-escalas__pie">Vacío = automático (en gris, el valor actual). Incremento = distancia entre marcas.
+                Los datos fuera del rango quedan marcados ▲▼ en el borde. El zoom por arrastre la sustituye mientras está activo.</p>
+        </div>`;
 }
 
 function parametrosVisibles() {
@@ -589,7 +668,7 @@ function pintarGraficaGrande() {
     tarjeta.innerHTML = htmlTarjeta(p, true);
     document.getElementById('posicionGrafica').textContent = `${i + 1} de ${lista.length}`;
     // Alto según la ventana: lo que queda después del encabezado, la leyenda y la nota
-    const alto = Math.max(320, Math.min(window.innerHeight - 230, 900));
+    const alto = Math.max(320, Math.min(window.innerHeight - 230 - (tarjetasConEscalas.has(p.clave) ? 120 : 0), 900));
     dibujarTarjeta(tarjeta, p, alto);
 }
 

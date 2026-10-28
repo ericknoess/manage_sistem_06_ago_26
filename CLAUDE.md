@@ -98,7 +98,9 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Comparar tiene «⤢ Ampliar» (ventana flotante, `dibujarComparacion(caja, ctx, grande)`) y «⚙ Escalas»: mínimo, máximo e incremento del eje X
   y de cada parámetro (o del eje % en superpuestas), guardados por receta en `compEscalas`; en `graficaLineas` son `escalaX`/`escalaY`
   (`paso` = distancia entre marcas) y, en ejes múltiples, `paso` de cada entrada de `ejesY`.
-  En superpuestas y ejes múltiples el panel también elige el color de cada parámetro (`compColores`, `colorParametro`; avisa si dos se parecen). e Indicadores (tabla ordenable con
+  En superpuestas y ejes múltiples el panel también elige el color de cada parámetro (`compColores`, `colorParametro`; avisa si dos se parecen).
+  En la pestaña Gráficas, cada tarjeta tiene «⚙ Escalas» (`htmlEscalasTarjeta`): Y por parámetro y X por edad ('LOTE' o 'ETAPA-<id>',
+  compartido como el zoom), en `escalasGraficas`, guardado por receta (`escalas-<receta>`); también en la gráfica ampliada. e Indicadores (tabla ordenable con
   promedio, mín–máx y % en meta). `IndicadorProceso` (por receta, configurable en esa
   pantalla, `/api/indicadores-proceso/`): área bajo la curva por trapecios, apego % contra la curva esperada (en la edad de la curva),
   último, máximo o fórmula con otros indicadores (ej. gramos = abc_cel / 1000 - 5.5); se calculan al consultar, no se guardan.
