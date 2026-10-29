@@ -1078,6 +1078,15 @@ def en_turno(operador_ids, ahora=None):
     return any(i <= ahora < f for lista in ventanas.values() for i, f in lista)
 
 
+def personal_en_turno(ahora=None):
+    """Cuántos operadores activos tienen un turno laborable que cubre este momento (página de inicio)."""
+    ahora = ahora or timezone.now()
+    hoy = timezone.localtime(ahora).date()
+    ids = list(Operador.objects.filter(activo=True).values_list('id', flat=True))
+    ventanas = _turnos_por_operador(ids, hoy, hoy)
+    return sum(1 for lista in ventanas.values() if any(i <= ahora < f for i, f in lista))
+
+
 def puede_recibir_material(usuario, operador, fase, ahora=None):
     """
     Quién recibe una entrega (o devuelve el sobrante) de la fase. No tiene que ser quien ejecuta la actividad:

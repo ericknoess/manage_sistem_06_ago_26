@@ -4,43 +4,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inicio - MES Bioprocesos Upstream</title>
+    <title>Centro de Control - MES Bioprocesos Upstream</title>
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/inicio.css' %}">
+    <script src="{% static 'core/js/inicio-previo.js' %}"></script>
     <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
     <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
     <script src="{% static 'core/js/sesion.js' %}"></script>
 </head>
-<body>
+<body class="cc">
 
-    <header class="inicio-header">
-        <div>
-            <p class="inicio-eyebrow">Bioprocesos · Upstream · GxP</p>
-            <h1>Centro de Control de Operaciones</h1>
-            <p class="inicio-subtitulo">Elige una aplicación. Desde cualquiera de ellas puedes volver aquí con el botón <strong>Menú principal</strong>.</p>
+    <!-- Fondo vivo: aurora de color y células que flotan (decorativo) -->
+    <div class="cc-aurora" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <canvas id="lienzoCelulas" class="cc-celulas" aria-hidden="true"></canvas>
+
+    <!-- Intro cinematográfica (una vez por sesión; «Saltar» o Esc la termina) -->
+    <div id="intro" class="cc-intro" aria-hidden="true">
+        <div class="cc-intro__barra cc-intro__barra--arriba"></div>
+        <div class="cc-intro__centro">
+            <svg class="cc-intro__emblema" viewBox="0 0 120 120">
+                <defs>
+                    <linearGradient id="introTrazo" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#38bdf8"/><stop offset="0.5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#f472b6"/>
+                    </linearGradient>
+                </defs>
+                <circle class="cc-trazo" cx="60" cy="60" r="54"/>
+                <path class="cc-trazo" d="M42 22 h36 M47 22 v18 l-17 44 a10 10 0 0 0 9 14 h42 a10 10 0 0 0 9 -14 l-17 -44 v-18"/>
+                <path class="cc-trazo cc-trazo--liquido" d="M36 76 q12 -8 24 0 t24 0"/>
+                <circle class="cc-trazo cc-trazo--burbuja" cx="52" cy="86" r="3"/>
+                <circle class="cc-trazo cc-trazo--burbuja" cx="66" cy="80" r="2.4"/>
+                <circle class="cc-trazo cc-trazo--burbuja" cx="60" cy="90" r="1.8"/>
+            </svg>
+            <p class="cc-intro__marca"><span>Bioprocesos</span><span>·</span><span>Upstream</span><span>·</span><span>GxP</span></p>
+            <p class="cc-intro__titulo">Centro de Control de Operaciones</p>
         </div>
-        <div class="inicio-lateral">
-            <div class="inicio-fecha">{% now "l j \d\e F \d\e Y" %}</div>
+        <div class="cc-intro__barra cc-intro__barra--abajo"></div>
+        <button type="button" class="cc-intro__saltar" id="saltarIntro">Saltar ›</button>
+    </div>
+
+    <header class="cc-hero">
+        <div class="cc-hero__texto">
+            <p class="cc-eyebrow"><span class="cc-pulso"></span> Bioprocesos · Upstream · GxP · <span class="cc-en-vivo">en vivo</span></p>
+            <h1 class="cc-titulo" id="tituloPrincipal">Centro de Control de Operaciones</h1>
+            <p class="cc-subtitulo">Elige una aplicación. Desde cualquiera de ellas vuelves aquí con el botón <strong>Menú principal</strong>.</p>
+        </div>
+
+        <!-- Biorreactor animado: nivel con oleaje, burbujas y agitador girando -->
+        <svg class="cc-reactor" viewBox="0 0 200 220" aria-hidden="true">
+            <defs>
+                <linearGradient id="reactorVidrio" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0" stop-color="#e0f2fe"/><stop offset="0.5" stop-color="#ffffff"/><stop offset="1" stop-color="#ede9fe"/>
+                </linearGradient>
+                <linearGradient id="reactorLiquido" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#7c3aed"/>
+                </linearGradient>
+                <clipPath id="reactorInterior"><rect x="46" y="42" width="108" height="150" rx="34"/></clipPath>
+            </defs>
+            <rect class="cc-reactor__sombra" x="56" y="196" width="88" height="10" rx="5"/>
+            <rect class="cc-reactor__vaso" x="46" y="42" width="108" height="150" rx="34"/>
+            <g clip-path="url(#reactorInterior)">
+                <path class="cc-reactor__ola cc-reactor__ola--atras" d="M0 112 q25 -12 50 0 t50 0 t50 0 t50 0 t50 0 V230 H0z"/>
+                <path class="cc-reactor__ola" d="M0 116 q25 10 50 0 t50 0 t50 0 t50 0 t50 0 V230 H0z"/>
+                <circle class="cc-reactor__burbuja" cx="78" cy="186" r="4"/>
+                <circle class="cc-reactor__burbuja cc-reactor__burbuja--2" cx="118" cy="190" r="3"/>
+                <circle class="cc-reactor__burbuja cc-reactor__burbuja--3" cx="98" cy="188" r="5"/>
+                <circle class="cc-reactor__burbuja cc-reactor__burbuja--4" cx="134" cy="184" r="2.5"/>
+                <circle class="cc-reactor__burbuja cc-reactor__burbuja--5" cx="64" cy="190" r="2"/>
+            </g>
+            <rect class="cc-reactor__eje" x="98" y="20" width="4" height="138" rx="2"/>
+            <g class="cc-reactor__aspas">
+                <ellipse cx="100" cy="158" rx="26" ry="5"/>
+                <rect x="96" y="150" width="8" height="16" rx="2"/>
+            </g>
+            <rect class="cc-reactor__tapa" x="40" y="30" width="120" height="16" rx="8"/>
+            <rect class="cc-reactor__motor" x="84" y="6" width="32" height="22" rx="6"/>
+            <path class="cc-reactor__brillo" d="M62 60 q-6 40 0 90" />
+        </svg>
+
+        <div class="cc-hero__lateral">
+            <div class="cc-reloj" aria-label="Hora actual">
+                <span id="relojHora">--:--</span><span id="relojSegundos" class="cc-reloj__seg">:--</span>
+            </div>
+            <div class="cc-fecha">{% now "l j \d\e F \d\e Y" %}</div>
             <div data-sesion></div>
         </div>
     </header>
 
-    <section class="inicio-indicadores" aria-label="Resumen de planta">
+    <section class="cc-indicadores" aria-label="Resumen de planta en vivo">
         {% for indicador in indicadores %}
-        <div class="indicador">
-            <span class="indicador-valor">{{ indicador.valor }}</span>
-            <span class="indicador-etiqueta">{{ indicador.etiqueta }}</span>
-        </div>
+        <a class="cc-kpi cc-kpi--{{ indicador.color }}" href="{{ indicador.url }}">
+            <span class="cc-kpi__icono" aria-hidden="true">{{ indicador.icono }}</span>
+            <span class="cc-kpi__valor" data-valor="{{ indicador.valor }}">{{ indicador.valor }}</span>
+            <span class="cc-kpi__etiqueta">{{ indicador.etiqueta }}</span>
+            <span class="cc-kpi__brillo" aria-hidden="true"></span>
+        </a>
         {% endfor %}
     </section>
 
-    <main class="inicio-contenido">
+    <main class="cc-contenido">
 
-        <section class="grupo">
-            <h2 class="grupo-titulo">Flujo de producción</h2>
-            <div class="flujo">
-                <div class="etapa etapa--diseno">
-                    <div class="etapa-encabezado"><span class="etapa-numero">1</span> Diseño</div>
+        <section class="cc-grupo">
+            <h2 class="cc-grupo__titulo"><span>Flujo de producción</span></h2>
+            <div class="cc-flujo">
+                <div class="cc-etapa cc-etapa--diseno">
+                    <div class="cc-etapa__encabezado"><span class="cc-etapa__numero">1</span> Diseño</div>
                     <a class="app-card" href="{% url 'procesos-index' %}">
                         <span class="app-icono">🧫</span>
                         <span class="app-texto">
@@ -71,8 +138,10 @@
                     </a>
                 </div>
 
-                <div class="etapa etapa--planificacion">
-                    <div class="etapa-encabezado"><span class="etapa-numero">2</span> Planificación</div>
+                <div class="cc-conector" aria-hidden="true"><span></span><span></span><span></span></div>
+
+                <div class="cc-etapa cc-etapa--planificacion">
+                    <div class="cc-etapa__encabezado"><span class="cc-etapa__numero">2</span> Planificación</div>
                     <a class="app-card" href="{% url 'planificacion-semanal' %}">
                         <span class="app-icono">📅</span>
                         <span class="app-texto">
@@ -103,8 +172,10 @@
                     </a>
                 </div>
 
-                <div class="etapa etapa--ejecucion">
-                    <div class="etapa-encabezado"><span class="etapa-numero">3</span> Ejecución</div>
+                <div class="cc-conector" aria-hidden="true"><span></span><span></span><span></span></div>
+
+                <div class="cc-etapa cc-etapa--ejecucion">
+                    <div class="cc-etapa__encabezado"><span class="cc-etapa__numero">3</span> Ejecución</div>
                     <a class="app-card" href="{% url 'ejecucion-lotes' %}">
                         <span class="app-icono">🏭</span>
                         <span class="app-texto">
@@ -144,9 +215,9 @@
             </div>
         </section>
 
-        <div class="grupos-secundarios">
-            <section class="grupo grupo--oficina">
-                <h2 class="grupo-titulo">Oficina (no GMP)</h2>
+        <div class="cc-secundarios">
+            <section class="cc-grupo cc-grupo--oficina">
+                <h2 class="cc-grupo__titulo"><span>Oficina (no GMP)</span></h2>
                 <a class="app-card" href="{% url 'gestion-proyectos' %}">
                     <span class="app-icono">🗂️</span>
                     <span class="app-texto">
@@ -156,8 +227,8 @@
                 </a>
             </section>
 
-            <section class="grupo grupo--personal">
-                <h2 class="grupo-titulo">Personal y turnos</h2>
+            <section class="cc-grupo cc-grupo--personal">
+                <h2 class="cc-grupo__titulo"><span>Personal y turnos</span></h2>
                 <a class="app-card" href="{% url 'roster_dashboard' %}">
                     <span class="app-icono">👥</span>
                     <span class="app-texto">
@@ -174,8 +245,8 @@
                 </a>
             </section>
 
-            <section class="grupo grupo--admin">
-                <h2 class="grupo-titulo">Administración</h2>
+            <section class="cc-grupo cc-grupo--admin">
+                <h2 class="cc-grupo__titulo"><span>Administración</span></h2>
                 <a class="app-card" href="{% url 'admin:index' %}">
                     <span class="app-icono">⚙️</span>
                     <span class="app-texto">
@@ -202,5 +273,12 @@
 
     </main>
 
+    <footer class="cc-pie">
+        <span>MES Bioprocesos · Upstream · GxP</span>
+        <button type="button" class="cc-pie__intro" id="repetirIntro">▶ Ver la intro otra vez</button>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="{% static 'core/js/inicio.js' %}"></script>
 </body>
 </html>
