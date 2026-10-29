@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Celda estática para el operador (Fija a la izquierda y arriba)
         headerRow.innerHTML = `
-            <th class="p-3 sticky left-0 top-0 bg-slate-950 z-[60] border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest min-w-[280px] w-[280px] shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
+            <th class="p-3 sticky left-0 top-0 bg-slate-950 z-[60] border-r border-slate-700 text-xs text-slate-400 font-bold uppercase tracking-widest min-w-[330px] w-[330px] shadow-[2px_0_5px_rgba(0,0,0,0.5)]">
                 Operador / Cuadrilla
             </th>
         `;
@@ -215,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `
                 <tr class="bg-slate-950 border-b border-slate-700 font-mono text-xs">
                     <td colspan="32" class="p-0 z-20">
-                        <div class="sticky left-0 flex items-center gap-4 p-2.5 w-[max-content] min-w-[280px] bg-slate-950 shadow-[2px_0_5px_rgba(0,0,0,0.3)] border-r border-slate-700">
+                        <div class="sticky left-0 flex items-center gap-4 p-2.5 w-[max-content] min-w-[330px] bg-slate-950 shadow-[2px_0_5px_rgba(0,0,0,0.3)] border-r border-slate-700">
                             <span class="text-cyan-400 font-bold tracking-wide">CUADRILLA [${cuadrilla.identificador}]: ${cuadrilla.nombre}</span>
                             <span class="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-900 rounded border border-slate-700">
                                 Operadores: ${cuadrilla.operadores ? cuadrilla.operadores.length : 0}
@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `background-color: ${encontrado.color_fondo}; color: ${encontrado.color_texto}; border: 1px solid rgba(255,255,255,0.15);`;
             }
         }
-        return 'background-color: rgba(15, 23, 42, 0.4); color: #475569; border: 1px dashed #334155;';
+        return 'background-color: rgba(15, 23, 42, 0.04); color: #64748b; border: 1px dashed #c3cedb;';
     }
 
     // --- MANEJO DEL MENÚ DESPLEGABLE DE TURNOS Y ATAJOS ---
@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dropdown.className = 'roster-turno-dropdown fixed font-mono text-[11px] w-max min-w-[16rem] max-w-[min(20rem,calc(100vw-1rem))] overflow-y-auto bg-slate-800 border border-slate-600 rounded-md shadow-[0_15px_30px_rgba(0,0,0,0.6)] z-[60] flex flex-col py-1';
                 dropdown.celdaOrigen = td;
                 
-                const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#94a3b8'}, ...tiposTurnoCache];
+                const opciones = [{codigo: '', nombre: 'Vacío', color_fondo: 'transparent', color_texto: '#475569'}, ...tiposTurnoCache];
                 
                 opciones.forEach(opt => {
                     const btn = document.createElement('button');
@@ -505,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     const badgeStyle = opt.codigo 
                         ? `background-color: ${opt.color_fondo}; color: ${opt.color_texto}; border-color: ${opt.color_texto};` 
-                        : `background-color: rgba(15,23,42,0.5); border-color: #475569; border-style: dashed;`;
+                        : `background-color: rgba(15,23,42,0.04); border-color: #94a3b8; border-style: dashed;`;
 
                     btn.innerHTML = `
                         <div class="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded text-[10px] font-bold border" style="${badgeStyle}">

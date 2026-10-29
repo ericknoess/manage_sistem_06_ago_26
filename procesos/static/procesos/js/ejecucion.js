@@ -64,13 +64,13 @@ function renderizarLotes() {
         card.innerHTML = `
             <div style="flex: 1;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <h4 style="margin: 0; font-size: 0.85rem; color: var(--text);">${lote.identificador_lote}</h4>
+                    <h4 style="margin: 0; font-size: 0.952rem; color: var(--text);">${lote.identificador_lote}</h4>
                     <div style="display: flex; align-items: center; gap: 0.25rem;">
                         <span class="badge-status ${badgeClass}">${lote.estado}</span>
                         ${actionButtonHtml}
                     </div>
                 </div>
-                <span style="font-size: 0.7rem; color: var(--text-muted);">${lote.proceso_nombre}</span>
+                <span style="font-size: 0.784rem; color: var(--text-muted);">${lote.proceso_nombre}</span>
                 <div class="progress-container">
                     <div class="progress-fill" style="width: ${progress}%;"></div>
                 </div>
@@ -94,7 +94,7 @@ async function renderizarDetalleLote() {
 
     if (!loteSeleccionado) {
         container.innerHTML = '<div class="empty-state">👈 Selecciona un lote activo del panel izquierdo para ver sus fases y registrar firmas GxP.</div>';
-        headerTitle.innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>';
+        headerTitle.innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: var(--text);">Selecciona un Lote</strong></span>';
         return;
     }
 
@@ -123,23 +123,23 @@ async function renderizarDetalleLote() {
 
     let bannerLockHtml = isLocked ? `
         <div class="gxp-lock-banner">
-            <span style="font-size: 1.2rem;">🔒</span> 
+            <span style="font-size: 1.272rem;">🔒</span> 
             <div><strong>Data Lock (QA Release):</strong> Este Lote de Producción ha sido cerrado. Sus registros son estrictamente inmutables (21 CFR Part 11).</div>
         </div>
     ` : '';
 
     let html = `
-        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.2); display: flex; gap: 3rem;">
+        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); background: rgba(15,23,42,0.04); display: flex; gap: 3rem;">
             <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Proceso / Receta Maestra</div>
+                <div style="font-size: 0.84rem; color: var(--text-muted);">Proceso / Receta Maestra</div>
                 <div style="font-weight: bold; color: var(--info);">${loteSeleccionado.proceso_nombre}</div>
             </div>
             <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">Fecha Planeada</div>
+                <div style="font-size: 0.84rem; color: var(--text-muted);">Fecha Planeada</div>
                 <div style="font-weight: bold;">${fechaPlaneadaTxt}</div>
             </div>
             <div style="flex: 1; max-width: 200px;">
-                <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                <div style="font-size: 0.84rem; color: var(--text-muted); display: flex; justify-content: space-between;">
                     <span>Progreso</span>
                     <span style="font-weight: bold; color: var(--success);">${progress}%</span>
                 </div>
@@ -193,7 +193,7 @@ async function renderizarDetalleLote() {
 
                 // INDICADORES Y BLOQUEOS
                 let estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(fase.estado);
-                let lockIconUI = estaIniciada ? '<span style="color:var(--warning); font-size:0.7rem;" title="Iniciada en Piso">🔒</span> ' : '';
+                let lockIconUI = estaIniciada ? '<span style="color:var(--warning); font-size:0.784rem;" title="Iniciada en Piso">🔒</span> ' : '';
 
                 const [fcstInicio, fcstFin] = formatearRangoFase(fase.inicio_programado, fase.fin_programado).split(' - ');
                 let actInicio = fase.fecha_inicio_real ? new Date(fase.fecha_inicio_real).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false}) : '--:--';
@@ -220,7 +220,7 @@ async function renderizarDetalleLote() {
 
                 let asignacionesHtml = fase.operadores_asignados.length > 0 
                     ? fase.operadores_asignados.map(a => `<div class="tag-resource">👤 ${a.operador_nombre}</div>`).join('') 
-                    : '<span style="color: var(--text-muted); font-size: 0.7rem;">Sin asignar</span>';
+                    : '<span style="color: var(--text-muted); font-size: 0.784rem;">Sin asignar</span>';
 
                 // [NUEVO] IDENTIFICACIÓN DE TAREA PASIVA (MÁQUINA)
                 let esPasiva = fase.tipo_operacion === 'INCUBACION' && !fase.es_subtarea_muestreo;
@@ -251,7 +251,7 @@ async function renderizarDetalleLote() {
                 // ACCIONES CON BLOQUEOS
                 let accionesHtml = '';
                 if (isLocked) {
-                    accionesHtml = `${btnDatos}${btnEvento}<span style="font-size: 1rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
+                    accionesHtml = `${btnDatos}${btnEvento}<span style="font-size: 1.12rem; opacity: 0.5;" title="Registro Inmutable (Solo Lectura)">🔒</span>`;
                 } else {
                     let btnReprogramar = estaIniciada
                         ? `<button class="btn-icon" title="Bloqueo GxP: Tarea iniciada en planta. No se puede reprogramar." disabled>🔒</button>`
@@ -276,9 +276,9 @@ async function renderizarDetalleLote() {
                         <td style="color: var(--info); font-weight: bold;">${idMostrar}</td>
                         <td style="font-weight: bold;">${lockIconUI}${nombreMostrar}${capturaHtml ? `<div>${capturaHtml}</div>` : ''}</td>
                         <td><span class="badge-status ${badgeClass}">${fase.estado}</span></td>
-                        <td style="font-size: 0.75rem;">
-                            <div style="color: var(--text-muted); font-size: 0.65rem;">FCST: ${fcstInicio} a ${fcstFin}</div>
-                            <div style="color: white; margin-top:2px;">REAL: ${actInicio} a ${actFin}</div>
+                        <td style="font-size: 0.92rem;">
+                            <div style="color: var(--text-muted); font-size: 0.82rem;">FCST: ${fcstInicio} a ${fcstFin}</div>
+                            <div style="color: var(--text); margin-top:2px;">REAL: ${actInicio} a ${actFin}</div>
                         </td>
                         <td>${rendimientoHtml}</td>
                         <td>${asignacionesHtml}${htmlEquiposCompacto(fase, { permiteCambio: fase.estado === 'EN_PROGRESO' && !isLocked })}</td>
@@ -402,7 +402,7 @@ function limpiarSeleccionSiCorresponde(loteId) {
     if (loteSeleccionado && loteSeleccionado.id === loteId) {
         loteSeleccionado = null;
         document.getElementById('editorLote').innerHTML = '<div class="empty-state">👈 Selecciona un lote activo.</div>';
-        document.getElementById('tituloLoteActivo').innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: white;">Selecciona un Lote</strong></span>';
+        document.getElementById('tituloLoteActivo').innerHTML = '<span>⚡ Monitor de Ejecución: <strong style="color: var(--text);">Selecciona un Lote</strong></span>';
     }
 }
 

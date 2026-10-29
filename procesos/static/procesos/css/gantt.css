@@ -1,16 +1,16 @@
 /* procesos/static/procesos/css/gantt.css — extraído de procesos/gantt.html */
 
 :root {
-    --bg-dark: #0f172a;
-    --panel-bg: #1e293b;
-    --border-color: #334155;
-    --accent: #38bdf8;
-    --text: #f8fafc;
-    --text-muted: #94a3b8;
+    --bg-dark: #eef2f7;
+    --panel-bg: #ffffff;
+    --border-color: #c3cedb;
+    --accent: #1d4ed8;
+    --text: #0f172a;
+    --text-muted: #475569;
     --warning: #f59e0b;
     --success: #22c65e;
-    --danger: #ef4444;
-    --baseline-color: rgba(148, 163, 184, 0.25);
+    --danger: #eb1515;
+    --baseline-color: rgba(15, 23, 42, 0.1);
 
     /* Escala del Gantt: 1 Hora = 3px | 1 Día = 72px */
     --hour-width: 3px;
@@ -35,7 +35,7 @@ body {
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-dark); }
-::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 .header-toolbar {
@@ -49,9 +49,9 @@ body {
     flex-shrink: 0;
 }
 
-.header-title h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+.header-title h2 { margin: 0; font-size: 1.166rem; color: var(--accent); }
 
-.btn-primary { background-color: var(--accent); color: #0f172a; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+.btn-primary { background-color: var(--accent); color: #ffffff; border: none; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.84rem; font-weight: bold; cursor: pointer; text-decoration: none; transition: all 0.2s; }
 .btn-primary:hover { opacity: 0.9; }
 
 .gantt-wrapper {
@@ -96,7 +96,7 @@ body {
     display: flex;
     align-items: center;
     padding-left: 1rem;
-    font-size: 0.75rem;
+    font-size: 0.84rem;
     font-weight: bold;
     color: var(--text-muted);
     position: sticky;
@@ -105,9 +105,9 @@ body {
 }
 
 .lote-group-header {
-    background-color: rgba(0,0,0,0.2);
+    background-color: rgba(15, 23, 42, 0.07);
     padding: 0.6rem 1rem;
-    font-size: 0.85rem;
+    font-size: 0.952rem;
     font-weight: bold;
     border-bottom: 1px solid var(--border-color);
     color: var(--info);
@@ -128,7 +128,7 @@ body {
     padding: 0 1rem;
     display: flex;
     align-items: center;
-    font-size: 0.75rem;
+    font-size: 0.84rem;
     border-bottom: 1px solid var(--border-color);
     color: var(--text);
     white-space: nowrap;
@@ -137,9 +137,9 @@ body {
 }
 
 /* Recetas sin etapas: una fila por actividad, con aviso en el lote */
-.etapa-label--actividad { padding-left: 1.6rem; color: var(--text-muted, #94a3b8); }
+.etapa-label--actividad { padding-left: 1.6rem; color: var(--text-muted, #475569); }
 .etapa-label--sin-etapa { color: var(--warning, #f59e0b); font-style: italic; }
-.aviso-sin-etapas { margin-left: 0.2rem; font-size: 0.8rem; cursor: help; }
+.aviso-sin-etapas { margin-left: 0.2rem; font-size: 0.896rem; cursor: help; }
 
 /* Área del Calendario y Barras (Derecha) */
 .gantt-timeline {
@@ -173,11 +173,11 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 0.65rem;
+    font-size: 0.78rem;
     color: var(--text-muted);
     line-height: 1.2;
 }
-.day-tick.today { color: var(--accent); font-weight: bold; background: rgba(56, 189, 248, 0.05); }
+.day-tick.today { color: var(--accent); font-weight: bold; background: rgba(56, 189, 248, 0.057); }
 
 .gantt-rows-container {
     position: relative;
@@ -194,7 +194,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     position: relative;
 }
-.etapa-row:hover { background-color: rgba(255,255,255,0.02); }
+.etapa-row:hover { background-color: rgba(15, 23, 42, 0.012); }
 
 /* Estilos de las Barras */
 .gantt-bar {
@@ -203,7 +203,7 @@ body {
     cursor: pointer;
     transition: transform 0.15s ease;
 }
-.gantt-bar:hover { transform: translateY(-2px); filter: brightness(1.2); z-index: 15; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+.gantt-bar:hover { transform: translateY(-2px); filter: brightness(1.2); z-index: 15; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.175); }
 
 /* [MODIFICADO] Diseño de la barra Baseline para albergar texto */
 .bar-baseline {
@@ -219,7 +219,7 @@ body {
 }
 
 .bar-baseline .bar-label {
-    color: #cbd5e1; /* Color gris suave */
+    color: #334155; /* Color gris suave */
     text-shadow: none; /* Sin sombra para que sea marca de agua */
     font-weight: 600;
 }
@@ -229,7 +229,7 @@ body {
     height: 22px;
     background-color: var(--success);
     border: 1px solid #16a34a;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.105);
     display: flex;
     align-items: center;
     padding: 0 6px;
@@ -241,10 +241,10 @@ body {
 .bar-forecast.in-progress { background-color: var(--accent); border-color: #0284c7; }
 
 .bar-label {
-    font-size: 0.7rem;
+    font-size: 0.784rem;
     font-weight: 700;
-    color: #ffffff;
-    text-shadow: 0px 1px 2px rgba(0,0,0,0.6);
+    color: #0f172a;
+    text-shadow: 0px 1px 2px rgba(15, 23, 42, 0.21);
     pointer-events: none;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -252,12 +252,12 @@ body {
 
 .bar-delay-badge {
     margin-left: 6px;
-    background-color: rgba(0, 0, 0, 0.4);
-    color: #fca5a5;
-    border: 1px solid #f87171;
+    background-color: rgba(15, 23, 42, 0.14);
+    color: #d50707;
+    border: 1px solid #e00b0b;
     border-radius: 4px;
     padding: 1px 5px;
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     font-weight: 800;
     pointer-events: none;
     flex-shrink: 0;
@@ -266,31 +266,31 @@ body {
 /* ESTILOS DEL CUSTOM TOOLTIP GXP */
 .custom-tooltip {
     position: fixed;
-    background-color: rgba(15, 23, 42, 0.95);
+    background-color: rgba(15, 23, 42, 0.05);
     backdrop-filter: blur(4px);
     border: 1px solid var(--accent);
     border-radius: 6px;
     padding: 0.75rem 1rem;
     color: var(--text);
-    font-size: 0.75rem;
+    font-size: 0.84rem;
     z-index: 9999;
     pointer-events: none;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.21);
     transition: opacity 0.1s ease;
     opacity: 0;
     display: none;
     min-width: 220px;
 }
 
-.custom-tooltip h4 { margin: 0 0 0.2rem 0; color: var(--accent); font-size: 0.85rem; }
-.custom-tooltip .badge-tipo { font-size: 0.65rem; color: var(--text-muted); border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem; margin-bottom: 0.5rem; display: block; }
+.custom-tooltip h4 { margin: 0 0 0.2rem 0; color: var(--accent); font-size: 0.952rem; }
+.custom-tooltip .badge-tipo { font-size: 0.78rem; color: var(--text-muted); border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem; margin-bottom: 0.5rem; display: block; }
 .custom-tooltip p { margin: 0.3rem 0; display: flex; justify-content: space-between; gap: 1rem; }
-.custom-tooltip .val { font-weight: bold; color: #fff; }
-.custom-tooltip .delay-val { color: #fca5a5; font-weight: bold; background: rgba(239, 68, 68, 0.2); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--danger); }
+.custom-tooltip .val { font-weight: bold; color: #0f172a; }
+.custom-tooltip .delay-val { color: #d50707; font-weight: bold; background: rgba(239, 68, 68, 0.23); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--danger); }
 
 #loadingState { padding: 2rem; text-align: center; color: var(--accent); font-weight: bold; }
 
 /* Filtro de lotes terminados (por defecto: abiertos y terminados en los últimos 30 días) */
-.gantt-filtro { display: flex; flex-direction: column; justify-content: center; gap: 2px; font-size: 0.75rem; color: var(--text-muted); }
+.gantt-filtro { display: flex; flex-direction: column; justify-content: center; gap: 2px; font-size: 0.84rem; color: var(--text-muted); }
 .gantt-filtro label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
-.gantt-filtro__aviso { font-size: 0.68rem; }
+.gantt-filtro__aviso { font-size: 0.762rem; }

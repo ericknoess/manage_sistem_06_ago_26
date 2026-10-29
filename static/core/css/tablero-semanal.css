@@ -12,7 +12,7 @@
 }
 
 .toolbar-title {
-    font-size: 0.9rem;
+    font-size: 1.008rem;
     font-weight: bold;
     color: var(--accent);
     display: flex;
@@ -36,9 +36,9 @@
     z-index: 5;
 }
 
-.day-name { font-size: 0.7rem; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
+.day-name { font-size: 0.784rem; color: #475569; font-weight: bold; text-transform: uppercase; }
 
-.day-date { font-size: 0.85rem; font-weight: bold; color: var(--text); }
+.day-date { font-size: 0.952rem; font-weight: bold; color: var(--text); }
 
 .day-tasks {
     padding: 0.4rem;
@@ -50,7 +50,7 @@
 
 .task-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 
-.task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.1); box-shadow: 0 0 0 1px var(--accent); }
+.task-card.selected { border-color: var(--accent); background-color: rgba(56, 189, 248, 0.115); box-shadow: 0 0 0 1px var(--accent); }
 
 .task-resources-preview {
     display: flex;
@@ -60,21 +60,21 @@
 }
 
 .tag-micro {
-    font-size: 0.58rem;
+    font-size: 0.78rem;
     padding: 1px 4px;
     border-radius: 3px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(15, 23, 42, 0.03);
     border: 1px solid var(--border-color);
-    color: #cbd5e1;
+    color: #334155;
 }
 
-.tag-micro.eq { border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe; }
+.tag-micro.eq { border-color: rgba(120, 11, 224, 0.44); color: #6303c9; }
 
-.tag-micro.mat { border-color: rgba(34, 198, 94, 0.4); color: #86efac; }
+.tag-micro.mat { border-color: rgba(34, 198, 94, 0.46); color: #12873c; }
 
-.tag-micro.op { border-color: rgba(56, 189, 248, 0.4); color: #bae6fd; }
+.tag-micro.op { border-color: rgba(56, 189, 248, 0.46); color: #067ab7; }
 
-.info-card h4 { margin: 0; color: var(--accent); font-size: 0.8rem; }
+.info-card h4 { margin: 0; color: var(--accent); font-size: 0.896rem; }
 
 .resource-section {
     background: var(--bg-dark);
@@ -84,9 +84,9 @@
 }
 
 .resource-title {
-    font-size: 0.68rem;
+    font-size: 0.762rem;
     font-weight: bold;
-    color: #94a3b8;
+    color: #475569;
     margin-bottom: 0.3rem;
 }
 
@@ -105,17 +105,17 @@
 
 .op-header { display: flex; align-items: center; gap: 0.5rem; }
 
-.op-name { font-size: 0.78rem; font-weight: bold; }
+.op-name { font-size: 0.874rem; font-weight: bold; }
 
-.op-status-text { font-size: 0.68rem; color: #94a3b8; }
+.op-status-text { font-size: 0.762rem; color: #475569; }
 
 .btn-assign {
     background-color: var(--accent);
-    color: #0f172a;
+    color: #ffffff;
     border: none;
     padding: 4px 8px;
     border-radius: 4px;
-    font-size: 0.7rem;
+    font-size: 0.784rem;
     font-weight: bold;
     cursor: pointer;
 }

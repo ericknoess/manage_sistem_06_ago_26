@@ -6,13 +6,13 @@
     width: 100%;
     box-sizing: border-box;
     padding: 0.45rem 0.6rem;
-    border: 1px solid var(--border-color, #334155);
+    border: 1px solid var(--border-color, #c3cedb);
     border-radius: 6px;
-    background: var(--bg-dark, #0f172a);
-    color: var(--text, #f8fafc);
-    font-size: 0.78rem;
+    background: var(--bg-dark, #eef2f7);
+    color: var(--text, #0f172a);
+    font-size: 0.874rem;
 }
-.selector-material__input:focus { outline: none; border-color: var(--accent, #38bdf8); box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+.selector-material__input:focus { outline: none; border-color: var(--accent, #1d4ed8); box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.23); }
 
 .selector-material__lista {
     position: absolute;
@@ -22,10 +22,10 @@
     z-index: 3000;
     max-height: 260px;
     overflow-y: auto;
-    background: var(--panel-bg, #1e293b);
-    border: 1px solid var(--border-color, #334155);
+    background: var(--panel-bg, #ffffff);
+    border: 1px solid var(--border-color, #c3cedb);
     border-radius: 6px;
-    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.6);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
 }
 
 .selector-material--en-linea .selector-material__lista { position: static; margin-top: 4px; max-height: 200px; box-shadow: none; }
@@ -36,40 +36,40 @@
     gap: 0.1rem 0.5rem;
     padding: 0.4rem 0.6rem;
     cursor: pointer;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.2);
 }
 .selector-material__opcion:last-child { border-bottom: none; }
 .selector-material__opcion.is-activa,
-.selector-material__opcion:hover { background: rgba(56, 189, 248, 0.12); }
+.selector-material__opcion:hover { background: rgba(56, 189, 248, 0.138); }
 .selector-material__opcion.is-agregado { opacity: 0.45; cursor: default; }
 
-.selector-material__codigo { font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--accent, #38bdf8); font-weight: 700; }
-.selector-material__nombre { font-size: 0.78rem; color: var(--text, #f8fafc); font-weight: 600; }
-.selector-material__meta { grid-column: 2; font-size: 0.68rem; color: var(--text-muted, #94a3b8); }
+.selector-material__codigo { font-family: ui-monospace, monospace; font-size: 0.784rem; color: var(--accent, #1d4ed8); font-weight: 700; }
+.selector-material__nombre { font-size: 0.874rem; color: var(--text, #0f172a); font-weight: 600; }
+.selector-material__meta { grid-column: 2; font-size: 0.762rem; color: var(--text-muted, #475569); }
 
-.selector-material__vacio { padding: 0.6rem; font-size: 0.75rem; color: var(--text-muted, #94a3b8); }
-.selector-material__vacio a { color: var(--accent, #38bdf8); }
+.selector-material__vacio { padding: 0.6rem; font-size: 0.84rem; color: var(--text-muted, #475569); }
+.selector-material__vacio a { color: var(--accent, #1d4ed8); }
 
 /* Tabla editable de materiales (cantidad, anticipación, aplica a) */
-.tabla-materiales { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.72rem; }
-.tabla-materiales th { text-align: left; font-weight: 600; color: var(--text-muted, #94a3b8); padding: 0.25rem 0.3rem; border-bottom: 1px solid var(--border-color, #334155); }
-.tabla-materiales td { padding: 0.25rem 0.3rem; border-bottom: 1px solid rgba(51, 65, 85, 0.5); vertical-align: middle; }
+.tabla-materiales { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.806rem; }
+.tabla-materiales th { text-align: left; font-weight: 600; color: var(--text-muted, #475569); padding: 0.25rem 0.3rem; border-bottom: 1px solid var(--border-color, #c3cedb); }
+.tabla-materiales td { padding: 0.25rem 0.3rem; border-bottom: 1px solid rgba(15, 23, 42, 0.2); vertical-align: middle; }
 .tabla-materiales input,
 .tabla-materiales select {
     width: 100%;
     box-sizing: border-box;
     height: 26px;
     padding: 2px 4px;
-    font-size: 0.72rem;
-    background: var(--bg-dark, #0f172a);
-    color: var(--text, #f8fafc);
-    border: 1px solid var(--border-color, #334155);
+    font-size: 0.806rem;
+    background: var(--bg-dark, #eef2f7);
+    color: var(--text, #0f172a);
+    border: 1px solid var(--border-color, #c3cedb);
     border-radius: 4px;
 }
 .tabla-materiales .celda-cantidad { display: flex; align-items: center; gap: 0.3rem; }
-.tabla-materiales .celda-cantidad span { color: var(--text-muted, #94a3b8); white-space: nowrap; }
-.tabla-materiales__vacio { text-align: center; color: var(--text-muted, #94a3b8); font-style: italic; padding: 0.5rem; font-size: 0.72rem; }
-.material-inactivo { color: var(--warning, #f59e0b); font-size: 0.65rem; }
+.tabla-materiales .celda-cantidad span { color: var(--text-muted, #475569); white-space: nowrap; }
+.tabla-materiales__vacio { text-align: center; color: var(--text-muted, #475569); font-style: italic; padding: 0.5rem; font-size: 0.806rem; }
+.material-inactivo { color: var(--warning, #f59e0b); font-size: 0.78rem; }
 
 /* Chip de material requerido (cantidad + nombre) */
 .chip-material {
@@ -78,11 +78,11 @@
     gap: 0.25rem;
     padding: 0.1rem 0.45rem;
     margin: 0.1rem 0.15rem 0.1rem 0;
-    border: 1px solid rgba(34, 197, 94, 0.45);
+    border: 1px solid rgba(34, 197, 94, 0.517);
     border-radius: 999px;
-    color: #86efac;
-    font-size: 0.65rem;
+    color: #12873c;
+    font-size: 0.78rem;
     white-space: nowrap;
 }
-.chip-material--ajustado { border-color: rgba(245, 158, 11, 0.6); color: #fcd34d; }
-.chip-material--retirado { border-style: dashed; color: var(--text-muted, #94a3b8); text-decoration: line-through; }
+.chip-material--ajustado { border-color: rgba(245, 158, 11, 0.69); color: #8d6c02; }
+.chip-material--retirado { border-style: dashed; color: var(--text-muted, #475569); text-decoration: line-through; }

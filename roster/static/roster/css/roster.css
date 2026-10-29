@@ -1,13 +1,13 @@
 :root {
-    --bg-dark: #0f172a;
-    --panel-bg: #1e293b;
-    --border-color: #334155;
-    --accent: #38bdf8;
-    --text: #f8fafc;
+    --bg-dark: #eef2f7;
+    --panel-bg: #ffffff;
+    --border-color: #c3cedb;
+    --accent: #1d4ed8;
+    --text: #0f172a;
     --warning: #f59e0b;
     --success: #22c65e;
-    --danger: #ef4444;
-    --purple: #a855f7;
+    --danger: #eb1515;
+    --purple: #780be0;
 }
 
 body {
@@ -44,7 +44,7 @@ body {
 }
 
 .toolbar-title {
-    font-size: 0.85rem;
+    font-size: 0.952rem;
     font-weight: bold;
     color: var(--accent);
     display: flex;
@@ -53,12 +53,12 @@ body {
 }
 
 .kpi-badge {
-    background-color: rgba(56, 189, 248, 0.15);
+    background-color: rgba(56, 189, 248, 0.172);
     color: var(--accent);
     border: 1px solid var(--accent);
     padding: 2px 8px;
     border-radius: 12px;
-    font-size: 0.75rem;
+    font-size: 0.84rem;
 }
 
 .month-navigator {
@@ -73,7 +73,7 @@ body {
 
 .month-navigator span {
     font-weight: bold;
-    font-size: 0.85rem;
+    font-size: 0.952rem;
     color: var(--accent);
     min-width: 110px;
     text-align: center;
@@ -95,7 +95,7 @@ body {
     align-items: flex-end;
     gap: 0.75rem;
     flex-wrap: wrap;
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(15, 23, 42, 0.05);
     padding: 0.6rem 0.8rem;
     border-radius: 6px;
     border: 1px solid var(--border-color);
@@ -108,8 +108,8 @@ body {
 }
 
 label {
-    font-size: 0.68rem;
-    color: #94a3b8;
+    font-size: 0.762rem;
+    color: #475569;
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -120,7 +120,7 @@ select, input, button {
     border: 1px solid var(--border-color);
     padding: 6px 8px;
     border-radius: 6px;
-    font-size: 0.8rem;
+    font-size: 0.896rem;
     outline: none;
 }
 
@@ -130,7 +130,7 @@ select:focus, input:focus {
 
 button.btn-accent {
     background-color: var(--accent);
-    color: #0f172a;
+    color: #ffffff;
     font-weight: bold;
     border: none;
     padding: 7px 14px;
@@ -155,8 +155,8 @@ button.btn-outline {
 .leyenda {
     display: flex;
     gap: 0.4rem;
-    font-size: 0.72rem;
-    background: rgba(0, 0, 0, 0.3);
+    font-size: 0.806rem;
+    background: rgba(15, 23, 42, 0.105);
     padding: 4px 8px;
     border-radius: 6px;
     align-items: center;
@@ -183,7 +183,7 @@ table.roster-table {
     border-collapse: separate;
     border-spacing: 0;
     width: max-content;
-    font-size: 0.78rem;
+    font-size: 0.874rem;
 }
 
 th, td {
@@ -203,7 +203,7 @@ th.col-fixed, td.col-fixed {
     text-align: left;
     padding: 4px 8px;
     font-weight: 500;
-    border-right: 2px solid #475569;
+    border-right: 2px solid #94a3b8;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -223,12 +223,12 @@ th.col-fixed {
     display: table-cell;
 }
 
-th.weekend { background-color: #1e1b4b; }
+th.weekend { background-color: #f1f0fa; }
 
 tr.row-cuadrilla td {
     font-weight: bold;
     padding: 5px 10px;
-    font-size: 0.8rem;
+    font-size: 0.896rem;
     text-align: left;
     position: sticky;
     left: 0;
@@ -242,11 +242,11 @@ tr.draggable-row:active { cursor: grabbing; }
 
 tr.dragging {
     opacity: 0.4;
-    background-color: rgba(56, 189, 248, 0.2) !important;
+    background-color: rgba(56, 189, 248, 0.23) !important;
 }
 
 .drag-over {
-    background-color: rgba(56, 189, 248, 0.25) !important;
+    background-color: rgba(56, 189, 248, 0.287) !important;
     outline: 2px dashed var(--accent);
 }
 
@@ -254,7 +254,7 @@ tr.dragging {
     cursor: grab;
     margin-right: 6px;
     color: #64748b;
-    font-size: 0.85rem;
+    font-size: 0.952rem;
 }
 
 .cell-turno {
@@ -262,7 +262,7 @@ tr.dragging {
     height: 30px;
     cursor: pointer;
     font-weight: bold;
-    font-size: 0.72rem;
+    font-size: 0.806rem;
     user-select: none;
 }
 
@@ -272,44 +272,44 @@ tr.dragging {
 }
 
 /* ESTILOS TURNOS */
-.t-M { background-color: #1e3a8a; color: #93c5fd; }
-.t-T { background-color: #854d0e; color: #fef08a; }
-.t-N { background-color: #7c2d12; color: #fed7aa; }
-.t-TR { background-color: #065f46; color: #a7f3d0; }
-.t-OFF { background-color: #334155; color: #94a3b8; }
-.t-EMPTY { background-color: #0f172a; color: #475569; border: 1px dashed #475569; }
-.t-F { background-color: #7f1d1d; color: #fca5a5; border: 1px solid var(--danger); }
-.t-INC { background-color: #581c87; color: #e9d5ff; border: 1px solid var(--purple); font-size: 0.62rem; }
+.t-M { background-color: #1e3a8a; color: #046fe6; }
+.t-T { background-color: #fdf5ed; color: #847401; }
+.t-N { background-color: #fcf1ed; color: #ab5c02; }
+.t-TR { background-color: #ecfdf9; color: #11804e; }
+.t-OFF { background-color: #c3cedb; color: #475569; }
+.t-EMPTY { background-color: #eef2f7; color: #94a3b8; border: 1px dashed #94a3b8; }
+.t-F { background-color: #fae8e8; color: #d50707; border: 1px solid var(--danger); }
+.t-INC { background-color: #efe2f9; color: #5100a9; border: 1px solid var(--purple); font-size: 0.78rem; }
 
 .tag-status {
-    font-size: 0.6rem;
+    font-size: 0.78rem;
     padding: 1px 4px;
     border-radius: 3px;
     float: right;
     margin-top: 2px;
 }
-.st-ok { background: rgba(34, 198, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
-.st-pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+.st-ok { background: rgba(34, 198, 94, 0.23); color: var(--success); border: 1px solid var(--success); }
+.st-pending { background: rgba(245, 158, 11, 0.23); color: var(--warning); border: 1px solid var(--warning); }
 
 .btn-move {
-    background: rgba(255,255,255,0.1);
-    border: 1px solid #475569;
-    color: #cbd5e1;
+    background: rgba(15, 23, 42, 0.06);
+    border: 1px solid #94a3b8;
+    color: #334155;
     padding: 2px 6px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.7rem;
+    font-size: 0.784rem;
     margin-left: 10px;
 }
-.btn-move:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn-move:hover { background: var(--accent); color: #ffffff; border-color: var(--accent); }
 
 /* Nuevo estilo para el selector de turnos */
 .turno-selector {
     position: absolute;
-    background: #2c3e50;
-    border: 1px solid #34495e;
+    background: #c3cedb;
+    border: 1px solid #f2f5f8;
     border-radius: 4px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 6px rgba(15, 23, 42, 0.105);
     z-index: 1000;
     padding: 5px;
     display: flex;
@@ -319,18 +319,18 @@ tr.dragging {
 
 .turno-selector button {
     background: transparent;
-    color: white;
+    color: #0f172a;
     border: none;
     padding: 8px 12px;
     text-align: left;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 15.7px;
     transition: background 0.2s;
     width: 100%;
 }
 
 .turno-selector button:hover {
-    background: #3498db;
+    background: #217dbb;
 }
 
 /* --- Paleta Industrial (Basada en referencia visual) --- */
@@ -339,22 +339,22 @@ tr.dragging {
     text-align: center;
     transition: background-color 0.2s ease, border 0.2s ease;
     font-weight: 600;
-    font-size: 13px;
-    border: 1px solid #2c3e50;
-    color: #ffffff;
+    font-size: 14.6px;
+    border: 1px solid #c3cedb;
+    color: #0f172a;
     height: 35px;
     line-height: 35px;
 }
 
-.turno-M   { background-color: #3b82f6 !important; } /* Azul Mañana */
+.turno-M   { background-color: #0b63f3 !important; } /* Azul Mañana */
 .turno-T   { background-color: #d97706 !important; } /* Oro/Mustaza Tarde */
-.turno-N   { background-color: #92400e !important; } /* Naranja Profundo/Marrón Noche */
-.turno-TR  { background-color: #059669 !important; } /* Teal/Verde Turno Rotativo */
-.turno-OFF { background-color: #4b5563 !important; } /* Gris Descanso */
+.turno-N   { background-color: #fcece1 !important; } /* Naranja Profundo/Marrón Noche */
+.turno-TR  { background-color: #e6fdf6 !important; } /* Teal/Verde Turno Rotativo */
+.turno-OFF { background-color: #94a3b8 !important; } /* Gris Descanso */
 .turno-F   { background-color: #dc2626 !important; } /* Rojo Falta */
-.turno-INC { background-color: #7c3aed !important; } /* Morado Incapacidad */
+.turno-INC { background-color: #5f14e0 !important; } /* Morado Incapacidad */
 .turno-none { 
     background-color: transparent !important; 
-    border: 1px dashed #4b5563 !important; 
-    color: #9ca3af !important; 
+    border: 1px dashed #94a3b8 !important; 
+    color: #475569 !important; 
 }

@@ -9,6 +9,12 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Python 3.11.9 (el servidor tiene 3.12), Django 5.1, Django REST Framework 3.17 (versiones en `requirements.txt`)
 - SQLite en desarrollo; PostgreSQL en producción (variables `DB_*`, ver Comandos)
 - Frontend: plantillas Django + JavaScript puro (fetch a la API), Tailwind CSS (CDN), GSAP
+- TEMA CLARO en toda la app (desde 2026-10-29: se proyecta y el oscuro pierde resolución): fondo `#eef2f7`, paneles blancos, bordes
+  `#c3cedb`, texto `#0f172a`, tenue `#475569`, acento `#1d4ed8`; textos de color con contraste ≥ 4.5:1 sobre blanco. Las pantallas
+  con Tailwind cargan `static/core/js/tailwind-claro.js` después del CDN (invierte slate y ajusta las paletas; `data-letra="1.17"`
+  agranda text-xs…text-3xl, como en el roster). Inicio, roster y consulta bisemanal llevan letra más grande (se proyectan); el resto se
+  agrandó ~12 % (Planificación ~20 %). Letra mínima 0.78rem: no poner textos más chicos. Las gráficas usan
+  `tema: 'claro'` por omisión. No volver a introducir colores oscuros de fondo ni texto claro sin fondo de color.
 - Pruebas: pytest + pytest-django
 
 ## Comandos
@@ -17,7 +23,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
 - Entorno: `~/miniforge3/envs/venv` (Django 5.1 + Pillow + openpyxl + reportlab + psycopg2); el `venv/` del proyecto no tiene Pillow
 - Base de datos: SQLite por defecto; PostgreSQL si se define `DB_NAME` (+ `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`).
   Producción: además `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0`, `DJANGO_ALLOWED_HOSTS` y `collectstatic` (a `staticfiles/` o `DJANGO_STATIC_ROOT`, no se versiona). Las pruebas pasan en ambas.
-- Pruebas: `python manage.py test eventos.tests datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
+- Pruebas: `python manage.py test gestion.tests eventos.tests datos_proceso.tests auditoria usuarios procesos.tests` (las de `roster/tests/` requieren pytest, no instalado)
 - Datos de prueba: `python manage.py seed_roster`, `python manage.py poblar_actividades`
 
 ## Arquitectura
@@ -163,7 +169,25 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Salen en el PDF (sección «Eventos GMP») y en el Excel (hoja «Eventos GMP») del lote, dentro de la huella. API `/api/eventos/`
   (`?lote=&estado=&tipo=&desde=&hasta=&q=`, `resumen/`, `opciones/`, `<id>/cerrar/`, `<id>/anular/`); bitácora categoría EVENTO.
   Investigación y CAPA siguen en el sistema de calidad. Pruebas: `python manage.py test eventos.tests`.
-- Pantallas: /login/, /auditoria/ (bitácora), /eventos/ (eventos GMP), /retrasos/ (retrasos por lote y su origen), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
+- `gestion/`: proyectos y tareas de oficina (NO GMP: sin firma ni bitácora de auditoría; historial simple `Historial` por proyecto y se
+  borra libremente). `Proyecto` (responsable, miembros, estado, color) → `Tarea` (árbol con `padre`: con subtareas es resumen y sus fechas
+  y avance salen de ellas; fechas en días, duración en días hábiles lun–vie; hito; avance; prioridad; etiquetas; línea base `base_inicio/fin`)
+  + `Dependencia` fin a inicio con `desfase_dias` + `Columna` del Kanban (`es_final` = terminada; límite WIP) + checklist y comentarios.
+  Lógica en `gestion/services.py`: calendario hábil (`indice_habil`, `sumar_habiles`), `propagar` empuja sucesoras al cambiar fechas,
+  sin ciclos, la sucesora no inicia antes de `inicio_minimo`; ruta crítica (`_ruta_critica`, holgura en días hábiles); `detalle_proyecto`
+  calcula EDT, resúmenes, atraso contra línea base y avance esperado. 100 % ⇔ columna final. Acceso: solo usuarios web; ven y editan el
+  responsable y los miembros (y Administrador); configurar (miembros, columnas, estado, borrar) solo responsable o Administrador.
+  Por eso sus ViewSets declaran SOLO_SESION y las reglas van en services (sus botones no llevan data-permiso).
+  Para no perder información: toda función de services que modifica lleva `@con_respaldo(...)` (foto del proyecto antes del cambio,
+  `foto_proyecto`) y `anotar` la guarda en `Historial.estado_previo` (los últimos `CAMBIOS_DESHACIBLES`=100 cambios). Con ella:
+  `deshacer` (↶ y Ctrl+Z: el último cambio no deshecho del proyecto, de cualquier persona), `regresar` (a antes de un cambio del
+  historial; marca deshechos los posteriores) y `restaurar_foto` (sincroniza por id: el historial sigue ligado a sus tareas).
+  `VersionProyecto`: versiones con nombre, respaldo automático diario y otro antes de cada regreso o restauración. Borrar un proyecto
+  lo manda a la papelera (`en_papelera_desde`); solo desde ahí se elimina de verdad. Una función nueva que modifique debe llevar
+  `@con_respaldo` y llamar `anotar`.
+  API `/api/gestion/{proyectos,tareas,columnas,etiquetas,dependencias,checklist}/`; pantallas /proyectos/ (mis tareas y proyectos) y
+  /proyectos/<id>/ (Gantt SVG propio en `gestion/js/gantt.js` con arrastre, y tablero en `tablero.js`). Pruebas: `python manage.py test gestion.tests`.
+- Pantallas: /login/, /proyectos/ (proyectos y tareas de oficina), /auditoria/ (bitácora), /eventos/ (eventos GMP), /retrasos/ (retrasos por lote y su origen), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales),
   /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos), /parametros/ (catálogo de parámetros de proceso),
   /graficas/ (gráficas de proceso e indicadores; acepta ?proceso=&lotes=)

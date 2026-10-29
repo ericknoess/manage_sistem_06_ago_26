@@ -145,6 +145,17 @@
         </section>
 
         <div class="grupos-secundarios">
+            <section class="grupo grupo--oficina">
+                <h2 class="grupo-titulo">Oficina (no GMP)</h2>
+                <a class="app-card" href="{% url 'gestion-proyectos' %}">
+                    <span class="app-icono">🗂️</span>
+                    <span class="app-texto">
+                        <span class="app-nombre">Proyectos y tareas</span>
+                        <span class="app-desc">Mis tareas, seguimiento de proyectos con Gantt (dependencias, ruta crítica, línea base) y tableros Kanban.</span>
+                    </span>
+                </a>
+            </section>
+
             <section class="grupo grupo--personal">
                 <h2 class="grupo-titulo">Personal y turnos</h2>
                 <a class="app-card" href="{% url 'roster_dashboard' %}">

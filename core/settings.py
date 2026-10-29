@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'usuarios',
     'auditoria',
     'eventos',
+    'gestion',
 ]
 
 MIDDLEWARE = [

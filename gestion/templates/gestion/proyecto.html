@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proyecto - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'gestion/css/gestion.css' %}">
+    <link rel="stylesheet" href="{% static 'gestion/css/proyecto.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body data-proyecto="{{ view.kwargs.pk }}">
+
+    <header class="page-header gq-cabecera">
+        <div class="header-title">
+            <div class="gq-migas">
+                <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+                <a href="{% url 'gestion-proyectos' %}" class="btn-secundario">← Proyectos</a>
+            </div>
+            <h2 id="nombreProyecto">Cargando…</h2>
+            <p id="detalleProyecto"></p>
+        </div>
+        <div id="resumenProyecto" class="gq-resumen" aria-label="Resumen del proyecto"></div>
+    </header>
+
+    <section class="barra-herramientas gq-barra" aria-label="Vista y filtros">
+        <div class="g-pestanas" role="tablist">
+            <button type="button" role="tab" id="pestanaGantt" data-vista="gantt" onclick="cambiarVista('gantt')">📊 Gantt</button>
+            <button type="button" role="tab" id="pestanaTablero" data-vista="tablero" onclick="cambiarVista('tablero')">🗂️ Tablero</button>
+        </div>
+        <div class="grupo-filtros">
+            <input type="search" id="filtroTexto" placeholder="🔎 Buscar tarea…" oninput="repintar()">
+            <select id="filtroResponsable" onchange="repintar()" aria-label="Responsable"><option value="">Todos</option></select>
+            <select id="filtroEtiqueta" onchange="repintar()" aria-label="Etiqueta"><option value="">Todas las etiquetas</option></select>
+            <span class="gq-solo-gantt">
+                <select id="escalaGantt" onchange="cambiarEscala(this.value)" aria-label="Escala">
+                    <option value="dia">Días</option><option value="semana">Semanas</option><option value="mes">Meses</option>
+                </select>
+                <label class="g-check"><input type="checkbox" id="verCritica" onchange="repintar()"> Ruta crítica</label>
+                <label class="g-check"><input type="checkbox" id="verBase" onchange="repintar()"> Línea base</label>
+                <button type="button" class="btn-secundario" onclick="irAHoy()">Hoy</button>
+            </span>
+        </div>
+        <div class="gq-acciones">
+            <button type="button" class="btn-primario" onclick="abrirTarea(null)">+ Tarea</button>
+            <button type="button" class="btn-secundario" id="botonDeshacer" onclick="deshacerUltimo()" disabled>↶ Deshacer</button>
+            <button type="button" class="btn-secundario" onclick="guardarLineaBase()" title="Copia las fechas actuales como lo planeado, para medir el atraso">📌 Línea base</button>
+            <button type="button" class="btn-secundario" onclick="verHistorial()" title="Quién cambió qué y cuándo; regresar el proyecto a un punto">🕘 Historial</button>
+            <button type="button" class="btn-secundario" onclick="verVersiones()" title="Guardar y restaurar versiones del proyecto">💾 Versiones</button>
+            <button type="button" class="btn-secundario" onclick="configurar()">⚙ Configurar</button>
+        </div>
+    </section>
+
+    <div id="avisoPapelera" class="gq-papelera" hidden></div>
+
+    <main id="vista" class="gq-vista"><div class="estado-vacio">Cargando…</div></main>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'gestion/js/comun.js' %}"></script>
+    <script src="{% static 'gestion/js/gantt.js' %}"></script>
+    <script src="{% static 'gestion/js/tablero.js' %}"></script>
+    <script src="{% static 'gestion/js/proyecto.js' %}"></script>
+</body>
+</html>

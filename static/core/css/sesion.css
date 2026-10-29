@@ -14,29 +14,29 @@
     gap: 0.5rem;
     max-width: 100%;
     padding: 0.25rem 0.3rem 0.25rem 0.75rem;
-    border: 1px solid #334155;
+    border: 1px solid #c3cedb;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.75);
-    color: #f8fafc;
+    background: rgba(15, 23, 42, 0.05);
+    color: #0f172a;
     font-family: system-ui, -apple-system, sans-serif;
-    font-size: 0.74rem;
+    font-size: 0.829rem;
     line-height: 1.2;
     white-space: nowrap;
 }
 .sesion-chip__usuario { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-.sesion-chip__rol { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; }
+.sesion-chip__rol { color: #475569; overflow: hidden; text-overflow: ellipsis; }
 .sesion-chip__salir { margin: 0; }
 .sesion-chip__salir button {
     padding: 0.2rem 0.65rem;
-    border: 1px solid #475569;
+    border: 1px solid #94a3b8;
     border-radius: 999px;
     background: transparent;
-    color: #cbd5e1;
-    font-size: 0.7rem;
+    color: #334155;
+    font-size: 0.784rem;
     font-weight: 600;
     cursor: pointer;
 }
-.sesion-chip__salir button:hover { border-color: #ef4444; color: #fca5a5; }
+.sesion-chip__salir button:hover { border-color: #eb1515; color: #d50707; }
 
 .sesion-chip--flotante { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 2000; }
 
@@ -47,13 +47,13 @@
     z-index: 3000;
     max-width: min(520px, calc(100vw - 2rem));
     padding: 0.7rem 1rem;
-    border: 1px solid rgba(245, 158, 11, 0.6);
+    border: 1px solid rgba(245, 158, 11, 0.69);
     border-radius: 8px;
-    background: #1e293b;
-    color: #fcd34d;
+    background: #ffffff;
+    color: #8d6c02;
     font-family: system-ui, -apple-system, sans-serif;
-    font-size: 0.8rem;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    font-size: 0.896rem;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.175);
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, 10px);

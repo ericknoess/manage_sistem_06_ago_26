@@ -357,7 +357,7 @@ function agregarFilaRolBuilder(modo, rolId = '', cantidad = 1) {
     const row = document.createElement('div');
     row.className = 'role-row-builder';
 
-    let selectHtml = `<select class="select-rol-item" style="flex: 2; height: 26px; font-size: 0.7rem; padding: 2px;">`;
+    let selectHtml = `<select class="select-rol-item" style="flex: 2; height: 26px; font-size: 0.784rem; padding: 2px;">`;
     selectHtml += `<option value="">-- Seleccionar Rol / Competencia --</option>`;
     rolesGlobales.forEach(r => {
         const selected = (r.id == rolId) ? 'selected' : '';
@@ -367,7 +367,7 @@ function agregarFilaRolBuilder(modo, rolId = '', cantidad = 1) {
 
     row.innerHTML = `
         ${selectHtml}
-        <input type="number" class="input-rol-cantidad" value="${cantidad}" min="1" step="1" style="width: 50px; height: 26px; font-size: 0.7rem; padding: 2px;" placeholder="Cant">
+        <input type="number" class="input-rol-cantidad" value="${cantidad}" min="1" step="1" style="width: 50px; height: 26px; font-size: 0.784rem; padding: 2px;" placeholder="Cant">
         <button type="button" class="btn-icon delete" title="Eliminar fila" style="height: 26px; line-height: 1;" onclick="this.parentElement.remove()">🗑️</button>
     `;
     container.appendChild(row);
@@ -424,7 +424,7 @@ function toggleVistaArchivados() {
     const btn = document.getElementById('btnToggleArchivados');
     if (mostrandoArchivados) {
         btn.style.backgroundColor = 'var(--warning)';
-        btn.style.color = '#0f172a';
+        btn.style.color = '#ffffff';
         btn.innerText = '📂 Activos';
     } else {
         btn.style.backgroundColor = '';
@@ -446,7 +446,7 @@ function renderizarListaProcesos() {
     const listaFiltrada = procesosGlobales.filter(p => mostrandoArchivados ? p.activo === false : p.activo !== false);
 
     if (listaFiltrada.length === 0) {
-        container.innerHTML = `<div class="empty-state" style="padding:1.5rem; text-align:center; font-size:0.75rem; color:var(--text-muted);">No hay plantillas ${mostrandoArchivados ? 'archivadas' : 'activas'}.</div>`;
+        container.innerHTML = `<div class="empty-state" style="padding:1.5rem; text-align:center; font-size:0.84rem; color:var(--text-muted);">No hay plantillas ${mostrandoArchivados ? 'archivadas' : 'activas'}.</div>`;
         return;
     }
 
@@ -701,7 +701,7 @@ function renderizarCPMConHolguras(cpmData) {
                 : `<span class="tag-resource" style="border-color:var(--success); color:var(--success);">✅ Holgura: ${t.holgura}h</span>`;
 
             let subTxtFrecuencia = (t.tipo_operacion === 'INCUBACION' && frecMuestreo > 0) 
-                ? `<br><span style="font-size:0.65rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h,${opsMuestreo}Op)</span>` 
+                ? `<br><span style="font-size: 0.78rem; color:var(--incubation);">Muestreos: c/${frecMuestreo}h (${durMuestreo}h,${opsMuestreo}Op)</span>` 
                 : '';
 
             let badgesRolesHtml = '';
@@ -731,7 +731,7 @@ function renderizarCPMConHolguras(cpmData) {
                 <td style="cursor: grab;" title="Arrastrar para reordenar">⠿ <strong>#${item.globalIndex}</strong><br><span style="color:var(--accent);">${t.identificador_paso}</span></td>
                 <td><strong>${t.nombre}</strong></td>
                 <td>⏱️ ${t.duracion_horas}h${subTxtFrecuencia}</td>
-                <td><span style="font-size:0.65rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
+                <td><span style="font-size: 0.78rem; color:var(--text-muted);">ES:${t.es}h | LS:${t.ls}h</span><br>${holguraBadge}</td>
                 <td>
                     ${badgesRolesHtml}
                     ${chipsEquipos}
@@ -832,7 +832,7 @@ function renderizarGanttAvanzado(cpmData) {
 
     timelineHeader.style.width = `${anchoTotal}px`;
     timelineBody.style.width = `${anchoTotal}px`;
-    timelineBody.style.backgroundImage = `linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px)`;
+    timelineBody.style.backgroundImage = `linear-gradient(to right, rgba(15,23,42,0.07) 1px, transparent 1px)`;
     timelineBody.style.backgroundSize = `${PIXELES_POR_HORA}px 100%`;
 
     // Construir encabezado de marcas de tiempo
@@ -1376,7 +1376,7 @@ async function ejecutarValidacionGxpAPI() {
 
         let html = `
             <div style="margin-bottom: 1rem; text-align: center;">${globalBadge}</div>
-            <div style="font-size: 0.72rem; color: var(--text-muted); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem; margin-bottom: 0.3rem;">
+            <div style="font-size: 0.806rem; color: var(--text-muted); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3rem; margin-bottom: 0.3rem;">
                 <strong>Rol/Competencia</strong>
                 <strong style="text-align:center;">Requerido</strong>
                 <strong style="text-align:center;">Disponible</strong>
@@ -1386,8 +1386,8 @@ async function ejecutarValidacionGxpAPI() {
 
         data.detalles.forEach(det => {
             let estadoHtml = det.cumplido 
-                ? `<span class="status-badge status-ok" style="font-size: 0.6rem;">OK</span>`
-                : `<span class="status-badge status-fail" style="font-size: 0.6rem;">Faltan ${det.brecha}</span>`;
+                ? `<span class="status-badge status-ok" style="font-size: 0.78rem;">OK</span>`
+                : `<span class="status-badge status-fail" style="font-size: 0.78rem;">Faltan ${det.brecha}</span>`;
 
             html += `
                 <div class="validation-row">

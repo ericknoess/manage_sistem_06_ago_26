@@ -12,7 +12,7 @@
     color: var(--text);
     font: inherit;
     font-weight: 400;
-    font-size: 0.8rem;
+    font-size: 0.896rem;
     resize: vertical;
 }
 .campo textarea:focus { outline: none; border-color: var(--accent); }
@@ -21,8 +21,8 @@
 .ayuda-formula { display: block; margin-top: 0.3rem; color: var(--text-muted); line-height: 1.5; }
 .ayuda-formula code, .celda-formula code {
     font-family: ui-monospace, monospace;
-    color: #a5f3fc;
-    background: rgba(56, 189, 248, 0.08);
+    color: #058290;
+    background: rgba(56, 189, 248, 0.092);
     padding: 0 0.25rem;
     border-radius: 3px;
 }
@@ -32,7 +32,7 @@
     padding: 0.5rem 0.6rem;
     border: 1px dashed var(--border-color);
     border-radius: 6px;
-    font-size: 0.72rem;
+    font-size: 0.806rem;
     color: var(--text-muted);
     font-weight: 400;
 }
@@ -48,17 +48,17 @@
     background: var(--bg-dark);
     color: var(--text);
 }
-.probador__resultado { color: #86efac; font-weight: 700; }
-.probador__error { color: #fca5a5; }
+.probador__resultado { color: #12873c; font-weight: 700; }
+.probador__error { color: #d50707; }
 
-.celda-formula { max-width: 320px; font-size: 0.72rem; color: var(--text-muted); }
+.celda-formula { max-width: 320px; font-size: 0.806rem; color: var(--text-muted); }
 .etiqueta-calculado {
     display: inline-block;
     margin-right: 0.3rem;
     padding: 0 0.35rem;
     border-radius: 999px;
-    border: 1px solid rgba(168, 85, 247, 0.6);
-    color: #d8b4fe;
-    font-size: 0.62rem;
+    border: 1px solid rgba(120, 11, 224, 0.66);
+    color: #6303c9;
+    font-size: 0.78rem;
     font-weight: 700;
 }

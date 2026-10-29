@@ -190,7 +190,7 @@ function renderGrillaDiaria() {
     const lotesUnicos = Array.from(lotesIdsMap, ([id, codigo]) => ({ id, codigo }));
 
     if (lotesUnicos.length === 0) {
-        grid.innerHTML = `<div class="empty-state" style="margin-top:4rem; font-size:1rem;">☕ No hay actividades programadas para este día.</div>`;
+        grid.innerHTML = `<div class="empty-state" style="margin-top:4rem; font-size:1.2rem;">☕ No hay actividades programadas para este día.</div>`;
         return;
     }
 
@@ -210,7 +210,7 @@ function renderGrillaDiaria() {
 
     html += `<div class="gantt-header-cell time-col"></div>`;
     lotesUnicos.forEach(lote => {
-        html += `<div class="gantt-header-cell">LOTE DE PRODUCCIÓN<span style="color:white; font-size:0.9rem;">${lote.codigo}</span></div>`;
+        html += `<div class="gantt-header-cell">LOTE DE PRODUCCIÓN<span style="color:var(--text); font-size:1.08rem;">${lote.codigo}</span></div>`;
     });
 
     html += `<div class="gantt-time-ruler">`;
@@ -286,7 +286,7 @@ function renderGrillaSemanal() {
         tasksContainer.className = 'day-tasks';
 
         const fasesDia = fasesGlobales.filter(f => f.fecha_programada === dia.fecha && (f.tipo_operacion !== 'INCUBACION' || f.es_subtarea_muestreo === true));
-        if (fasesDia.length === 0) tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.65rem; margin-top:1rem;">Sin programación</div>`;
+        if (fasesDia.length === 0) tasksContainer.innerHTML = `<div style="text-align:center; color:#475569; font-size:0.8rem; margin-top:1rem;">Sin programación</div>`;
 
         fasesDia.forEach(f => {
             const estaIniciada = ['EN_PROGRESO', 'COMPLETADA'].includes(f.estado);
@@ -316,9 +316,9 @@ function renderGrillaSemanal() {
             card.innerHTML = `
                 <div class="task-time"><span>⏰ ${formatearRangoFase(f.inicio_programado, f.fin_programado)}</span> <span style="color:var(--text-muted);">${f.estado}</span></div>
                 <div class="task-title">[${f.operacion_id_paso}] ${f.operacion_nombre}</div>
-                <div style="font-size:0.6rem; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
+                <div style="font-size:0.8rem; color:#475569; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.2rem;">
                     <span>Lote: ${f.lote_codigo}</span>
-                    <div style="display:flex; gap:0.25rem; align-items:center;">${insigniaAlertas(f.id)}${delayHtml}${insigniaEquipos(f)}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
+                    <div style="display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap;">${insigniaAlertas(f.id)}${delayHtml}${insigniaEquipos(f)}<span class="badge-headcount">👥 ${opsDetalles.length}/${headcountReq}</span></div>
                 </div>
                 ${assigneesHTML}
             `;
@@ -448,12 +448,12 @@ function renderPanelDetalle(faseId) {
             const tDia = opData.turnos.find(t => t.fecha === fechaTurno);
             // Si no se cargó el turno de hoy, el aviso "sin turno" lo da el servidor en las alertas de la fase
             if ((!tDia && !vent.retrasada) || (tDia && tDia.codigo_turno === 'OFF')) {
-                advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;">[⚠️ DÍA OFF]</span>`;
+                advertenciaUI = `<span style="font-size:0.84rem; font-weight:bold; margin-left:4px;">[⚠️ DÍA OFF]</span>`;
                 extraClass = 'danger-chip';
             } else {
                 const conf = checkConflictosOperador(a.operador, fase);
                 if (conf) {
-                    advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;" title="${conf}">[⚠️ CRUCE]</span>`;
+                    advertenciaUI = `<span style="font-size:0.84rem; font-weight:bold; margin-left:4px;" title="${conf}">[⚠️ CRUCE]</span>`;
                     extraClass = 'warning-chip';
                 }
             }
@@ -497,7 +497,7 @@ function renderPanelDetalle(faseId) {
 
             <div class="resource-section">
                 <div class="resource-title">OPERADORES ASIGNADOS:</div>
-                <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.65rem;">Sin operador</span>'}</div>
+                <div class="resource-tags-container">${operadoresChips || '<span style="color:#64748b; font-size:0.8rem;">Sin operador</span>'}</div>
             </div>
 
             <div class="resource-section">

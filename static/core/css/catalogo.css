@@ -1,15 +1,15 @@
 /* static/core/css/catalogo.css — Pantallas de catálogo maestro (materiales, equipos): filtros, tabla y modal de alta/edición */
 
 :root {
-    --bg-dark: #0f172a;
-    --panel-bg: #1e293b;
-    --border-color: #334155;
-    --accent: #38bdf8;
-    --text: #f8fafc;
-    --text-muted: #94a3b8;
+    --bg-dark: #eef2f7;
+    --panel-bg: #ffffff;
+    --border-color: #c3cedb;
+    --accent: #1d4ed8;
+    --text: #0f172a;
+    --text-muted: #475569;
     --warning: #f59e0b;
     --success: #22c65e;
-    --danger: #ef4444;
+    --danger: #eb1515;
 }
 
 * { box-sizing: border-box; }
@@ -37,23 +37,23 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 8px;
 }
-.header-title h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+.header-title h2 { margin: 0; font-size: 1.166rem; color: var(--accent); }
 .header-enlaces { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .btn-secundario, .btn-primario {
     height: 32px;
     padding: 0 0.85rem;
     border-radius: 6px;
-    font-size: 0.75rem;
+    font-size: 0.84rem;
     font-weight: 700;
     cursor: pointer;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
 }
-.btn-secundario { border: 1px solid var(--border-color); background: rgba(15, 23, 42, 0.6); color: var(--text); }
+.btn-secundario { border: 1px solid #94a3b8; background: #ffffff; color: var(--text); }
 .btn-secundario:hover { border-color: var(--accent); color: var(--accent); }
-.btn-primario { border: none; background: var(--accent); color: #0f172a; }
+.btn-primario { border: none; background: var(--accent); color: #ffffff; }
 .btn-primario:hover { filter: brightness(1.1); }
 
 .barra-herramientas {
@@ -75,45 +75,45 @@ body {
     border-radius: 6px;
     background: var(--bg-dark);
     color: var(--text);
-    font-size: 0.75rem;
+    font-size: 0.84rem;
 }
 .grupo-filtros input:focus, .grupo-filtros select:focus { outline: none; border-color: var(--accent); }
 #filtroTexto { width: 300px; }
-.conteo { font-size: 0.72rem; color: var(--text-muted); margin-left: 0.3rem; }
+.conteo { font-size: 0.806rem; color: var(--text-muted); margin-left: 0.3rem; }
 
 .panel { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
 .tabla-contenedor { overflow: auto; max-height: calc(100vh - 230px); }
-.tabla-catalogo { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+.tabla-catalogo { width: 100%; border-collapse: collapse; font-size: 0.851rem; }
 .tabla-catalogo th {
     position: sticky;
     top: 0;
     z-index: 1;
     padding: 0.55rem 0.7rem;
     text-align: left;
-    background: #172033;
+    background: #ffffff;
     color: var(--text-muted);
-    font-size: 0.68rem;
+    font-size: 0.762rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
 }
-.tabla-catalogo td { padding: 0.5rem 0.7rem; border-bottom: 1px solid rgba(51, 65, 85, 0.5); }
-.tabla-catalogo tbody tr:hover { background: rgba(56, 189, 248, 0.05); }
+.tabla-catalogo td { padding: 0.5rem 0.7rem; border-bottom: 1px solid rgba(15, 23, 42, 0.2); }
+.tabla-catalogo tbody tr:hover { background: rgba(56, 189, 248, 0.057); }
 .col-codigo { font-family: ui-monospace, monospace; color: var(--accent); font-weight: 700; white-space: nowrap; }
 .col-acciones { text-align: center; white-space: nowrap; width: 90px; }
 .fila-inactiva td { color: var(--text-muted); }
 .fila-inactiva strong { text-decoration: line-through; }
-.sin-dato { color: #475569; }
+.sin-dato { color: #94a3b8; }
 .estado-vacio { padding: 1.5rem; text-align: center; color: var(--text-muted); font-style: italic; }
 
-.estado { padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700; border: 1px solid; }
-.estado--activo { color: #86efac; border-color: rgba(34, 197, 94, 0.5); }
+.estado { padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700; border: 1px solid; }
+.estado--activo { color: #12873c; border-color: rgba(34, 197, 94, 0.575); }
 .estado--inactivo { color: var(--text-muted); border-color: var(--border-color); }
 
-.btn-icono { background: none; border: 1px solid transparent; border-radius: 4px; padding: 0.15rem 0.3rem; cursor: pointer; font-size: 0.85rem; }
-.btn-icono:hover { border-color: var(--border-color); background: rgba(255, 255, 255, 0.05); }
+.btn-icono { background: none; border: 1px solid transparent; border-radius: 4px; padding: 0.15rem 0.3rem; cursor: pointer; font-size: 0.952rem; }
+.btn-icono:hover { border-color: var(--border-color); background: rgba(15, 23, 42, 0.03); }
 
 /* Modal de alta / edición */
 .modal-content {
@@ -128,10 +128,10 @@ body {
     background: var(--panel-bg);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.175);
 }
 .formulario { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.campo { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+.campo { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.784rem; color: var(--text-muted); font-weight: 600; }
 .campo--ancho { grid-column: span 2; }
 .campo input, .campo select {
     height: 32px;
@@ -140,14 +140,14 @@ body {
     border-radius: 6px;
     background: var(--bg-dark);
     color: var(--text);
-    font-size: 0.8rem;
+    font-size: 0.896rem;
 }
 .campo input:focus, .campo select:focus { outline: none; border-color: var(--accent); }
 .campo input[readonly] { opacity: 0.6; cursor: not-allowed; }
-.campo small { font-weight: 400; font-size: 0.64rem; }
+.campo small { font-weight: 400; font-size: 0.78rem; }
 .campo--check { grid-column: span 2; flex-direction: row; align-items: center; gap: 0.5rem; color: var(--text); }
 .campo--check input { height: auto; }
-.error-formulario { padding: 0.5rem 0.7rem; border: 1px solid rgba(239, 68, 68, 0.6); border-radius: 6px; background: rgba(239, 68, 68, 0.1); color: #fca5a5; font-size: 0.75rem; }
+.error-formulario { padding: 0.5rem 0.7rem; border: 1px solid rgba(239, 68, 68, 0.69); border-radius: 6px; background: rgba(239, 68, 68, 0.115); color: #d50707; font-size: 0.84rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 @media (max-width: 700px) {

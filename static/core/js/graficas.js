@@ -14,7 +14,7 @@
 //       alElegirSerie: (id) => {},     // clic sobre una línea o un punto
 //       textoPunto: (serie, punto) => html,   // detalle del punto (si no trae `texto`)
 //       textoX: 'Edad del lote (h)', alto: 260,
-//       tema: 'oscuro' | 'claro',      // claro = fondo blanco (usa COLORES_SERIES_CLARO para las series)
+//       tema: 'claro' | 'oscuro',      // claro (por omisión, toda la app es clara) = fondo blanco con COLORES_SERIES_CLARO
 //       tipoX: 'numero' | 'fecha',     // fecha: x en segundos epoch; marcas y guía con fecha y hora
 //       rangoX: [x0, x1] | null,       // rango fijo (gráficas apiladas alineadas); el zoom lo sustituye
 //       grupoGuia: 'nombre',           // las gráficas del mismo grupo mueven juntas su guía vertical
@@ -137,7 +137,7 @@
     window.graficaLineas = function (contenedor, opciones) {
         const {
             series = [], vivo = null, curva = [], objetivo = null, limites = null, banda = false, mostrarPuntos = true,
-            zoom = null, alZoom = null, alElegirSerie = null, textoPunto = null, textoX = 'Edad (h)', alto = 260, tema = 'oscuro',
+            zoom = null, alZoom = null, alElegirSerie = null, textoPunto = null, textoX = 'Edad (h)', alto = 260, tema = 'claro',
             tipoX = 'numero', rangoX = null, grupoGuia = null, animar = false, ejesY = null, rangoY = null, escalaX = null, escalaY = null,
         } = opciones;
         const textoEjeX = tipoX === 'fecha' ? fechaCorta : (v) => `${corto(v)} h`;

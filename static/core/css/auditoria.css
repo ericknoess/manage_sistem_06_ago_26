@@ -3,43 +3,43 @@
 .aud-linea { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .aud-evento {
     padding: 0.5rem 0.65rem;
-    border: 1px solid #334155;
+    border: 1px solid #c3cedb;
     border-left: 3px solid #64748b;
     border-radius: 6px;
-    background: rgba(15, 23, 42, 0.55);
-    font-size: 0.74rem;
-    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.055);
+    font-size: 0.829rem;
+    color: #1e293b;
 }
-.aud-evento--lote { border-left-color: #38bdf8; }
+.aud-evento--lote { border-left-color: #1d4ed8; }
 .aud-evento--fase { border-left-color: #22c55e; }
-.aud-evento--asignacion { border-left-color: #a855f7; }
+.aud-evento--asignacion { border-left-color: #780be0; }
 .aud-evento--material_lote { border-left-color: #f59e0b; }
-.aud-evento--receta { border-left-color: #c084fc; }
-.aud-evento--sesion { border-left-color: #475569; }
+.aud-evento--receta { border-left-color: #7506e5; }
+.aud-evento--sesion { border-left-color: #94a3b8; }
 
 .aud-evento__cabecera { display: flex; gap: 0.4rem; align-items: flex-start; }
 .aud-evento__icono { flex-shrink: 0; }
 .aud-evento__descripcion { font-weight: 600; line-height: 1.3; }
-.aud-evento__meta { margin-top: 0.2rem; font-size: 0.66rem; color: #94a3b8; }
-.aud-evento__meta strong { color: #cbd5e1; }
-.aud-motivo { margin-top: 0.25rem; font-size: 0.68rem; color: #fcd34d; }
+.aud-evento__meta { margin-top: 0.2rem; font-size: 0.78rem; color: #475569; }
+.aud-evento__meta strong { color: #334155; }
+.aud-motivo { margin-top: 0.25rem; font-size: 0.762rem; color: #8d6c02; }
 
-.aud-cambios { list-style: none; margin: 0.3rem 0 0; padding: 0; font-size: 0.68rem; color: #cbd5e1; }
+.aud-cambios { list-style: none; margin: 0.3rem 0 0; padding: 0; font-size: 0.762rem; color: #334155; }
 .aud-cambios li { line-height: 1.45; }
-.aud-campo { color: #94a3b8; }
-.aud-antes { color: #fca5a5; text-decoration: line-through; text-decoration-color: rgba(252, 165, 165, 0.5); }
-.aud-nuevo { color: #86efac; }
-.aud-vacio { padding: 0.6rem; font-size: 0.72rem; font-style: italic; color: #64748b; }
+.aud-campo { color: #475569; }
+.aud-antes { color: #d50707; text-decoration: line-through; text-decoration-color: rgba(213, 7, 7, 0.55); }
+.aud-nuevo { color: #12873c; }
+.aud-vacio { padding: 0.6rem; font-size: 0.806rem; font-style: italic; color: #64748b; }
 
 /* Firma electrónica ligada al registro */
 .aud-firma {
     margin-top: 0.35rem;
     padding: 0.3rem 0.5rem;
-    border: 1px dashed rgba(56, 189, 248, 0.5);
+    border: 1px dashed rgba(56, 189, 248, 0.575);
     border-radius: 5px;
-    background: rgba(56, 189, 248, 0.06);
-    font-size: 0.66rem;
-    color: #bae6fd;
+    background: rgba(56, 189, 248, 0.069);
+    font-size: 0.78rem;
+    color: #067ab7;
 }
-.aud-firma strong { color: #f0f9ff; }
-.aud-firma__comentario { margin-top: 0.15rem; color: #94a3b8; font-style: italic; }
+.aud-firma strong { color: #0f172a; }
+.aud-firma__comentario { margin-top: 0.15rem; color: #475569; font-style: italic; }

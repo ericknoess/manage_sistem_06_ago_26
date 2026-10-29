@@ -69,8 +69,8 @@ function procesarYRenderizar(lotes) {
         const isToday = currentDay.toISOString().split('T')[0] === todayStr;
         headerHtml.push(`
             <div class="day-tick ${isToday ? 'today' : ''}">
-                <span style="font-weight:bold; font-size:0.75rem;">${currentDay.getDate()} ${nombresMeses[currentDay.getMonth()]}</span>
-                <span style="font-size:0.6rem;">${nombresDias[currentDay.getDay()]}</span>
+                <span style="font-weight:bold; font-size:0.84rem;">${currentDay.getDate()} ${nombresMeses[currentDay.getMonth()]}</span>
+                <span style="font-size: 0.78rem;">${nombresDias[currentDay.getDay()]}</span>
             </div>
         `);
         currentDay.setDate(currentDay.getDate() + 1);
@@ -94,7 +94,7 @@ function procesarYRenderizar(lotes) {
         const avisoSinEtapas = lote.sinEtapas
             ? ` <span class="aviso-sin-etapas" title="La receta no tiene etapas ISA-88: se muestra una fila por actividad. Defínelas en el Diseñador de procesos.">⚠️</span>`
             : '';
-        sidebarHtml += `<div class="lote-group-header">📦 ${lote.identificador_lote}${avisoSinEtapas} <span style="font-size:0.6rem; color:var(--${badgeLote}); border:1px solid; border-radius:3px; padding:1px 3px; float:right;">${lote.estado}</span></div>`;
+        sidebarHtml += `<div class="lote-group-header">📦 ${lote.identificador_lote}${avisoSinEtapas} <span style="font-size: 0.78rem; color:var(--${badgeLote}); border:1px solid; border-radius:3px; padding:1px 3px; float:right;">${lote.estado}</span></div>`;
         rowsHtml += `<div class="lote-row-spacer"></div>`;
 
         lote.etapasSummary.forEach(etapa => {

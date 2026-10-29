@@ -24,6 +24,8 @@ urlpatterns = [
     path('', include('datos_proceso.urls')),
     # Eventos GMP del lote: reporte en planta, evaluación de Calidad e informe
     path('', include('eventos.urls')),
+    # Proyectos, tareas de oficina y tableros Kanban (no GMP)
+    path('', include('gestion.urls')),
 ]
 
 # Configuración para servir archivos multimedia en entorno de desarrollo (DEBUG = True)

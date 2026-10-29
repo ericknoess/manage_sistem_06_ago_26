@@ -1,0 +1,54 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proyectos y tareas - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'gestion/css/gestion.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>🗂️ Proyectos y tareas</h2>
+            <p>Tareas de oficina y seguimiento de proyectos con Gantt y tablero Kanban. No es un registro GMP: se edita y se borra libremente.</p>
+        </div>
+        <nav class="header-enlaces">
+            <button type="button" class="btn-primario" onclick="nuevoProyecto()">+ Nuevo proyecto o tablero</button>
+        </nav>
+    </header>
+
+    <main class="gp-layout">
+        <section class="panel gp-mias" aria-labelledby="tituloMias">
+            <div class="gp-panel-titulo"><h3 id="tituloMias">✅ Mis tareas</h3><span id="conteoMias" class="conteo"></span></div>
+            <div id="misTareas" class="gp-mias__cuerpo"><div class="estado-vacio">Cargando…</div></div>
+        </section>
+
+        <section class="gp-proyectos" aria-labelledby="tituloProyectos">
+            <div class="gp-barra">
+                <h3 id="tituloProyectos">Proyectos y tableros</h3>
+                <div class="grupo-filtros">
+                    <input type="search" id="filtroProyecto" placeholder="🔎 Buscar proyecto…" oninput="pintarProyectos()">
+                    <select id="verProyectos" onchange="cargarProyectos()" aria-label="Qué proyectos ver">
+                        <option value="">Activos, en pausa y terminados</option>
+                        <option value="archivados">Incluir archivados</option>
+                        <option value="papelera">🗑 Papelera</option>
+                    </select>
+                </div>
+            </div>
+            <div id="listaProyectos" class="gp-rejilla"><div class="estado-vacio">Cargando…</div></div>
+        </section>
+    </main>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'gestion/js/comun.js' %}"></script>
+    <script src="{% static 'gestion/js/proyectos.js' %}"></script>
+</body>
+</html>

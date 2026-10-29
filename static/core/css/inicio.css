@@ -1,17 +1,18 @@
 /* static/core/css/inicio.css — página central de acceso a las aplicaciones */
 
 :root {
-    --bg-dark: #0f172a;
-    --panel-bg: #1e293b;
-    --border-color: #334155;
-    --accent: #38bdf8;
-    --text: #f8fafc;
-    --text-muted: #94a3b8;
-    --diseno: #a855f7;
-    --planificacion: #38bdf8;
-    --ejecucion: #22c55e;
-    --personal: #f59e0b;
-    --admin: #64748b;
+    --bg-dark: #eef2f7;
+    --panel-bg: #ffffff;
+    --border-color: #c3cedb;
+    --accent: #1d4ed8;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --diseno: #780be0;
+    --planificacion: #1d4ed8;
+    --ejecucion: #15803d;
+    --personal: #c2410c;
+    --admin: #475569;
+    --oficina: #c82361;
 }
 
 * { box-sizing: border-box; }
@@ -38,17 +39,17 @@ body {
 
 .inicio-eyebrow {
     margin: 0 0 0.35rem;
-    font-size: 0.72rem;
+    font-size: 0.82rem;
     font-weight: bold;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent);
 }
 
-.inicio-header h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); }
-.inicio-subtitulo { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--text-muted); }
+.inicio-header h1 { margin: 0; font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
+.inicio-subtitulo { margin: 0.4rem 0 0; font-size: 1rem; color: var(--text-muted); }
 .inicio-subtitulo strong { color: var(--text); }
-.inicio-fecha { font-size: 0.8rem; color: var(--text-muted); }
+.inicio-fecha { font-size: 0.95rem; color: var(--text-muted); }
 
 /* --- INDICADORES --- */
 .inicio-indicadores {
@@ -68,8 +69,8 @@ body {
     gap: 0.2rem;
 }
 
-.indicador-valor { font-size: 1.6rem; font-weight: bold; font-variant-numeric: tabular-nums; }
-.indicador-etiqueta { font-size: 0.72rem; color: var(--text-muted); }
+.indicador-valor { font-size: 2rem; font-weight: bold; font-variant-numeric: tabular-nums; }
+.indicador-etiqueta { font-size: 0.88rem; color: var(--text-muted); }
 
 /* --- GRUPOS DE APLICACIONES --- */
 .inicio-contenido { display: flex; flex-direction: column; gap: 1.75rem; }
@@ -78,7 +79,7 @@ body {
 
 .grupo-titulo {
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 0.88rem;
     font-weight: bold;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -93,7 +94,7 @@ body {
 
 .etapa {
     --color-grupo: var(--accent);
-    background-color: rgba(30, 41, 59, 0.45);
+    background-color: rgba(15, 23, 42, 0.045);
     border: 1px solid var(--border-color);
     border-top: 3px solid var(--color-grupo);
     border-radius: 10px;
@@ -111,28 +112,29 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-weight: bold;
     color: var(--color-grupo);
 }
 
 .etapa-numero {
-    width: 1.4rem;
-    height: 1.4rem;
+    width: 1.7rem;
+    height: 1.7rem;
     border-radius: 50%;
     border: 1px solid var(--color-grupo);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.72rem;
+    font-size: 0.82rem;
 }
 
 .grupos-secundarios {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
 }
 
+.grupo--oficina { --color-grupo: var(--oficina); }
 .grupo--personal { --color-grupo: var(--personal); }
 .grupo--admin { --color-grupo: var(--admin); }
 
@@ -154,18 +156,18 @@ body {
 .app-card:hover,
 .app-card:focus-visible {
     border-color: var(--color-grupo, var(--accent));
-    background-color: #243247;
+    background-color: #ffffff;
     transform: translateY(-2px);
     outline: none;
 }
 
-.app-icono { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
+.app-icono { font-size: 1.7rem; line-height: 1; flex-shrink: 0; }
 .app-texto { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
-.app-nombre { font-size: 0.92rem; font-weight: bold; }
+.app-nombre { font-size: 1.1rem; font-weight: bold; }
 .app-nombre::after { content: ' →'; color: var(--color-grupo, var(--accent)); opacity: 0; transition: opacity 0.15s ease; }
 .app-card:hover .app-nombre::after,
 .app-card:focus-visible .app-nombre::after { opacity: 1; }
-.app-desc { font-size: 0.75rem; line-height: 1.4; color: var(--text-muted); }
+.app-desc { font-size: 0.9rem; line-height: 1.4; color: var(--text-muted); }
 
 /* --- RESPONSIVO --- */
 @media (max-width: 900px) {

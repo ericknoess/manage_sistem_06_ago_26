@@ -7,6 +7,7 @@
     <title>Bioprocesos - CPM, Holguras, Rutas y Competencias GxP</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{% static 'core/js/tailwind-claro.js' %}" data-letra="1.1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
@@ -44,7 +45,7 @@
 
         <div class="panel-box">
             <div class="panel-header" id="tituloProcesoActivo" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>⚡ Mapeo Operacional ISA-88: <strong style="color: white;" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
+                <span>⚡ Mapeo Operacional ISA-88: <strong style="color: var(--text);" id="nombreProcesoSelec">Selecciona un proceso</strong></span>
                 <button class="btn-secondary btn-sm" data-permiso="editar_receta" id="btnEditarNombreProc" style="display: none;" onclick="abrirModalEditarProceso()" title="Cambiar nombre de la receta">✏️ Renombrar</button>
             </div>
 
@@ -69,7 +70,7 @@
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; margin-bottom: 0.2rem;">
-                    <h3 style="margin: 0; font-size: 0.9rem; color: var(--text); font-weight: bold;">Estructura de Fases y Actividades</h3>
+                    <h3 style="margin: 0; font-size: 1.008rem; color: var(--text); font-weight: bold;">Estructura de Fases y Actividades</h3>
                     <div style="display: flex; gap: 0.5rem;">
                         <button class="btn-secondary btn-sm" style="font-weight: bold; border: 1px solid var(--accent); color: var(--accent);" onclick="abrirGanttPantallaCompleta()">📊 Ver Gantt Completo</button>
                         <button class="btn-secondary btn-sm" data-permiso="editar_receta" style="font-weight: bold;" onclick="abrirModalNuevaEtapa()">📁 + Nueva Etapa</button>
@@ -112,7 +113,7 @@
         <div class="modal-content" style="width: 96vw; height: 96vh; max-width: none; padding: 1rem; display: flex; flex-direction: column;">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 1rem;">
-                    <h3 style="font-size: 1.15rem;">📊 Diagrama de Gantt CPM: <span id="ganttTituloProceso" style="color: white;"></span></h3>
+                    <h3 style="font-size: 1.219rem;">📊 Diagrama de Gantt CPM: <span id="ganttTituloProceso" style="color: var(--text);"></span></h3>
                     <!-- BOTONERA DE ZOOM ACTUALIZADA -->
                     <div style="display: flex; gap: 0.35rem; background-color: var(--bg-dark); padding: 3px; border-radius: 6px; border: 1px solid var(--border-color);">
                         <button class="btn-toggle-zoom" id="btnZoomSemanas" onclick="cambiarNivelZoom('semanas')" title="Vista Ultra-Compacta para procesos de 14-21 días">📆 Semanal (6px/h)</button>
@@ -121,16 +122,16 @@
                         <button class="btn-toggle-zoom" id="btnZoomHoras" onclick="cambiarNivelZoom('horas')" title="Vista detallada hora a hora">🔍 Detalle (65px/h)</button>
                     </div>
                 </div>
-                <button class="btn-secondary btn-sm" onclick="cerrarGanttPantallaCompleta()" style="font-size: 0.85rem; padding: 0.35rem 0.9rem;">❌ Cerrar</button>
+                <button class="btn-secondary btn-sm" onclick="cerrarGanttPantallaCompleta()" style="font-size: 0.952rem; padding: 0.35rem 0.9rem;">❌ Cerrar</button>
             </div>
             
-            <div style="display:flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size:0.75rem; font-weight:bold;">
+            <div style="display:flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size:0.84rem; font-weight:bold;">
                 <div style="display: flex; gap: 1rem;">
                     <span style="color:var(--accent);">🟦 Tarea Normal</span>
                     <span style="color:var(--critical);">🟥 Ruta Crítica</span>
                     <span style="color:var(--incubation);">🟪 Incubación / Bloqueo</span>
                 </div>
-                <span id="ganttEscalaActualTexto" style="color: var(--text-muted); font-size: 0.7rem;">Escala: 35 px/hora</span>
+                <span id="ganttEscalaActualTexto" style="color: var(--text-muted); font-size: 0.784rem;">Escala: 35 px/hora</span>
             </div>
 
             <div class="gantt-fs-container">
@@ -186,7 +187,7 @@
             <div class="modal-header">
                 <h3>📑 Clonar Receta Maestra</h3>
             </div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+            <div style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 0.5rem;">
                 Se realizará una copia profunda (Deep Copy) de la receta original, incluyendo sus etapas, actividades y la red de dependencias críticas (CPM).
             </div>
             <input type="hidden" id="clonarProcId">
@@ -207,7 +208,7 @@
             <div class="modal-header">
                 <h3>📁 Registrar Nueva Etapa</h3>
             </div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+            <div style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 0.5rem;">
                 Agrupa las actividades para mejorar la lectura del proceso. (Ej. "Fase 1: Inóculo", "Downstream").
             </div>
             <div class="form-group" style="width: 100%;">
@@ -499,13 +500,13 @@
             <div class="modal-header">
                 <h3>🔍 Simulación y Auditoría GxP de Personal</h3>
             </div>
-            <div style="font-size: 0.8rem; color: var(--text-muted); padding-bottom: 0.5rem;">
+            <div style="font-size: 0.896rem; color: var(--text-muted); padding-bottom: 0.5rem;">
                 Compruebe si el Roster actual cuenta con el personal calificado requerido para ejecutar esta fase operativa en una fecha específica.
             </div>
             
             <input type="hidden" id="valOpId">
-            <div class="form-group" style="background-color: rgba(255,255,255,0.02); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color);">
-                <strong id="valOpNombre" style="color: var(--accent); font-size: 0.9rem;"></strong>
+            <div class="form-group" style="background-color: rgba(15,23,42,0.03); padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color);">
+                <strong id="valOpNombre" style="color: var(--accent); font-size: 1.008rem;"></strong>
             </div>
 
             <div class="form-group" style="margin-top: 0.5rem;">
