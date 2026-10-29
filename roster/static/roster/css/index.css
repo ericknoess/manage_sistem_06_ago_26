@@ -20,3 +20,19 @@ table { table-layout: fixed; width: 100%; min-width: max-content; }
 .text-\[10px\] { font-size: 12px !important; }
 .text-\[11px\] { font-size: 13px !important; }
 .text-\[11\.5px\] { font-size: 13.5px !important; }
+
+/* Leyenda de turnos compacta: la matriz se queda con el alto; la leyenda ocupa ~2 renglones con scroll */
+.leyenda-turnos { margin-top: 0.5rem; border: 1px solid #c3cedb; border-radius: 10px; background: #ffffff; }
+.leyenda-turnos summary { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 13px;
+    font-weight: 800; color: #0f172a; list-style: none; user-select: none; }
+.leyenda-turnos summary::-webkit-details-marker { display: none; }
+.leyenda-turnos summary::before { content: '▸'; color: #1d4ed8; transition: transform 0.15s; }
+.leyenda-turnos[open] summary::before { transform: rotate(90deg); }
+.leyenda-turnos__conteo { padding: 0 0.45rem; border-radius: 999px; background: #e0e7ff; color: #3730a3; font-size: 12px; }
+.leyenda-turnos__ayuda { margin-left: auto; color: #64748b; font-size: 11.5px; font-weight: 500; }
+.leyenda-turnos__lista { display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; max-height: 54px; overflow-y: auto; padding: 0 0.75rem 0.4rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #334155; }
+.leyenda-turno { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.1rem 0.45rem; border: 1px solid #dbe3ee; border-radius: 5px;
+    background: #f8fafc; white-space: nowrap; }
+.leyenda-turno i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid; flex-shrink: 0; }
+.leyenda-turno b { color: #0f172a; }

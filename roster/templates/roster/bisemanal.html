@@ -39,10 +39,13 @@
         </table>
     </div>
 
-    <!-- CONTENEDOR PARA LA LEYENDA DE TURNOS -->
-    <div id="leyendaGxpContainer" class="leyenda-container">
-        <span style="font-style: italic;">Cargando catálogo de turnos...</span>
-    </div>
+    <!-- Leyenda de turnos compacta: dos renglones con scroll; se puede plegar (se recuerda en el navegador) -->
+    <details id="leyendaTurnos" class="leyenda-turnos" open>
+        <summary>🏷️ Turnos <span id="leyendaConteo" class="leyenda-turnos__conteo"></span><span class="leyenda-turnos__ayuda">desliza para ver todos · clic para ocultar</span></summary>
+        <div id="leyendaGxpContainer" class="leyenda-turnos__lista">
+            <span class="leyenda-turnos__cargando">Cargando catálogo de turnos...</span>
+        </div>
+    </details>
 
     <script src="{% static 'core/js/utils.js' %}"></script>
     <script src="{% static 'roster/js/bisemanal.js' %}"></script>

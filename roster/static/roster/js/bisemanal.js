@@ -67,18 +67,25 @@ function renderizarLeyenda(tiposTurno) {
         return;
     }
 
-    let html = '';
-    tiposTurno.filter(t => t.activo && t.codigo).forEach(t => {
-        html += `
-            <div class="leyenda-item">
-                <div class="leyenda-color-box" style="background-color: ${t.color_fondo}; border: 1px solid ${t.color_texto};"></div>
-                <span style="color: var(--text); font-weight: bold;">${t.codigo}:</span>
-                <span>${t.nombre}</span>
-            </div>
-        `;
-    });
-    contenedor.innerHTML = html;
+    const visibles = tiposTurno.filter(t => t.activo && t.codigo);
+    contenedor.innerHTML = visibles.map(t => `
+        <span class="leyenda-turno" title="${escaparHtml(`${t.codigo}: ${t.nombre}`)}">
+            <i style="background-color: ${t.color_fondo}; border-color: ${t.color_texto};"></i>
+            <b>${escaparHtml(t.codigo)}</b> ${escaparHtml(t.nombre)}
+        </span>`).join('');
+    const conteo = document.getElementById('leyendaConteo');
+    if (conteo) conteo.textContent = visibles.length;
 }
+
+// Leyenda de turnos: recordar si el usuario la dejó plegada (la misma preferencia que en el roster)
+(function () {
+    const leyenda = document.getElementById('leyendaTurnos');
+    if (!leyenda) return;
+    try { if (localStorage.getItem('roster:leyenda') === 'cerrada') leyenda.open = false; } catch (e) { /* sin almacenamiento */ }
+    leyenda.addEventListener('toggle', () => {
+        try { localStorage.setItem('roster:leyenda', leyenda.open ? 'abierta' : 'cerrada'); } catch (e) { /* sin almacenamiento */ }
+    });
+})();
 
 async function cargarVistaBisemanal() {
     const rango = obtenerRango14DiasDesdeLunes(fechaLunesPivot);
@@ -104,7 +111,7 @@ function renderizarTabla(daysObjArray, cuadrillas) {
     const headerRow = document.getElementById('tableHeaders');
     const tbody = document.getElementById('tableBody');
 
-    let headerHTML = `<th class="operator-col" style="min-width: 180px;">Colaborador</th>`;
+    let headerHTML = `<th class="operator-col">Colaborador</th>`;
     daysObjArray.forEach(d => {
         headerHTML += `<th style="text-align: center;"><div style="font-size: 0.65rem; color: var(--accent);">${d.nombreDia}</div><div>${d.diaMes}</div></th>`;
     });
@@ -127,8 +134,8 @@ function renderizarTabla(daysObjArray, cuadrillas) {
         } else {
             operadores.forEach(op => {
                 bodyHTML += `<tr class="hover:bg-slate-800/30 transition-colors">`;
-                bodyHTML += `<td class="operator-col" style="padding-left: 15px;">`;
-                bodyHTML += `<span class="operator-name">👤 ${op.nombre}</span>`;
+                bodyHTML += `<td class="operator-col" title="${escaparHtml(op.nombre)}">`;
+                bodyHTML += `<span class="operator-name">👤 ${escaparHtml(op.nombre)}</span>`;
                 bodyHTML += `</td>`;
 
                 daysObjArray.forEach(d => {

@@ -115,22 +115,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!contenedorLeyenda) return;
 
         if (!tipos || tipos.length === 0) {
-            contenedorLeyenda.innerHTML = `<span class="text-slate-600 italic">No hay tipos de turno configurados.</span>`;
+            contenedorLeyenda.innerHTML = `<span class="italic">No hay tipos de turno configurados.</span>`;
             return;
         }
 
         let html = '';
-        tipos.filter(t => t.activo && t.codigo !== '').forEach(t => {
+        const visibles = tipos.filter(t => t.activo && t.codigo !== '');
+        visibles.forEach(t => {
             html += `
-                <span class="flex items-center gap-1.5 px-2 py-1 bg-slate-800/80 border border-slate-700 rounded">
-                    <div class="w-3 h-3 rounded-sm border shadow-sm flex items-center justify-center text-[8px] font-bold" 
-                         style="background-color: ${t.color_fondo}; color: ${t.color_texto}; border-color: ${t.color_texto};">
-                    </div> 
-                    <span class="text-slate-300 font-semibold">${t.codigo}:</span> ${t.nombre}
+                <span class="leyenda-turno" title="${escaparHtml(`${t.codigo}: ${t.nombre}`)}">
+                    <i style="background-color: ${t.color_fondo}; border-color: ${t.color_texto};"></i>
+                    <b>${escaparHtml(t.codigo)}</b> ${escaparHtml(t.nombre)}
                 </span>
             `;
         });
         contenedorLeyenda.innerHTML = html;
+        const conteo = document.getElementById('leyendaConteo');
+        if (conteo) conteo.textContent = visibles.length;
     }
 
     // NUEVO: Generación Dinámica de Cabeceras (Sticky y con Nombres de Día)
@@ -1322,3 +1323,12 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
     }
 });
+// Leyenda de turnos: recordar si el usuario la dejó plegada
+(function () {
+    const leyenda = document.getElementById('leyendaTurnos');
+    if (!leyenda) return;
+    try { if (localStorage.getItem('roster:leyenda') === 'cerrada') leyenda.open = false; } catch (e) { /* sin almacenamiento */ }
+    leyenda.addEventListener('toggle', () => {
+        try { localStorage.setItem('roster:leyenda', leyenda.open ? 'abierta' : 'cerrada'); } catch (e) { /* sin almacenamiento */ }
+    });
+})();
