@@ -59,6 +59,9 @@ urlpatterns = [
     # Monitor de ocupación de equipos por día y hora
     path('equipos/', TemplateView.as_view(template_name='procesos/monitor_equipos.html'), name='monitor-equipos'),
 
+    # Retrasos por lote: dónde se originó cada hora de retraso
+    path('retrasos/', TemplateView.as_view(template_name='procesos/retrasos.html'), name='retrasos-lotes'),
+
     # Rutas generadas automáticamente por el router de la API
     path('api/', include(router.urls)),
 ]

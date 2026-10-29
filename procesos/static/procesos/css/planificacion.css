@@ -234,4 +234,6 @@ body { margin: 0; padding: 1rem; background-color: var(--bg-dark); color: var(--
 
 /* Personal disponible a la hora de la actividad (planificacion.js → cargarDisponibles) */
 .disponibles-titulo { font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 0.25rem; }
+.disponibles-retraso { display: block; margin-top: 0.2rem; padding: 0.3rem 0.5rem; border-left: 3px solid #f59e0b; border-radius: 4px;
+    background: rgba(245, 158, 11, 0.1); color: #fcd34d; font-weight: 600; font-size: 0.7rem; }
 .op-aviso-turno { margin-top: 0.2rem; font-size: 0.65rem; color: #fcd34d; }

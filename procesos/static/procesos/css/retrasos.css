@@ -1,0 +1,96 @@
+/* procesos/static/procesos/css/retrasos.css — Pantalla /retrasos/ (usa los tokens de core/css/catalogo.css) */
+
+:root {
+    --rt-espera: #f59e0b;
+    --rt-duracion: #ef4444;
+    --rt-recupera: #22c55e;
+    --rt-heredado: rgba(148, 163, 184, 0.28);
+}
+
+.check-filtro { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text-muted); font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+
+.rt-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+.rt-panel-titulo { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.7rem;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.rt-lista__cuerpo { max-height: calc(100vh - 230px); overflow-y: auto; }
+
+.rt-lote { display: flex; flex-direction: column; gap: 0.15rem; width: 100%; padding: 0.6rem 0.85rem; border: none;
+    border-bottom: 1px solid var(--border-color); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.rt-lote:hover { background: rgba(56, 189, 248, 0.06); }
+.rt-lote:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rt-lote--activo { background: rgba(56, 189, 248, 0.12); box-shadow: inset 3px 0 0 var(--accent); }
+.rt-lote__fila { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.rt-lote__codigo { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+
+.rt-sub { display: block; color: var(--text-muted); font-size: 0.68rem; font-weight: 400; line-height: 1.35; }
+.rt-sub strong { color: var(--text); font-weight: 600; }
+
+.rt-valor { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.78rem; }
+.rt-valor--alto { color: #fca5a5; }
+.rt-valor--medio { color: #fcd34d; }
+.rt-valor--adelanto { color: #86efac; }
+.rt-valor--cero { color: var(--text-muted); }
+.rt-valor--grande { font-size: 1.5rem; }
+
+/* Detalle */
+.rt-detalle { padding: 0.9rem 1rem 1.1rem; overflow: visible; min-width: 0; }
+.rt-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; }
+.rt-cabecera h3 { margin: 0; font-size: 1.05rem; font-family: ui-monospace, monospace; }
+.rt-estado { margin-left: 0.35rem; padding: 0.1rem 0.5rem; border: 1px solid var(--border-color); border-radius: 999px; color: var(--text-muted);
+    font-family: system-ui, -apple-system, sans-serif; font-size: 0.66rem; font-weight: 700; vertical-align: middle; }
+.rt-enlaces { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.rt-tarjetas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; margin: 0.85rem 0 0.4rem; }
+.rt-tarjeta { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.85rem; border: 1px solid var(--border-color);
+    border-radius: 10px; background: rgba(15, 23, 42, 0.5); }
+.rt-tarjeta--origen { border-color: rgba(245, 158, 11, 0.6); box-shadow: inset 4px 0 0 var(--rt-espera); }
+.rt-tarjeta__etiqueta { color: var(--text-muted); font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.rt-seccion { margin-top: 1.1rem; }
+.rt-seccion h4 { margin: 0 0 0.35rem; color: var(--accent); font-size: 0.85rem; }
+.rt-seccion__titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.rt-seccion__titulo h4 { margin: 0; }
+.rt-ayuda { margin: 0 0 0.6rem; color: var(--text-muted); font-size: 0.72rem; line-height: 1.5; }
+.rt-muestra { display: inline-block; width: 0.9rem; height: 0.55rem; border-radius: 2px; vertical-align: middle; }
+.rt-muestra--espera { background: var(--rt-espera); }
+.rt-muestra--duracion { background: var(--rt-duracion); }
+.rt-muestra--recupera { background: var(--rt-recupera); }
+
+/* Cascada: una fila por actividad de la ruta, escala común en horas */
+.rt-cascada { display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.rt-cascada__fila { display: grid; grid-template-columns: minmax(150px, 240px) minmax(0, 1fr) minmax(120px, 190px); gap: 0.75rem;
+    align-items: center; padding: 0.45rem 0.75rem; border-bottom: 1px solid rgba(51, 65, 85, 0.6); font-size: 0.76rem; }
+.rt-cascada__fila:last-child { border-bottom: none; }
+.rt-cascada__fila--origen { background: rgba(245, 158, 11, 0.08); }
+.rt-cascada__nombre { min-width: 0; }
+.rt-cascada__pista { position: relative; height: 18px; border-radius: 3px; background: rgba(15, 23, 42, 0.6); }
+.rt-cascada__valor { text-align: right; }
+.rt-cero { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--text-muted); opacity: 0.6; }
+.rt-arrastre { position: absolute; top: 6px; height: 6px; border-radius: 3px; background: var(--rt-heredado); }
+.rt-barra { position: absolute; top: 2px; height: 14px; border-radius: 4px; }
+.rt-barra + .rt-barra { box-shadow: -2px 0 0 rgba(15, 23, 42, 0.9); }
+.rt-barra--espera { background: var(--rt-espera); }
+.rt-barra--duracion { background: var(--rt-duracion); }
+.rt-barra--recupera { background: var(--rt-recupera); }
+
+/* Tablas */
+.rt-tabla { max-height: none; border: 1px solid var(--border-color); border-radius: 8px; }
+.rt-tabla td { vertical-align: top; }
+.rt-num { text-align: right; white-space: nowrap; }
+.rt-fila--ruta td:first-child { box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.6); }
+.rt-fila--origen td { background: rgba(245, 158, 11, 0.08); }
+.rt-fila--origen td:first-child { box-shadow: inset 3px 0 0 var(--rt-espera); }
+.rt-col-motivos { min-width: 220px; max-width: 420px; }
+.rt-motivos { margin: 0; padding-left: 1rem; font-size: 0.72rem; line-height: 1.45; }
+.rt-motivos li + li { margin-top: 0.2rem; }
+.rt-motivos a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.rt-motivo__que { color: var(--text-muted); }
+.rt-abierto { color: #fcd34d; font-weight: 700; }
+
+@media (max-width: 900px) {
+    .rt-layout { grid-template-columns: 1fr; }
+    .rt-lista__cuerpo { max-height: 260px; }
+    .rt-tarjetas { grid-template-columns: 1fr; }
+    .rt-cascada__fila { grid-template-columns: 1fr; gap: 0.3rem; }
+    .rt-cascada__valor { text-align: left; }
+}

@@ -342,6 +342,21 @@ function seleccionarFase(faseId) {
     renderPanelDetalle(faseId);
 }
 
+// Horario en que se asigna personal (misma regla que `ventana_asignacion` del servidor): el programado, salvo que la tarea
+// siga pendiente y su hora ya pasó; entonces cuenta desde ahora, con la misma duración.
+function ventanaAsignacion(fase) {
+    const inicio = new Date(fase.inicio_programado);
+    const fin = new Date(fase.fin_programado);
+    const ahora = new Date();
+    if (fase.estado === 'PENDIENTE' && inicio < ahora) {
+        ahora.setSeconds(0, 0);
+        return { inicio: ahora, fin: new Date(ahora.getTime() + (fin - inicio)), retrasada: true };
+    }
+    return { inicio, fin, retrasada: false };
+}
+
+const fechaLocalISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 // Traslape por fecha-hora completas (detecta cruces de medianoche y fases de varios días); misma regla que el servidor
 // Personal con turno que cubre la hora de inicio de la actividad y sin otra tarea encimada (lo calcula el servidor,
 // con la misma regla que la alerta "no tiene turno a las…"; considera turnos nocturnos, retardos y salidas anticipadas).
@@ -350,14 +365,17 @@ async function cargarDisponibles(fase) {
     try {
         const res = await fetch(`/api/fases-lote/${fase.id}/disponibles/`);
         if (!res.ok) throw new Error();
-        lista = await res.json();
+        const datos = await res.json();
+        lista = datos.operadores;
+        const titulo = document.getElementById('tituloDisponibles');
+        if (titulo && faseSeleccionadaId === fase.id) titulo.innerHTML = textoTituloDisponibles(fase, datos);
     } catch (e) {
         lista = null;
     }
     const caja = document.getElementById('listaDisponibles');
     if (!caja || faseSeleccionadaId !== fase.id) return;  // el usuario ya eligió otra fase
     if (lista === null) { caja.innerHTML = '<div class="empty-state">⚠️ No se pudo consultar el personal disponible.</div>'; return; }
-    if (!lista.length) { caja.innerHTML = '<div class="empty-state">⚠️ Nadie tiene turno libre a la hora de esta actividad.</div>'; return; }
+    if (!lista.length) { caja.innerHTML = '<div class="empty-state">⚠️ Nadie tiene turno libre a esa hora.</div>'; return; }
     const hora = (iso) => new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
     caja.innerHTML = lista.map(op => `
         <div class="op-availability-card available">
@@ -372,10 +390,19 @@ async function cargarDisponibles(fase) {
         </div>`).join('');
 }
 
+// Título de la lista de disponibles: la hora programada o, si la tarea va retrasada, desde ahora
+function textoTituloDisponibles(fase, ventana) {
+    const desde = ventana.desde || ventana.inicio, hasta = ventana.hasta || ventana.fin;
+    const rango = formatearRangoFase(desde, hasta);
+    if (!ventana.retrasada) return `Disponibles a las ${rango} (${fase.fecha_programada}):`;
+    return `Disponibles ahora, ${rango} (${fechaLocalISO(new Date(desde))}):
+            <span class="disponibles-retraso">⏰ La tarea va retrasada (programada a las ${formatearRangoFase(fase.inicio_programado, fase.fin_programado)}
+            del ${fase.fecha_programada}); se muestra el personal en turno ahora.</span>`;
+}
+
 function checkConflictosOperador(operadorId, fase) {
     if (!fase.inicio_programado || !fase.fin_programado) return null;
-    const inicio = new Date(fase.inicio_programado);
-    const fin = new Date(fase.fin_programado);
+    const { inicio, fin } = ventanaAsignacion(fase);
 
     for (const f of fasesGlobales) {
         if (f.id === fase.id || f.estado === 'OMITIDA' || !f.inicio_programado || !f.fin_programado) continue;
@@ -415,8 +442,12 @@ function renderPanelDetalle(faseId) {
         let extraClass = '';
 
         if (opData) {
-            const tDia = opData.turnos.find(t => t.fecha === fase.fecha_programada);
-            if (!tDia || tDia.codigo_turno === 'OFF') {
+            // Una tarea retrasada se revisa contra el turno de hoy, no el de su fecha planeada
+            const vent = ventanaAsignacion(fase);
+            const fechaTurno = vent.retrasada ? fechaLocalISO(vent.inicio) : fase.fecha_programada;
+            const tDia = opData.turnos.find(t => t.fecha === fechaTurno);
+            // Si no se cargó el turno de hoy, el aviso "sin turno" lo da el servidor en las alertas de la fase
+            if ((!tDia && !vent.retrasada) || (tDia && tDia.codigo_turno === 'OFF')) {
                 advertenciaUI = `<span style="font-size:0.7rem; font-weight:bold; margin-left:4px;">[⚠️ DÍA OFF]</span>`;
                 extraClass = 'danger-chip';
             } else {
@@ -488,7 +519,7 @@ function renderPanelDetalle(faseId) {
     `;
 
     if (!estaIniciada) {
-        html += `<div class="disponibles-titulo">Disponibles a las ${formatearRangoFase(fase.inicio_programado, fase.fin_programado)} (${fase.fecha_programada}):</div>
+        html += `<div class="disponibles-titulo" id="tituloDisponibles">${textoTituloDisponibles(fase, ventanaAsignacion(fase))}</div>
                  <div id="listaDisponibles"><div class="empty-state">Buscando personal con turno a esa hora…</div></div>`;
         cargarDisponibles(fase);
     }

@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
@@ -9,6 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from actividades.models import MaterialInsumo
+from auditoria.models import RegistroAuditoria
 from roster.models import Cuadrilla, Operador, RolOperador
 from usuarios.tests import programar_ahora
 from .models import (
@@ -961,6 +963,13 @@ class OperadoresDisponiblesTests(TestCase):
                                                   'fecha_inicio_planeada': '2026-11-03T01:30:00'}, format='json')
         self.assertEqual(respuesta.status_code, 201, respuesta.data)
         self.fase = FaseLote.objects.get(lote__identificador_lote='L-T', operacion_maestra=self.t1)
+        self.fijar_ahora(datetime(2026, 11, 1, 12, 0))   # antes de la actividad (03/11 01:30)
+
+    def fijar_ahora(self, momento):
+        """Fija la hora actual: la disponibilidad de una tarea retrasada se calcula desde ahora."""
+        parche = mock.patch('django.utils.timezone.now', return_value=timezone.make_aware(momento))
+        parche.start()
+        self.addCleanup(parche.stop)
 
     def turno(self, operador, tipo, dia):
         from roster.models import TurnoDia
@@ -969,7 +978,8 @@ class OperadoresDisponiblesTests(TestCase):
     def disponibles(self):
         respuesta = self.web.get(f'/api/fases-lote/{self.fase.id}/disponibles/')
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
-        return {d['nombre']: d for d in respuesta.data}
+        self.ultima = respuesta.data
+        return {d['nombre']: d for d in respuesta.data['operadores']}
 
     def test_solo_quien_tiene_turno_a_la_hora_de_la_actividad(self):
         # Actividad 03/11 01:30–03:30: cubre el nocturno que empezó el 02/11; el matutino y vespertino del 03 no
@@ -1017,6 +1027,31 @@ class OperadoresDisponiblesTests(TestCase):
                                        fecha_fin_real=self.fase.inicio_programado + timedelta(hours=1))
         AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.noche, rol_ejercido=self.rol)
         self.assertEqual(self.disponibles(), {})
+
+
+    def test_tarea_retrasada_ofrece_al_personal_en_turno_ahora(self):
+        """Una tarea pendiente cuya hora ya pasó se asigna con el personal en turno ahora, no el de la hora planeada."""
+        self.turno(self.noche, self.nocturno, 2)    # cubría la hora planeada (03/11 01:30)
+        self.turno(self.dia, self.matutino, 3)      # en turno ahora (03/11 09:00)
+        self.assertEqual(set(self.disponibles()), {'Nora'})
+        self.assertFalse(self.ultima['retrasada'])
+
+        self.fijar_ahora(datetime(2026, 11, 3, 9, 0))
+        self.assertEqual(set(self.disponibles()), {'Diana'})
+        self.assertTrue(self.ultima['retrasada'])
+        self.assertEqual(timezone.localtime(self.ultima['desde']).hour, 9)
+        self.assertEqual(self.ultima['hasta'] - self.ultima['desde'], timedelta(hours=2))   # conserva su duración
+
+        # Ocupada ahora en otra tarea: ya no se ofrece y el servidor rechaza asignarla
+        otra = FaseLote.objects.create(lote=self.fase.lote, operacion_maestra=self.t1, es_subtarea_muestreo=True, indice_muestreo=1,
+                                       inicio_programado=timezone.now() + timedelta(minutes=30),
+                                       fin_programado=timezone.now() + timedelta(hours=1))
+        AsignacionFaseOperador.objects.create(fase_lote=otra, operador=self.dia, rol_ejercido=self.rol)
+        self.assertEqual(self.disponibles(), {})
+        respuesta = self.web.post('/api/asignaciones-operador/', {'fase_lote': self.fase.id, 'operador': self.dia.id,
+                                                                  'rol_ejercido': self.rol.id}, format='json')
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('Conflicto', respuesta.data['error'])
 
 
 class ListadosEscalablesTests(TestCase):
@@ -1074,3 +1109,77 @@ class ListadosEscalablesTests(TestCase):
         self.assertTrue(lote['filas'][0]['prog_inicio'] and lote['filas'][1]['prog_fin'])
         todos = self.client.get('/api/lotes/gantt/?todos=1').json()
         self.assertEqual((len(todos['lotes']), todos['ocultos']), (2, 0))
+
+
+class RetrasosTests(TestCase):
+    """Pantalla /retrasos/: cuánto retraso heredó cada actividad y cuánto nació en ella."""
+
+    def setUp(self):
+        self.web = APIClient()
+        self.web.force_authenticate(usuario_con_rol('consulta', 'Consulta'))
+        planeador = APIClient()
+        planeador.force_authenticate(usuario_con_rol('planeador', 'Planeador'))
+        proceso = ProcesoMaestro.objects.create(nombre='Proceso retrasos')
+        crear = lambda **d: OperacionProceso.objects.create(proceso=proceso, **d)
+        self.t1 = crear(identificador_paso='T1', nombre='Limpieza', orden=1, duracion_horas=2)
+        self.t2 = crear(identificador_paso='T2', nombre='Incubación', orden=2, duracion_horas=3, predecesora=self.t1,
+                        tipo_operacion='INCUBACION', frecuencia_muestreo_horas=1, duracion_muestreo_horas=0.25)
+        self.t3 = crear(identificador_paso='T3', nombre='Cosecha', orden=3, duracion_horas=1, predecesora=self.t2)
+        r = planeador.post('/api/lotes/', {'identificador_lote': 'L-R', 'proceso_maestro': proceso.id,
+                                           'fecha_inicio_planeada': '2026-11-02T08:00:00'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.lote = LoteProduccion.objects.get(identificador_lote='L-R')
+        self.base = timezone.make_aware(datetime(2026, 11, 2, 8, 0))
+        parche = mock.patch('django.utils.timezone.now', return_value=timezone.make_aware(datetime(2026, 11, 3, 12, 0)))
+        parche.start()
+        self.addCleanup(parche.stop)
+
+    def fase(self, op, indice=None):
+        if indice is None:
+            return FaseLote.objects.get(lote=self.lote, operacion_maestra=op, es_subtarea_muestreo=False)
+        return FaseLote.objects.get(lote=self.lote, operacion_maestra=op, indice_muestreo=indice)
+
+    def ejecutar(self, fase, inicio_h, fin_h):
+        """Marca la fase como completada con horas reales relativas al inicio planeado del lote."""
+        fase.estado = 'COMPLETADA'
+        fase.fecha_inicio_real = self.base + timedelta(hours=inicio_h)
+        fase.fecha_fin_real = self.base + timedelta(hours=fin_h)
+        fase.save()
+
+    def test_separa_lo_heredado_de_lo_que_nacio_en_cada_actividad(self):
+        # Plan: T1 0–2 h, T2 2–5 h, T3 5–6 h. Real: T1 inicia 2 h tarde y dura 1 h más (2–5); T2 justo después (5–8);
+        # T3 espera 1.5 h (9.5–10.5). Retraso del lote: 4.5 h, nacido en T1 (2 h + 1 h) y en T3 (1.5 h).
+        self.ejecutar(self.fase(self.t1), 2, 5)
+        self.ejecutar(self.fase(self.t2), 5, 8)
+        self.ejecutar(self.fase(self.t3), 9.5, 10.5)
+        self.ejecutar(self.fase(self.t2, 1), 6, 6.25)          # le tocaba a las 6 h: a tiempo
+        self.ejecutar(self.fase(self.t2, 2), 10, 10.25)        # le tocaba a las 7 h: 3 h tarde (tolerancia 2 h)
+        self.lote.estado = 'COMPLETADO'
+        self.lote.save()
+
+        d = self.web.get(f'/api/lotes/{self.lote.id}/retrasos/').data
+        act = {a['paso']: a for a in d['actividades']}
+        self.assertEqual((act['T1']['heredado_h'], act['T1']['espera_h'], act['T1']['duracion_extra_h']), (0, 2, 1))
+        self.assertEqual((act['T2']['heredado_h'], act['T2']['espera_h'], act['T2']['duracion_extra_h']), (3, 0, 0))
+        self.assertEqual((act['T3']['heredado_h'], act['T3']['espera_h'], act['T3']['retraso_fin_h']), (3, 1.5, 4.5))
+        self.assertEqual(d['retraso_horas'], 4.5)
+        self.assertEqual((d['origen']['paso'], d['origen']['tipo'], d['origen']['horas']), ('T1', 'INICIO', 2))
+        self.assertEqual(d['ruta'], [act['T1']['id'], act['T2']['id'], act['T3']['id']])
+        self.assertEqual([(m['nombre'], m['retraso_h'], m['fuera_tolerancia']) for m in d['muestreos']], [('M-2h - Incubación', 3, True)])
+
+        lista = self.web.get('/api/lotes/retrasos/').data
+        self.assertEqual([(l['identificador_lote'], l['retraso_horas'], l['origen']['paso']) for l in lista], [('L-R', 4.5, 'T1')])
+
+    def test_lote_abierto_estima_desde_ahora_y_muestra_el_motivo(self):
+        # T1 terminó a tiempo; T2 debía iniciar a las 2 h del 02/11 y a las 12:00 del 03/11 sigue pendiente (26 h tarde)
+        self.ejecutar(self.fase(self.t1), 0, 2)
+        RegistroAuditoria.objects.create(actor='Ana', categoria='FASE', accion='REPROGRAMAR', descripcion='x', lote=self.lote,
+                                         fase=self.fase(self.t2), motivo='Mantenimiento de Equipo. Biorreactor en reparación')
+        d = self.web.get(f'/api/lotes/{self.lote.id}/retrasos/').data
+        act = {a['paso']: a for a in d['actividades']}
+        self.assertEqual(act['T2']['espera_h'], 26)
+        self.assertFalse(act['T2']['inicio_real'])
+        self.assertEqual(act['T3']['heredado_h'], 26)
+        self.assertEqual(d['retraso_horas'], 26)
+        self.assertEqual(d['origen']['paso'], 'T2')
+        self.assertIn('Biorreactor', act['T2']['motivos'][0]['texto'])

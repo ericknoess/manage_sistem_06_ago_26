@@ -107,6 +107,8 @@ async function renderizarDetalleLote() {
             <button class="btn-secondary btn-historial" title="Informe de datos de proceso en PDF o Excel"
                     onclick="abrirInformeLote({ loteId: ${loteSeleccionado.id}, procesoId: ${loteSeleccionado.proceso_maestro}, identificador: ${JSON.stringify(loteSeleccionado.identificador_lote).replace(/"/g, '&quot;')} })">🧾 Informe</button>
             <button class="btn-secondary btn-historial" onclick="abrirHistorialLote()" title="Quién hizo qué con este lote">📜 Historial</button>
+            <a class="btn-secondary btn-historial" href="/retrasos/?lote=${loteSeleccionado.id}"
+               title="Retraso del lote contra lo planeado y en qué actividad se originó">⏱️ Retrasos</a>
             <a class="btn-secondary btn-historial btn-eventos-lote" id="enlaceEventosLote" href="/eventos/?lote=${loteSeleccionado.id}"
                title="Eventos GMP de este lote">⚠️ Eventos</a>
             ${loteSeleccionado.archivado ? '' : `<button class="btn-secondary btn-historial btn-evento" title="Reportar una falla, desviación u otro evento GMP del lote"

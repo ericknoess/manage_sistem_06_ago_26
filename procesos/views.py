@@ -53,7 +53,7 @@ from .services import (
     liberar_reserva, cambiar_equipo, validar_cambio_equipo, equipos_candidatos, ocupacion_equipos, ErrorEquipoFase,
     registrar_entrega, recibir_entrega, rechazar_entrega, registrar_devolucion, materiales_por_surtir,
     advertencias_surtido, resumen_surtido, disponible_para_devolver, actor_tiene_permiso, puede_recibir_material, en_turno,
-    ErrorSurtido, operadores_disponibles, lotes_para_gantt, resumen_gantt,
+    ErrorSurtido, operadores_disponibles, ventana_asignacion, resumen_retrasos, analisis_retrasos, lotes_para_gantt, resumen_gantt,
 )
 from datos_proceso.services import clonar_indicadores, clonar_secciones, datos_pendientes, generar_plan_captura, resumen_captura
 
@@ -253,6 +253,36 @@ class LoteProduccionViewSet(viewsets.ModelViewSet):
         lotes, ocultos = lotes_para_gantt(LoteProduccion.objects.filter(archivado=False).exclude(estado='ABORTADO')
                                           .order_by('-created_at'), todos=request.query_params.get('todos') == '1')
         return Response({'lotes': resumen_gantt(lotes), 'ocultos': ocultos})
+
+    @action(detail=False, methods=['get'], url_path='retrasos')
+    def retrasos(self, request):
+        """Retraso estimado y origen principal por lote (pantalla /retrasos/). Por omisión, los lotes abiertos y los
+        terminados en los últimos 60 días; `?proceso=`, `?estado=abiertos|terminados`, `?todos=1` (sin límite de fecha),
+        `?archivados=1` (incluye archivados y abortados)."""
+        p = request.query_params
+        lotes = LoteProduccion.objects.select_related('proceso_maestro').order_by('-fecha_inicio_planeada')
+        if p.get('archivados') != '1':
+            lotes = lotes.filter(archivado=False).exclude(estado='ABORTADO')
+        if p.get('proceso'):
+            lotes = lotes.filter(proceso_maestro_id=p['proceso'])
+        terminados = Q(estado__in=['COMPLETADO', 'ABORTADO'])
+        if p.get('estado') == 'abiertos':
+            lotes = lotes.exclude(terminados)
+        elif p.get('estado') == 'terminados':
+            lotes = lotes.filter(terminados)
+        if p.get('todos') != '1':
+            lotes = lotes.filter(~terminados | Q(updated_at__gte=timezone.now() - timedelta(days=60)))
+        return Response(resumen_retrasos(lotes[:500]))
+
+    @action(detail=True, methods=['get'], url_path='retrasos')
+    def retrasos_lote(self, request, pk=None):
+        """Dónde se originó el retraso del lote: actividades con lo heredado y lo propio, ruta, motivos y muestreos tardíos."""
+        try:
+            lote = LoteProduccion.objects.select_related('proceso_maestro').get(pk=pk)   # también archivados
+        except LoteProduccion.DoesNotExist:
+            return Response({"error": "El lote no existe."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(analisis_retrasos(lote))
+
     permisos_por_accion = {
         'create': 'instanciar_lote',
         'destroy': 'abortar_lote', 'archivar': 'abortar_lote', 'abortar': 'abortar_lote',
@@ -508,7 +538,9 @@ class FaseLoteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     @action(detail=True, methods=['get'], url_path='disponibles')
     def disponibles(self, request, pk=None):
         """Operadores con turno a la hora de la actividad y sin otra tarea encimada (panel de Planificación)."""
-        return Response(operadores_disponibles(self.get_object()))
+        fase = self.get_object()
+        desde, hasta, retrasada = ventana_asignacion(fase)
+        return Response({'desde': desde, 'hasta': hasta, 'retrasada': retrasada, 'operadores': operadores_disponibles(fase)})
 
     @action(detail=False, methods=['get'], url_path='alertas')
     def alertas(self, request):

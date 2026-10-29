@@ -368,15 +368,32 @@ def filtro_ocupacion(inicio, fin):
     return abierta | completada
 
 
-def buscar_conflicto_operador(operador_id, fase):
+def ventana_asignacion(fase, ahora=None):
     """
-    Devuelve la asignación del operador cuya fase se traslapa con la ventana programada de `fase`
-    (comparando fecha-hora completas, incluso entre días), o None si está libre.
+    (inicio, fin, retrasada): horario en que se asigna personal a la fase. Es el programado, salvo que la fase siga
+    pendiente y su hora ya pasó: entonces se ejecutará desde ahora (con su misma duración) y el personal que cuenta
+    es el que está en turno ahora, no el de la hora planeada.
     """
-    if not fase.inicio_programado or not fase.fin_programado:
+    inicio, fin = fase.inicio_programado, fase.fin_programado
+    if not inicio or not fin:
+        return inicio, fin, False
+    ahora = ahora or timezone.now()
+    if fase.estado == 'PENDIENTE' and inicio < ahora:
+        momento = ahora.replace(second=0, microsecond=0)
+        return momento, momento + (fin - inicio), True
+    return inicio, fin, False
+
+
+def buscar_conflicto_operador(operador_id, fase, ahora=None):
+    """
+    Devuelve la asignación del operador cuya fase se traslapa con la ventana de asignación de `fase`
+    (`ventana_asignacion`, comparando fecha-hora completas, incluso entre días), o None si está libre.
+    """
+    inicio, fin, _ = ventana_asignacion(fase, ahora)
+    if not inicio or not fin:
         return None
     return AsignacionFaseOperador.objects.filter(
-        filtro_ocupacion(fase.inicio_programado, fase.fin_programado), operador_id=operador_id,
+        filtro_ocupacion(inicio, fin), operador_id=operador_id,
     ).exclude(fase_lote=fase).select_related(
         'fase_lote', 'fase_lote__operacion_maestra'
     ).first()
@@ -502,24 +519,26 @@ def _turnos_por_operador(operador_ids, desde, hasta):
     return ventanas
 
 
-def operadores_disponibles(fase):
+def operadores_disponibles(fase, ahora=None):
     """
     Personal que se puede asignar a la fase: operadores activos, aún no asignados, con un turno laborable
     que cubre la hora de inicio de la actividad (incluye turnos nocturnos del día anterior) y sin otra
     tarea que se traslape. `cubre_toda` avisa si su turno termina antes que la actividad.
+    La hora es la de `ventana_asignacion`: si la tarea va retrasada, el personal en turno ahora.
     """
-    if not fase.inicio_programado or not fase.fin_programado:
+    inicio_fase, fin_fase, _ = ventana_asignacion(fase, ahora)
+    if not inicio_fase or not fin_fase:
         return []
     asignados = set(fase.operadores_asignados.values_list('operador_id', flat=True))
-    dia = timezone.localtime(fase.inicio_programado).date()
+    dia = timezone.localtime(inicio_fase).date()
     candidatos = {}
     for t in _turnos_laborables(dia, dia, operador__activo=True).exclude(operador_id__in=asignados).select_related('operador__rol'):
         inicio, fin = ventana_turno(t)
-        if inicio <= fase.inicio_programado < fin:
+        if inicio <= inicio_fase < fin:
             candidatos[t.operador_id] = (t, inicio, fin)
 
     ocupados = set(AsignacionFaseOperador.objects.filter(
-        filtro_ocupacion(fase.inicio_programado, fase.fin_programado), operador_id__in=candidatos,
+        filtro_ocupacion(inicio_fase, fin_fase), operador_id__in=candidatos,
     ).exclude(fase_lote=fase).values_list('operador_id', flat=True))
 
     disponibles = []
@@ -530,7 +549,7 @@ def operadores_disponibles(fase):
             'id': operador_id, 'nombre': t.operador.nombre, 'rol': t.operador.rol_id,
             'rol_nombre': t.operador.rol.nombre if t.operador.rol else '',
             'codigo_turno': t.tipo_turno.codigo, 'turno_inicio': inicio, 'turno_fin': fin,
-            'cubre_toda': fin >= fase.fin_programado,
+            'cubre_toda': fin >= fin_fase,
         })
     return sorted(disponibles, key=lambda d: (not d['cubre_toda'], d['nombre']))
 
@@ -552,8 +571,9 @@ def alertas_programacion(fases, ahora=None):
     asignaciones = list(AsignacionFaseOperador.objects.filter(fase_lote_id__in=ids).select_related('operador'))
     operador_ids = {a.operador_id for a in asignaciones}
 
-    inicio_rango = min(f.inicio_programado for f in fases)
-    fin_rango = max(f.fin_programado for f in fases)
+    ventanas = {f.id: ventana_asignacion(f, ahora)[:2] for f in fases}   # una fase retrasada se revisa desde ahora
+    inicio_rango = min(min(f.inicio_programado, ventanas[f.id][0]) for f in fases)
+    fin_rango = max(ventanas[f.id][1] for f in fases)
     # Todas las asignaciones de esos operadores que tocan el rango, para detectar traslapes
     otras = list(AsignacionFaseOperador.objects.filter(
         operador_id__in=operador_ids, fase_lote__inicio_programado__lt=fin_rango, fase_lote__fin_programado__gt=inicio_rango,
@@ -565,17 +585,18 @@ def alertas_programacion(fases, ahora=None):
     por_fase = {f.id: f for f in fases}
     for a in asignaciones:
         fase = por_fase[a.fase_lote_id]
+        inicio_fase, fin_fase = ventanas[fase.id]
         for o in otras:
             otra = o.fase_lote
             if o.operador_id != a.operador_id or otra.id == fase.id:
                 continue
-            if otra.inicio_programado < fase.fin_programado and otra.fin_programado > fase.inicio_programado:
+            if otra.inicio_programado < fin_fase and otra.fin_programado > inicio_fase:
                 alertas.setdefault(fase.id, []).append(
                     f"👥 {a.operador.nombre} también está asignado a [{otra.operacion_maestra.identificador_paso}] "
                     f"{otra.nombre_tarea_dinamica or otra.operacion_maestra.nombre} (lote {otra.lote.identificador_lote}) "
                     f"de {formatear_hora(otra.inicio_programado)} a {formatear_hora(otra.fin_programado)}.")
-        if not any(i <= fase.inicio_programado < f for i, f in turnos.get(a.operador_id, [])):
-            alertas.setdefault(fase.id, []).append(f"🕒 {a.operador.nombre} no tiene turno a las {formatear_hora(fase.inicio_programado)}.")
+        if not any(i <= inicio_fase < f for i, f in turnos.get(a.operador_id, [])):
+            alertas.setdefault(fase.id, []).append(f"🕒 {a.operador.nombre} no tiene turno a las {formatear_hora(inicio_fase)}.")
 
     for m in materiales:
         # Solo avisa si el material aún no se recibe completo y su hora requerida ya pasó
@@ -1305,3 +1326,205 @@ def resumen_gantt(lotes):
         resultado.append({'id': lote.id, 'identificador_lote': lote.identificador_lote, 'estado': lote.estado,
                           'sin_etapas': sin_etapas, 'filas': lista})
     return resultado
+
+
+# ==============================================================================
+# RETRASOS POR LOTE: DÓNDE SE ORIGINÓ CADA HORA DE RETRASO
+# ==============================================================================
+#
+# Cada actividad se compara contra su línea base CPM (`inicio_base_cpm`/`fin_base_cpm`, al instanciar el lote).
+# Su hora "efectiva" es la real si ya la tiene; si no, la vigente (una tarea pendiente cuya hora ya pasó se cuenta
+# desde ahora y una en curso termina, como pronto, ahora). Así un lote abierto muestra su retraso estimado.
+#
+#   retraso_inicio = inicio efectivo − inicio base        retraso_fin = fin efectivo − fin base
+#   heredado       = lo que trae de su predecesora (FS: retraso de su fin; SS/desfase: retraso de su inicio)
+#   espera         = retraso_inicio − max(0, heredado)   → nació aquí: inició tarde o se reprogramó
+#   duracion_extra = retraso_fin − retraso_inicio         → nació aquí: tardó más (o menos) de lo planeado
+#
+# La ruta es la cadena de predecesoras de la actividad que termina al último: la suma de lo que nació en ella es
+# el retraso del lote. Los muestreos no mueven a las sucesoras; se revisan aparte contra la hora que les toca
+# (inicio efectivo de su incubación + n × frecuencia) y su tolerancia.
+
+def _en_horas(delta):
+    return round(delta.total_seconds() / 3600, 2)
+
+
+def _calcular_actividades(fases, ahora):
+    """Actividades (sin muestreos) de un lote con sus retrasos; devuelve (actividades por id de operación, ruta)."""
+    por_operacion = {}
+    for f in fases:
+        if f.es_subtarea_muestreo or not f.inicio_base_cpm or not f.fin_base_cpm:
+            continue
+        duracion = f.fin_base_cpm - f.inicio_base_cpm
+        omitida = f.estado == 'OMITIDA'
+        if f.fecha_inicio_real:
+            inicio, inicio_real = f.fecha_inicio_real, True
+        elif f.estado == 'PENDIENTE' and f.inicio_programado:
+            inicio, inicio_real = max(f.inicio_programado, ahora), False
+        else:
+            inicio, inicio_real = f.inicio_programado or f.inicio_base_cpm, False
+        if f.fecha_fin_real:
+            fin, fin_real = f.fecha_fin_real, True
+        elif f.estado == 'EN_PROGRESO':
+            fin, fin_real = max(inicio + duracion, ahora), False
+        else:
+            fin, fin_real = inicio + duracion, False
+        por_operacion[f.operacion_maestra_id] = {
+            'fase': f, 'omitida': omitida, 'inicio': inicio, 'fin': fin, 'inicio_real': inicio_real, 'fin_real': fin_real,
+            'retraso_inicio': timedelta(0) if omitida else inicio - f.inicio_base_cpm,
+            'retraso_fin': timedelta(0) if omitida else fin - f.fin_base_cpm,
+        }
+
+    # Lo heredado depende de la predecesora: se resuelve en orden de dependencia (la predecesora primero)
+    def heredado(op_id, visitando=()):
+        a = por_operacion[op_id]
+        if 'heredado' in a:
+            return
+        op = a['fase'].operacion_maestra
+        pred = por_operacion.get(op.predecesora_id)
+        if pred is None or op.predecesora_id in visitando:
+            a['heredado'], a['predecesora'] = timedelta(0), None
+        else:
+            heredado(op.predecesora_id, visitando + (op_id,))
+            fs = (op.tipo_dependencia or 'FS') not in ('SS', 'OFFSET')
+            a['heredado'] = pred['retraso_fin'] if fs else pred['retraso_inicio']
+            a['predecesora'] = op.predecesora_id
+        a['espera'] = timedelta(0) if a['omitida'] else a['retraso_inicio'] - max(timedelta(0), a['heredado'])
+        a['duracion_extra'] = timedelta(0) if a['omitida'] else a['retraso_fin'] - a['retraso_inicio']
+
+    for op_id in por_operacion:
+        heredado(op_id)
+
+    ruta = []
+    vigentes = [op_id for op_id, a in por_operacion.items() if not a['omitida']]
+    if vigentes:
+        actual = max(vigentes, key=lambda o: por_operacion[o]['fin'])
+        while actual is not None and actual not in ruta:
+            ruta.append(actual)
+            actual = por_operacion[actual]['predecesora']
+        ruta.reverse()
+    return por_operacion, ruta
+
+
+def _origen_principal(por_operacion, ruta):
+    """La mayor contribución positiva (espera o duración extra), preferentemente en la ruta que fija el fin del lote."""
+    def candidatos(ids):
+        for op_id in ids:
+            a = por_operacion[op_id]
+            for tipo, horas in (('INICIO', a['espera']), ('DURACION', a['duracion_extra'])):
+                if horas > timedelta(minutes=5):
+                    yield horas, tipo, op_id
+    mejor = max(candidatos(ruta), default=None) or max(candidatos(por_operacion), default=None)
+    if not mejor:
+        return None
+    horas, tipo, op_id = mejor
+    f = por_operacion[op_id]['fase']
+    return {'fase': f.id, 'paso': f.operacion_maestra.identificador_paso, 'nombre': f.operacion_maestra.nombre,
+            'tipo': tipo, 'horas': _en_horas(horas), 'en_ruta': op_id in ruta}
+
+
+def resumen_retrasos(lotes, ahora=None):
+    """Retraso estimado y origen principal de cada lote (lista de /retrasos/): solo actividades, sin muestreos."""
+    ahora = ahora or timezone.now()
+    lotes = list(lotes)
+    fases_por_lote = {}
+    for f in (FaseLote.objects.filter(lote__in=lotes, es_subtarea_muestreo=False)
+              .select_related('operacion_maestra').defer('plan_captura', 'notas_reprogramacion')):
+        fases_por_lote.setdefault(f.lote_id, []).append(f)
+    resultado = []
+    for lote in lotes:
+        por_operacion, ruta = _calcular_actividades(fases_por_lote.get(lote.id, []), ahora)
+        ultima = por_operacion[ruta[-1]] if ruta else None
+        resultado.append({
+            'id': lote.id, 'identificador_lote': lote.identificador_lote, 'estado': lote.estado, 'archivado': lote.archivado,
+            'receta': lote.proceso_maestro.nombre, 'receta_id': lote.proceso_maestro_id,
+            'terminado': lote.estado in ('COMPLETADO', 'ABORTADO'),
+            'fin_base': ultima['fase'].fin_base_cpm if ultima else None, 'fin_estimado': ultima['fin'] if ultima else None,
+            'retraso_horas': _en_horas(ultima['retraso_fin']) if ultima else 0,
+            'origen': _origen_principal(por_operacion, ruta),
+        })
+    return resultado
+
+
+def analisis_retrasos(lote, ahora=None):
+    """Detalle de retrasos de un lote: actividades con lo heredado y lo propio, ruta, motivos, eventos y muestreos tardíos."""
+    from auditoria.models import RegistroAuditoria
+    from eventos.models import EventoGMP
+    ahora = ahora or timezone.now()
+    fases = list(lote.fases.select_related('operacion_maestra__etapa').defer('plan_captura'))
+    por_operacion, ruta = _calcular_actividades(fases, ahora)
+
+    # Motivos que dejó la gente: inicio fuera de ventana, reprogramaciones y comentarios al firmar
+    motivos = {}
+    for r in (RegistroAuditoria.objects.filter(lote=lote, categoria='FASE', fase__isnull=False,
+                                               accion__in=['FASE_EN_PROGRESO', 'FASE_COMPLETADA', 'REPROGRAMAR'])
+              .exclude(motivo='').order_by('fecha')):
+        que = {'FASE_EN_PROGRESO': 'Al iniciar', 'FASE_COMPLETADA': 'Al completar', 'REPROGRAMAR': 'Reprogramación'}[r.accion]
+        motivos.setdefault(r.fase_id, []).append({'momento': r.fecha, 'actor': r.actor, 'que': que, 'texto': r.motivo})
+    eventos = {}
+    for e in EventoGMP.objects.filter(lote=lote, fase__isnull=False).exclude(estado='ANULADO').order_by('ocurrio_en'):
+        eventos.setdefault(e.fase_id, []).append({'id': e.id, 'folio': e.folio, 'tipo': e.get_tipo_display(),
+                                                 'titulo': e.titulo, 'estado': e.estado})
+
+    def info_base(f):
+        op = f.operacion_maestra
+        return {'id': f.id, 'paso': op.identificador_paso, 'nombre': op.nombre, 'etapa': op.etapa.nombre if op.etapa else '',
+                'estado': f.estado, 'motivos': motivos.get(f.id, []), 'eventos': eventos.get(f.id, [])}
+
+    actividades = []
+    for op_id, a in por_operacion.items():
+        f = a['fase']
+        pred = por_operacion.get(a['predecesora'])['fase'] if a['predecesora'] else None
+        reprogramada = f.motivo_reprogramacion and f.motivo_reprogramacion != 'PRODUCCION'
+        actividades.append({
+            **info_base(f), 'en_ruta': op_id in ruta, 'orden_ruta': ruta.index(op_id) if op_id in ruta else None,
+            'tipo_operacion': f.operacion_maestra.tipo_operacion,
+            'predecesora': pred.operacion_maestra.identificador_paso if pred else None,
+            'dependencia': f.operacion_maestra.tipo_dependencia or 'FS',
+            'base_inicio': f.inicio_base_cpm, 'base_fin': f.fin_base_cpm, 'inicio': a['inicio'], 'fin': a['fin'],
+            'inicio_real': a['inicio_real'], 'fin_real': a['fin_real'],
+            'retraso_inicio_h': _en_horas(a['retraso_inicio']), 'retraso_fin_h': _en_horas(a['retraso_fin']),
+            'heredado_h': _en_horas(a['heredado']), 'espera_h': _en_horas(a['espera']), 'duracion_extra_h': _en_horas(a['duracion_extra']),
+            'reprogramacion': ({'motivo': f.get_motivo_reprogramacion_display(), 'notas': f.notas_reprogramacion or ''}
+                               if reprogramada else None),
+        })
+    actividades.sort(key=lambda x: (x['base_inicio'], x['paso']))
+
+    # Muestreos: contra la hora que les toca desde el inicio efectivo de su incubación
+    muestreos = []
+    for f in fases:
+        if not f.es_subtarea_muestreo or f.estado == 'OMITIDA':
+            continue
+        incubacion = por_operacion.get(f.operacion_maestra_id)
+        op = f.operacion_maestra
+        if not incubacion:
+            continue
+        esperado = incubacion['inicio'] + timedelta(hours=f.indice_muestreo * (op.frecuencia_muestreo_horas or 0))
+        if f.fecha_inicio_real:
+            momento, real = f.fecha_inicio_real, True
+        elif f.estado == 'PENDIENTE' and esperado < ahora and incubacion['fase'].estado == 'EN_PROGRESO':
+            momento, real = ahora, False                           # ya le tocaba y la incubación sigue: no se ha tomado
+        else:
+            continue
+        retraso = momento - esperado
+        tolerancia = timedelta(hours=op.tolerancia_despues_horas or 0)
+        if retraso <= timedelta(minutes=5):
+            continue
+        muestreos.append({**info_base(f), 'nombre': f.nombre_tarea_dinamica or op.nombre, 'esperado': esperado,
+                          'inicio': momento, 'inicio_real': real, 'retraso_h': _en_horas(retraso),
+                          'tolerancia_h': op.tolerancia_despues_horas or 0, 'fuera_tolerancia': retraso > tolerancia})
+    muestreos.sort(key=lambda m: m['esperado'])
+
+    ultima = por_operacion[ruta[-1]] if ruta else None
+    return {
+        'lote': {'id': lote.id, 'identificador_lote': lote.identificador_lote, 'estado': lote.estado, 'archivado': lote.archivado,
+                 'receta': lote.proceso_maestro.nombre, 'terminado': lote.estado in ('COMPLETADO', 'ABORTADO')},
+        'ahora': ahora,
+        'fin_base': ultima['fase'].fin_base_cpm if ultima else None, 'fin_estimado': ultima['fin'] if ultima else None,
+        'retraso_horas': _en_horas(ultima['retraso_fin']) if ultima else 0,
+        'origen': _origen_principal(por_operacion, ruta),
+        'ruta': [por_operacion[o]['fase'].id for o in ruta],
+        'actividades': actividades,
+        'muestreos': muestreos,
+        'muestreos_fuera_tolerancia': sum(1 for m in muestreos if m['fuera_tolerancia']),
+    }

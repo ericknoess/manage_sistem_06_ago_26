@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retrasos por lote - MES Bioprocesos</title>
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'core/css/catalogo.css' %}">
+    <link rel="stylesheet" href="{% static 'procesos/css/retrasos.css' %}">
+    <!-- Sesión y permisos por rol (antes que los demás scripts: ajusta fetch con CSRF) -->
+    <link rel="stylesheet" href="{% static 'core/css/sesion.css' %}">
+    <script src="{% static 'core/js/sesion.js' %}"></script>
+</head>
+<body>
+
+    <header class="page-header">
+        <div class="header-title">
+            <a href="{% url 'inicio' %}" class="btn-inicio btn-inicio--arriba" title="Volver al menú principal">Menú principal</a>
+            <h2>⏱️ Retrasos por lote</h2>
+            <p>Cada actividad contra su línea base (lo planeado al instanciar el lote): cuánto retraso heredó de la anterior
+               y cuánto nació en ella, por iniciar tarde o por durar más. En los lotes abiertos el retraso es estimado.</p>
+        </div>
+        <nav class="header-enlaces">
+            <a href="{% url 'ejecucion-lotes' %}" class="btn-secundario">🏭 Piso de planta</a>
+            <a href="{% url 'gantt-lotes' %}" class="btn-secundario">📊 Gantt</a>
+        </nav>
+    </header>
+
+    <section class="barra-herramientas" aria-label="Filtros">
+        <div class="grupo-filtros">
+            <select id="filtroReceta" onchange="cargarLotes()" aria-label="Receta"><option value="">Todas las recetas</option></select>
+            <select id="filtroEstado" onchange="cargarLotes()" aria-label="Estado">
+                <option value="">Abiertos y terminados (60 días)</option>
+                <option value="abiertos">Solo abiertos</option>
+                <option value="terminados">Solo terminados (60 días)</option>
+                <option value="todos">Todos, sin límite de fecha</option>
+            </select>
+            <label class="check-filtro"><input type="checkbox" id="filtroArchivados" onchange="cargarLotes()"> Incluir archivados</label>
+            <input type="search" id="filtroTexto" placeholder="🔎 Lote…" oninput="pintarLotes()">
+            <span id="conteo" class="conteo"></span>
+        </div>
+    </section>
+
+    <main class="rt-layout">
+        <section class="panel rt-lista" aria-label="Lotes">
+            <div class="rt-panel-titulo">Lotes por retraso</div>
+            <div class="rt-lista__cuerpo" id="listaLotes"><div class="estado-vacio">Cargando…</div></div>
+        </section>
+
+        <section class="panel rt-detalle" id="detalle" aria-live="polite">
+            <div class="estado-vacio">👈 Elige un lote para ver dónde se originó su retraso.</div>
+        </section>
+    </main>
+
+    <script src="{% static 'core/js/utils.js' %}"></script>
+    <script src="{% static 'procesos/js/retrasos.js' %}"></script>
+</body>
+</html>

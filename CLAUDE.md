@@ -55,6 +55,14 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   (diseñador de procesos) decide si hay desviación: la tablet no adelanta fuera de ventana, y todo inicio fuera de ella exige
   `motivo_desviacion` en la bitácora. Iniciar o completar recalcula sucesoras y muestreos desde la hora real;
   `/api/fases-lote/alertas/` marca en Planificación cruces de operador, operadores sin turno y materiales afectados por un adelanto.
+  Personal disponible (`operadores_disponibles`, `/api/fases-lote/<id>/disponibles/` → `{desde, hasta, retrasada, operadores}`) y cruces al asignar
+  usan `ventana_asignacion`: la hora programada o, si la tarea sigue pendiente y su hora ya pasó, desde ahora con su misma duración
+  (personal en turno ahora, no el de la hora planeada).
+- Retrasos (/retrasos/, `resumen_retrasos` y `analisis_retrasos` en `procesos/services.py`; API `/api/lotes/retrasos/` y `/api/lotes/<id>/retrasos/`):
+  cada actividad contra su línea base CPM; heredado (de su predecesora: fin si FS, inicio si SS/desfase), lo que nació al iniciar
+  (`espera`: inició tarde, sigue sin iniciar o se reprogramó) y por duración (`duracion_extra`). La ruta (cadena de predecesoras de la que
+  termina al último) da el retraso del lote; en lotes abiertos es estimado desde ahora. Muestra motivos de la bitácora (inicio fuera de
+  ventana, reprogramaciones), eventos GMP y muestreos tomados tarde (contra el inicio real de su incubación y su tolerancia).
 - Materiales: `MaterialOperacion` (receta: cantidad, anticipación, actividad o cada muestreo) se copia a `MaterialFase`
   al instanciar el lote; los ajustes por lote exigen motivo y los retiros son bajas lógicas. El momento requerido es
   `inicio_programado - anticipacion_horas`, así que sigue a las reprogramaciones. Buscador compartido en `static/core/js/materiales.js`.
@@ -152,7 +160,7 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   Salen en el PDF (sección «Eventos GMP») y en el Excel (hoja «Eventos GMP») del lote, dentro de la huella. API `/api/eventos/`
   (`?lote=&estado=&tipo=&desde=&hasta=&q=`, `resumen/`, `opciones/`, `<id>/cerrar/`, `<id>/anular/`); bitácora categoría EVENTO.
   Investigación y CAPA siguen en el sistema de calidad. Pruebas: `python manage.py test eventos.tests`.
-- Pantallas: /login/, /auditoria/ (bitácora), /eventos/ (eventos GMP), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
+- Pantallas: /login/, /auditoria/ (bitácora), /eventos/ (eventos GMP), /retrasos/ (retrasos por lote y su origen), / (inicio), /procesos/ (diseñador de recetas), /planificacion/, /gantt/, /ejecucion/, /mobile/, /roster/,
   /materiales/ (monitor de materiales por día y hora), /materiales/catalogo/ (catálogo de materiales),
   /equipos/ (monitor de ocupación de equipos), /equipos/catalogo/ (catálogo de equipos y tipos), /parametros/ (catálogo de parámetros de proceso),
   /graficas/ (gráficas de proceso e indicadores; acepta ?proceso=&lotes=)
