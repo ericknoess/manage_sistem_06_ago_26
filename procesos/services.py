@@ -1469,6 +1469,7 @@ def analisis_retrasos(lote, ahora=None):
     def info_base(f):
         op = f.operacion_maestra
         return {'id': f.id, 'paso': op.identificador_paso, 'nombre': op.nombre, 'etapa': op.etapa.nombre if op.etapa else '',
+                'etapa_id': op.etapa_id,
                 'estado': f.estado, 'motivos': motivos.get(f.id, []), 'eventos': eventos.get(f.id, [])}
 
     actividades = []

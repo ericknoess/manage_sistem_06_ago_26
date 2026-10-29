@@ -63,6 +63,9 @@ planificación con CPM/Gantt y ejecución en piso de planta (eBR en tablet).
   (`espera`: inició tarde, sigue sin iniciar o se reprogramó) y por duración (`duracion_extra`). La ruta (cadena de predecesoras de la que
   termina al último) da el retraso del lote; en lotes abiertos es estimado desde ahora. Muestra motivos de la bitácora (inicio fuera de
   ventana, reprogramaciones), eventos GMP y muestreos tomados tarde (contra el inicio real de su incubación y su tolerancia).
+  El PDF del lote lleva la sección «Retrasos contra lo planeado» (resumen, cascada de la ruta, actividades con retraso propio y muestreos
+  fuera de tolerancia; con `?etapa=` las tablas solo muestran esa etapa) desde `datos_informe()['retrasos']`; no entra en la huella
+  (en un lote abierto es una estimación al emitir). El Excel del lote lleva las hojas «Retrasos» (todas las actividades, en horas) y «Muestreos tarde».
 - Materiales: `MaterialOperacion` (receta: cantidad, anticipación, actividad o cada muestreo) se copia a `MaterialFase`
   al instanciar el lote; los ajustes por lote exigen motivo y los retiros son bajas lógicas. El momento requerido es
   `inicio_programado - anticipacion_horas`, así que sigue a las reprogramaciones. Buscador compartido en `static/core/js/materiales.js`.

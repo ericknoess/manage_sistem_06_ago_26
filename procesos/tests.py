@@ -1183,3 +1183,21 @@ class RetrasosTests(TestCase):
         self.assertEqual(d['retraso_horas'], 26)
         self.assertEqual(d['origen']['paso'], 'T2')
         self.assertIn('Biorreactor', act['T2']['motivos'][0]['texto'])
+
+    def test_el_informe_pdf_lleva_los_retrasos_sin_cambiar_la_huella(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from datos_proceso.informes import excel_lote, pdf_lote
+        from datos_proceso.services import datos_informe
+        self.ejecutar(self.fase(self.t1), 2, 5)
+        datos = datos_informe(self.lote)
+        self.assertEqual(datos['retrasos']['origen']['paso'], 'T2')   # T2 lleva un día sin iniciar
+        self.assertTrue(pdf_lote(datos, 'Prueba').startswith(b'%PDF'))
+        libro = load_workbook(BytesIO(excel_lote(datos, 'Prueba')))
+        filas = {f[0]: f for f in libro['Retrasos'].iter_rows(min_row=3, values_only=True)}
+        self.assertEqual((filas['T1'][12], filas['T1'][13]), (2, 1))          # nació al iniciar 2 h y por duración 1 h
+        self.assertIn('Muestreos tarde', libro.sheetnames)
+        with mock.patch('django.utils.timezone.now', return_value=timezone.make_aware(datetime(2026, 11, 4, 12, 0))):
+            despues = datos_informe(self.lote)
+        self.assertNotEqual(datos['retrasos']['retraso_horas'], despues['retrasos']['retraso_horas'])   # estimado: crece
+        self.assertEqual(datos['huella'], despues['huella'])                                         # pero no es dato del lote

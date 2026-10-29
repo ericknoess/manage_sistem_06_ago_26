@@ -4,7 +4,9 @@
 # El informe sigue al diseñador: una sección por etapa (datos y gráficas por actividad · sección) y, si se piden,
 # gráficas combinadas de varios parámetros (apiladas con el mismo eje, o superpuestas escaladas a 0–100 %).
 #   pdf_lote(datos, emitido_por)   → bytes del PDF (carta horizontal; encabezado, pie con huella y "página X de Y")
-#   excel_lote(datos, emitido_por) → bytes del .xlsx (Resumen, Datos, Fuera de límites, Eventos GMP, Adicionales, Correcciones)
+#   (el PDF incluye «Retrasos contra lo planeado»: services.datos_informe()['retrasos'], de procesos.services.analisis_retrasos)
+#   excel_lote(datos, emitido_por) → bytes del .xlsx (Resumen, Datos, Fuera de límites, Eventos GMP, Retrasos, Muestreos tarde,
+#                                     Adicionales, Correcciones)
 #   excel_lotes(...)               → bytes del .xlsx de varios lotes (Datos en formato largo e Indicadores)
 
 from io import BytesIO
@@ -54,6 +56,87 @@ def _horas(h):
     if h is None:
         return '—'
     return '0.0' if abs(h) < 0.05 else f"{h:.1f}"   # sin "-0.0"
+
+
+UMBRAL_RETRASO_H = 5 / 60   # menos de 5 minutos no se cuenta como retraso (igual que la pantalla /retrasos/)
+VERDE = colors.HexColor('#16a34a')
+GRIS_HEREDADO = colors.HexColor('#cbd5e1')
+
+
+def _duracion(h, signo=False):
+    """3.5 → '3 h 30 min'; 50 → '2 d 2 h'; con signo: '+3 h', '−45 min'. Igual que la pantalla de retrasos."""
+    if h is None:
+        return '—'
+    total = round(abs(h) * 60)
+    if total < 5:
+        return '0'
+    dias, horas, minutos = total // 1440, (total % 1440) // 60, total % 60
+    if dias:
+        texto = f"{dias} d" + (f" {horas} h" if horas else '')
+    elif horas:
+        texto = f"{horas} h" + (f" {minutos} min" if minutos else '')
+    else:
+        texto = f"{minutos} min"
+    return (('+' if h > 0 else '−') + texto) if signo else texto
+
+
+def _texto_espera(a, ahora):
+    if a['espera_h'] > UMBRAL_RETRASO_H:
+        if a['inicio_real']:
+            return f"Inició {_duracion(a['espera_h'])} tarde"
+        if a['estado'] == 'PENDIENTE' and a['inicio'] <= ahora:
+            return f"Lleva {_duracion(a['espera_h'])} sin iniciar"
+        return f"Se reprogramó {_duracion(a['espera_h'])} después"
+    if a['espera_h'] < -UMBRAL_RETRASO_H:
+        return f"Inició {_duracion(a['espera_h'])} antes"
+    return ''
+
+
+def _texto_duracion(a):
+    if abs(a['duracion_extra_h']) <= UMBRAL_RETRASO_H:
+        return ''
+    if a['duracion_extra_h'] < 0:
+        return f"Duró {_duracion(a['duracion_extra_h'])} menos"
+    return f"Duró {_duracion(a['duracion_extra_h'])} más" if a['fin_real'] else f"Va {_duracion(a['duracion_extra_h'])} arriba de su duración"
+
+
+def _cascada_retrasos(ruta, ancho, origen_id):
+    """Cascada de la ruta: cada fila arranca en el retraso heredado y muestra lo que nació al iniciar y por duración."""
+    fila, etiqueta, valor = 0.62 * cm, 6.6 * cm, 5.2 * cm
+    pista = ancho - etiqueta - valor - 0.4 * cm
+    alto = fila * len(ruta) + 0.3 * cm
+    d = Drawing(ancho, alto)
+    valores = [v for a in ruta for v in (max(0, a['heredado_h']), a['retraso_inicio_h'], a['retraso_fin_h'])]
+    minimo, maximo = min(0, *valores), max(0, *valores)
+    rango = (maximo - minimo) or 1
+    x0 = etiqueta + 0.2 * cm
+    x = lambda h: x0 + (h - minimo) / rango * pista
+    for i, a in enumerate(ruta):
+        y = alto - (i + 1) * fila
+        if a['id'] == origen_id:
+            d.add(Rect(0, y, ancho, fila, fillColor=colors.HexColor('#fef3c7'), strokeColor=None))
+        d.add(Line(0, y, ancho, y, strokeColor=REJILLA, strokeWidth=0.4))
+        nombre = f"[{a['paso']}] {a['nombre']}"
+        d.add(String(3, y + fila * 0.55, nombre if len(nombre) <= 44 else nombre[:43] + '…', fontName='Helvetica-Bold', fontSize=7,
+                     fillColor=TINTA))
+        d.add(String(3, y + fila * 0.17, a['estado_texto'], fontName='Helvetica', fontSize=6, fillColor=TENUE))
+        d.add(Rect(x0, y + fila * 0.2, pista, fila * 0.6, fillColor=colors.HexColor('#f1f5f9'), strokeColor=None))
+        partida = max(0, a['heredado_h'])
+        if partida > UMBRAL_RETRASO_H:
+            d.add(Rect(x(0), y + fila * 0.42, x(partida) - x(0), fila * 0.16, fillColor=GRIS_HEREDADO, strokeColor=None))
+        for desde, hasta, color in ((partida, a['retraso_inicio_h'], AMBAR), (a['retraso_inicio_h'], a['retraso_fin_h'], ROJO)):
+            if abs(hasta - desde) > UMBRAL_RETRASO_H:
+                izq = x(min(desde, hasta))
+                d.add(Rect(izq, y + fila * 0.25, max(1.2, abs(x(hasta) - x(desde))), fila * 0.5,
+                           fillColor=VERDE if hasta < desde else color, strokeColor=None))
+        d.add(Line(x(0), y + fila * 0.1, x(0), y + fila * 0.9, strokeColor=TENUE, strokeWidth=0.6))
+        total = a['retraso_fin_h']
+        d.add(String(ancho - 3, y + fila * 0.55, 'A tiempo' if abs(total) <= UMBRAL_RETRASO_H else _duracion(total, True),
+                     fontName='Helvetica-Bold', fontSize=7, textAnchor='end',
+                     fillColor=ROJO if total > 24 else AMBAR if total > UMBRAL_RETRASO_H else VERDE if total < -UMBRAL_RETRASO_H else TENUE))
+        propio = ' · '.join(t for t in (a['texto_espera'], a['texto_duracion']) if t) or 'Sin retraso propio'
+        d.add(String(ancho - 3, y + fila * 0.17, propio, fontName='Helvetica', fontSize=6, fillColor=TENUE, textAnchor='end'))
+    return d
 
 
 def _numero(v, decimales=6):
@@ -295,6 +378,95 @@ def _rejilla_graficas(series, ancho_util):
     return t
 
 
+def _seccion_retrasos(h, e, r, ancho_util, por_etapa):
+    """Retrasos contra lo planeado: resumen, cascada de la ruta, actividades con retraso propio y muestreos fuera de tolerancia."""
+    ahora = r['ahora']
+    estados = {'PENDIENTE': 'Pendiente', 'EN_PROGRESO': 'En curso', 'COMPLETADA': 'Completada', 'OMITIDA': 'Omitida'}
+    for a in r['todas'] + r['muestreos']:
+        a['estado_texto'] = estados.get(a['estado'], a['estado']) + (f" · {a['etapa']}" if a.get('etapa') else '')
+        if 'espera_h' in a:
+            a['texto_espera'], a['texto_duracion'] = _texto_espera(a, ahora), _texto_duracion(a)
+
+    h.append(CondPageBreak(7 * cm))
+    h.append(Paragraph('Retrasos contra lo planeado', e['seccion']))
+    terminado = r['lote']['terminado']
+    total = r['retraso_horas']
+    resumen = (f"<b>{'Retraso al terminar' if terminado else 'Retraso estimado al terminar'}: "
+               f"{'a tiempo' if abs(total) <= UMBRAL_RETRASO_H else _duracion(total, True)}</b> · fin planeado {_local(r['fin_base'])} → "
+               f"{'real' if terminado else 'estimado'} {_local(r['fin_estimado'])}.")
+    if r['origen']:
+        o = r['origen']
+        a = next((x for x in r['todas'] if x['id'] == o['fase']), None)
+        causa = (a['texto_espera'] if o['tipo'] == 'INICIO' else a['texto_duracion']) if a else ''
+        resumen += f" Origen principal: <b>[{_xml(o['paso'])}] {_xml(o['nombre'])}</b> ({causa.lower()})."
+    if not terminado:
+        resumen += (f" Lote abierto: estimado al {_local(ahora)} (lo que ya debió iniciar se cuenta desde ese momento); "
+                    'por eso no forma parte de la huella.')
+    h.append(Paragraph(resumen, e['normal']))
+
+    por_id = {a['id']: a for a in r['todas']}
+    ruta = [por_id[i] for i in r['ruta'] if i in por_id]
+    if ruta:
+        h.append(Paragraph('Cómo se acumuló el retraso (ruta que fija el fin del lote)', e['subseccion']))
+        h.append(_cascada_retrasos(ruta, ancho_util, r['origen']['fase'] if r['origen'] else None))
+        h.append(Paragraph('Cada fila arranca en el retraso heredado de la actividad anterior (gris) y muestra lo que nació en ella: '
+                           'ámbar al iniciar (inició tarde, sigue sin iniciar o se reprogramó), rojo por durar más de lo planeado, '
+                           'verde tiempo recuperado. A la derecha, el retraso con que termina.', e['nota']))
+
+    def motivos(a):
+        partes = []
+        if a.get('reprogramacion'):
+            partes.append(f"<i>Reprogramada:</i> {_xml(a['reprogramacion']['motivo'])}"
+                          + (f" — {_xml(a['reprogramacion']['notas'])}" if a['reprogramacion']['notas'] else ''))
+        for m in a['motivos']:
+            partes.append(f"<i>{_xml(m['que'])} ({_local(m['momento'])}, {_xml(m['actor'])}):</i> {_xml(m['texto'])}")
+        for ev in a['eventos']:
+            partes.append(f"<b>{_xml(ev['folio'])}</b> {_xml(ev['tipo'])}: {_xml(ev['titulo'])}"
+                          + (' <font color="#d97706">(abierto)</font>' if ev['estado'] == 'ABIERTO' else ''))
+        return Paragraph('<br/>'.join(partes) or '—', e['celda'])
+
+    def horas(v):
+        return '—' if abs(v) <= UMBRAL_RETRASO_H else _duracion(v, True)
+
+    con_retraso = [a for a in r['actividades'] if a['espera_h'] > UMBRAL_RETRASO_H or a['duracion_extra_h'] > UMBRAL_RETRASO_H
+                   or a['motivos'] or a['eventos'] or a.get('reprogramacion')]
+    h.append(Paragraph('Actividades que agregaron retraso' + (' (de esta etapa)' if por_etapa else ''), e['subseccion']))
+    if con_retraso:
+        filas = [['Actividad', 'Inicio plan / real', 'Fin plan / real', 'Heredado', 'Nació al iniciar', 'Nació por duración',
+                  'Al terminar', 'Motivos y eventos']]
+        for a in con_retraso:
+            real = lambda plan, valor, es_real: Paragraph(f"{_local(plan)}<br/><font color='#64748b'>{'Real' if es_real else 'Estimado'}: "
+                                                          f"{_local(valor)}</font>", e['celda'])
+            filas.append([Paragraph(f"<b>[{_xml(a['paso'])}]</b> {_xml(a['nombre'])}<br/><font color='#64748b'>{_xml(a['estado_texto'])}"
+                                    f"{' · en la ruta' if a['en_ruta'] else ''}</font>", e['celda']),
+                          real(a['base_inicio'], a['inicio'], a['inicio_real']), real(a['base_fin'], a['fin'], a['fin_real']),
+                          horas(a['heredado_h']), horas(a['espera_h']), horas(a['duracion_extra_h']), horas(a['retraso_fin_h']), motivos(a)])
+        t = Table(filas, colWidths=[4.8 * cm, 2.9 * cm, 2.9 * cm, 1.9 * cm, 2.1 * cm, 2.3 * cm, 1.9 * cm, ancho_util - 18.8 * cm], repeatRows=1)
+        t.setStyle(_estilo_tabla())
+        t.setStyle(TableStyle([('VALIGN', (0, 1), (-1, -1), 'TOP'), ('ALIGN', (3, 0), (6, -1), 'RIGHT')]
+                              + [('BACKGROUND', (0, k), (-1, k), colors.HexColor('#fef3c7'))
+                                 for k, a in enumerate(con_retraso, start=1) if r['origen'] and a['id'] == r['origen']['fase']]))
+        h.append(t)
+    else:
+        h.append(Paragraph('Ninguna actividad agregó retraso.', e['normal']))
+
+    fuera = [m for m in r['muestreos'] if m['fuera_tolerancia']]
+    h.append(Paragraph('Muestreos fuera de tolerancia', e['subseccion']))
+    if fuera:
+        filas = [['Muestreo', 'Le tocaba', 'Se tomó', 'Retraso', 'Tolerancia', 'Motivos y eventos']]
+        for m in fuera:
+            filas.append([Paragraph(f"<b>[{_xml(m['paso'])}]</b> {_xml(m['nombre'])}", e['celda']), _local(m['esperado']),
+                          _local(m['inicio']) if m['inicio_real'] else 'Aún no se toma', _duracion(m['retraso_h'], True),
+                          _duracion(m['tolerancia_h']) if m['tolerancia_h'] >= 5 / 60 else '0 h', motivos(m)])
+        t = Table(filas, colWidths=[6 * cm, 3 * cm, 3 * cm, 2.4 * cm, 2.2 * cm, ancho_util - 16.6 * cm], repeatRows=1)
+        t.setStyle(_estilo_tabla())
+        t.setStyle(TableStyle([('VALIGN', (0, 1), (-1, -1), 'TOP')]))
+        h.append(t)
+    else:
+        h.append(Paragraph(f"Ningún muestreo fuera de tolerancia ({len(r['muestreos'])} tomado{'s' if len(r['muestreos']) != 1 else ''} "
+                           'tarde dentro de ella).' if r['muestreos'] else 'Ningún muestreo fuera de tolerancia.', e['normal']))
+
+
 def pdf_lote(datos, emitido_por):
     """PDF del informe de datos de proceso de un lote (o de una etapa)."""
     e = _estilos()
@@ -347,6 +519,16 @@ def pdf_lote(datos, emitido_por):
     abiertos = sum(1 for ev in datos['eventos'] if ev['estado'] == 'Abierto')
     generales.append(['Eventos GMP', f"{len(datos['eventos'])}" + (f" ({abiertos} abierto{'s' if abiertos != 1 else ''})" if abiertos else ''),
                       'Desviaciones', ', '.join(sorted({ev['numero_desviacion'] for ev in datos['eventos'] if ev['numero_desviacion']})) or '—'])
+    r = datos.get('retrasos')
+    if r:
+        origen = r['origen']
+        generales.append(['Retraso vs. planeado',
+                          ('A tiempo' if abs(r['retraso_horas']) <= UMBRAL_RETRASO_H else _duracion(r['retraso_horas'], True))
+                          + ('' if r['lote']['terminado'] else ' (estimado)'),
+                          'Origen del retraso',
+                          Paragraph(_xml(f"[{origen['paso']}] {origen['nombre']} · "
+                                         f"{'inicio tarde' if origen['tipo'] == 'INICIO' else 'duró más'} {_duracion(origen['horas'])}")
+                                    if origen else '—', e['celda'])])
     t = Table(generales, colWidths=[3.6 * cm, ancho_util / 2 - 3.6 * cm, 4.4 * cm, ancho_util / 2 - 4.4 * cm])
     t.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'), ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
@@ -454,6 +636,9 @@ def pdf_lote(datos, emitido_por):
         h.append(t)
     else:
         h.append(Paragraph('Sin eventos GMP registrados.', e['normal']))
+
+    if datos.get('retrasos'):
+        _seccion_retrasos(h, e, datos['retrasos'], ancho_util, bool(datos['etapa']))
 
     # Muestras adicionales
     if datos['adicionales']:
@@ -631,6 +816,47 @@ def _hoja_combinadas(hoja, datos):
         hoja.add_chart(grafica, f"{get_column_letter(len(combinadas) * 3 + 2)}{3 + k * 14}")
 
 
+def _resumen_retrasos_excel(r):
+    """Filas del Resumen con el retraso del lote y su origen principal."""
+    if not r:
+        return []
+    o = r['origen']
+    return [
+        ('Retraso vs. planeado (h)' + ('' if r['lote']['terminado'] else ', estimado'), r['retraso_horas']),
+        ('Origen del retraso', f"[{o['paso']}] {o['nombre']} · {'inicio tarde' if o['tipo'] == 'INICIO' else 'duró más'} "
+                               f"{_duracion(o['horas'])}" if o else '—'),
+    ]
+
+
+def _hojas_retrasos(libro, r):
+    """Hojas «Retrasos» (todas las actividades, en horas) y «Muestreos tarde». No entran en la huella."""
+    ahora = r['ahora']
+    estados = {'PENDIENTE': 'Pendiente', 'EN_PROGRESO': 'En curso', 'COMPLETADA': 'Completada', 'OMITIDA': 'Omitida'}
+    motivos = lambda a: '\n'.join(
+        ([f"Reprogramada: {a['reprogramacion']['motivo']} {a['reprogramacion']['notas']}".strip()] if a.get('reprogramacion') else [])
+        + [f"{m['que']} ({_local(m['momento'])}, {m['actor']}): {m['texto']}" for m in a['motivos']]
+        + [f"{ev['folio']} {ev['tipo']}: {ev['titulo']}" + (' (abierto)' if ev['estado'] == 'ABIERTO' else '') for ev in a['eventos']])
+    hoja = libro.create_sheet('Retrasos')
+    hoja.append([f"Retraso {'al terminar' if r['lote']['terminado'] else f'estimado al {_local(ahora)}'}: {r['retraso_horas']} h. "
+                 'Horas positivas = retraso; negativas = adelanto. Calculado al emitir: no forma parte de la huella.'])
+    hoja['A1'].font = Font(italic=True, color='64748B')
+    _hoja_tabla(hoja, ['Paso', 'Actividad', 'Etapa', 'Estado', 'En la ruta', 'Inicio planeado', 'Inicio real/estimado', 'Inicio real',
+                       'Fin planeado', 'Fin real/estimado', 'Fin real', 'Heredado (h)', 'Nació al iniciar (h)', 'Nació por duración (h)',
+                       'Al terminar (h)', 'Qué pasó', 'Motivos y eventos'],
+                [[a['paso'], a['nombre'], a['etapa'], estados.get(a['estado'], a['estado']), 'Sí' if a['en_ruta'] else '',
+                  _fecha_excel(a['base_inicio']), _fecha_excel(a['inicio']), 'Sí' if a['inicio_real'] else 'Estimado',
+                  _fecha_excel(a['base_fin']), _fecha_excel(a['fin']), 'Sí' if a['fin_real'] else 'Estimado',
+                  a['heredado_h'], a['espera_h'], a['duracion_extra_h'], a['retraso_fin_h'],
+                  ' · '.join(t for t in (_texto_espera(a, ahora), _texto_duracion(a)) if t), motivos(a)] for a in r['actividades']],
+                [8, 32, 16, 12, 9, 17, 17, 10, 17, 17, 10, 12, 14, 16, 13, 40, 60])
+    hoja = libro.create_sheet('Muestreos tarde')
+    _hoja_tabla(hoja, ['Paso', 'Muestreo', 'Etapa', 'Le tocaba', 'Se tomó', 'Retraso (h)', 'Tolerancia (h)', 'Fuera de tolerancia',
+                       'Motivos y eventos'],
+                [[m['paso'], m['nombre'], m['etapa'], _fecha_excel(m['esperado']), _fecha_excel(m['inicio']) if m['inicio_real'] else 'Aún no se toma',
+                  m['retraso_h'], m['tolerancia_h'], 'Sí' if m['fuera_tolerancia'] else 'No', motivos(m)] for m in r['muestreos']],
+                [8, 32, 16, 17, 17, 12, 13, 12, 60])
+
+
 def excel_lote(datos, emitido_por):
     """Excel del informe de un lote (o de una etapa)."""
     lote = datos['lote']
@@ -646,6 +872,7 @@ def excel_lote(datos, emitido_por):
         ('Inicio real', _fecha_excel(datos['inicio_real'])), ('Fin real', _fecha_excel(datos['fin_real'])),
         ('Edad 0 del lote', _fecha_excel(cero['momento']) if cero else None), ('Origen de la edad 0', cero['origen'] if cero else ''),
         ('Eventos GMP', f"{len(datos['eventos'])} ({sum(1 for ev in datos['eventos'] if ev['estado'] == 'Abierto')} abiertos)"),
+        *_resumen_retrasos_excel(datos.get('retrasos')),
         ('Emitido por', emitido_por), ('Emitido el', _fecha_excel(datos['generado'])),
         ('Huella SHA-256 de los datos', datos['huella']),
     ]:
@@ -686,6 +913,9 @@ def excel_lote(datos, emitido_por):
                   ev['evaluacion'], (ev['firma'] or {}).get('nombre', ''), (ev['firma'] or {}).get('significado', ''),
                   _fecha_excel(ev['firma']['fecha']) if ev['firma'] else None] for ev in datos['eventos']],
                 [14, 17, 26, 12, 34, 22, 36, 60, 40, 24, 11, 22, 16, 50, 22, 30, 17])
+
+    if datos.get('retrasos'):
+        _hojas_retrasos(libro, datos['retrasos'])
 
     hoja = libro.create_sheet('Muestras adicionales')
     _hoja_tabla(hoja, ['Tarea', 'Toma', 'Código', 'Motivo', 'Registró'],

@@ -1351,13 +1351,22 @@ def datos_informe(lote, etapa_id=None, combinar=None, vista='apiladas'):
     }
     fechas_reales = [f.fecha_inicio_real for f in fases if f.fecha_inicio_real]
     fines = [f.fecha_fin_real for f in fases if f.fecha_fin_real]
+
+    # Retrasos contra lo planeado (pantalla /retrasos/). No entran en la huella: en un lote abierto son una estimación al
+    # momento de emitir. El retraso y el origen son del lote; con una etapa, las tablas solo muestran sus actividades.
+    from procesos.services import analisis_retrasos
+    retrasos = analisis_retrasos(lote)
+    retrasos['todas'] = retrasos['actividades']            # la cascada sigue la ruta completa del lote
+    if etapa_id:
+        retrasos['actividades'] = [a for a in retrasos['actividades'] if a['etapa_id'] == etapa_id]
+        retrasos['muestreos'] = [m for m in retrasos['muestreos'] if m['etapa_id'] == etapa_id]
     return {
         'lote': lote, 'receta': lote.proceso_maestro.nombre, 'etapa': etapa.nombre if etapa else None, 'etapa_id': etapa_id,
         'inicio_real': min(fechas_reales) if fechas_reales else None,
         'fin_real': max(fines) if lote.estado == 'COMPLETADO' and fines else None,
         'edad_cero_lote': ceros.get('lote'), 'edad_cero_etapa': ceros.get(etapa_id) if etapa_id else None,
         'etapas': etapas, 'tomas': tomas, 'fuera': fuera, 'adicionales': adicionales,
-        'correcciones': correcciones, 'eventos': eventos, 'indicadores': lista_ind,
+        'correcciones': correcciones, 'eventos': eventos, 'indicadores': lista_ind, 'retrasos': retrasos,
         'combinadas': combinadas, 'vista_combinadas': vista if vista in VISTAS_COMBINADAS else 'apiladas',
         'huella': _huella(contenido), 'generado': timezone.now(),
     }
